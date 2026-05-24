@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, Response, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.dependencies import require_owner
 from app.services.owner_inventory import (
@@ -32,7 +32,11 @@ SessionStatus = Literal["scheduled", "locked", "in_progress", "completed", "canc
 SkillTier = Literal["Beginner", "Intermediate", "Advanced"]
 
 
-class CourtComplexCreate(BaseModel):
+class InventoryModel(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
+class CourtComplexCreate(InventoryModel):
     name: str = Field(min_length=2, max_length=200)
     district: str = Field(min_length=2, max_length=120)
     address: str = Field(min_length=5, max_length=400)
@@ -40,7 +44,7 @@ class CourtComplexCreate(BaseModel):
     longitude: float | None = None
 
 
-class CourtComplexUpdate(BaseModel):
+class CourtComplexUpdate(InventoryModel):
     name: str | None = Field(default=None, min_length=2, max_length=200)
     district: str | None = Field(default=None, min_length=2, max_length=120)
     address: str | None = Field(default=None, min_length=5, max_length=400)
@@ -60,9 +64,9 @@ class CourtComplexResponse(BaseModel):
     updated_at: datetime
 
 
-class CourtCreate(BaseModel):
+class CourtCreate(InventoryModel):
     complex_id: str
-    name: str = Field(min_length=2, max_length=200)
+    name: str = Field(min_length=1, max_length=200)
     sub_court_name: str = Field(min_length=1, max_length=120)
     sport: SportType
     status: CourtStatus = "active"
@@ -71,9 +75,9 @@ class CourtCreate(BaseModel):
     max_rental_duration_minutes: int = Field(ge=30, le=300)
 
 
-class CourtUpdate(BaseModel):
+class CourtUpdate(InventoryModel):
     complex_id: str | None = None
-    name: str | None = Field(default=None, min_length=2, max_length=200)
+    name: str | None = Field(default=None, min_length=1, max_length=200)
     sub_court_name: str | None = Field(default=None, min_length=1, max_length=120)
     sport: SportType | None = None
     status: CourtStatus | None = None
@@ -100,7 +104,7 @@ class CourtResponse(BaseModel):
     district: str | None = None
 
 
-class SessionCreate(BaseModel):
+class SessionCreate(InventoryModel):
     court_id: str
     title: str = Field(min_length=2, max_length=200)
     post_type: SessionPostType = "pool"
@@ -117,7 +121,7 @@ class SessionCreate(BaseModel):
     allows_solo_join: bool = True
 
 
-class SessionUpdate(BaseModel):
+class SessionUpdate(InventoryModel):
     court_id: str | None = None
     title: str | None = Field(default=None, min_length=2, max_length=200)
     post_type: SessionPostType | None = None

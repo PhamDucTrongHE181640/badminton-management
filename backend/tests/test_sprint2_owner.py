@@ -171,6 +171,47 @@ def test_owner_session_create_endpoint(
     assert response.json()["status"] == "scheduled"
 
 
+def test_owner_court_create_allows_single_character_name(
+    client: TestClient, monkeypatch, owner: UserPrincipal
+) -> None:
+    app.dependency_overrides[require_owner] = lambda: owner
+    created_at = datetime(2026, 5, 24, 12, 0, tzinfo=UTC)
+
+    monkeypatch.setattr(
+        "app.api.owner_inventory.create_court",
+        lambda **_: {
+            "id": "court-id",
+            "complex_id": "complex-id",
+            "owner_user_id": owner.id,
+            "name": "1",
+            "sub_court_name": "A",
+            "sport": "Badminton",
+            "status": "active",
+            "rating": 0,
+            "amenities": [],
+            "base_price_vnd": 120000,
+            "max_rental_duration_minutes": 120,
+            "created_at": created_at,
+            "updated_at": created_at,
+        },
+    )
+
+    response = client.post(
+        "/api/v1/owner/courts",
+        json={
+            "complex_id": "complex-id",
+            "name": "1",
+            "sub_court_name": "A",
+            "sport": "Badminton",
+            "base_price_vnd": 120000,
+            "max_rental_duration_minutes": 120,
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["name"] == "1"
+
+
 def test_session_validation_rejects_duration_above_court_limit(monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setattr(
         "app.services.owner_inventory._require_court",

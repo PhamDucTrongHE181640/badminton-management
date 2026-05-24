@@ -43,6 +43,11 @@ type Session = {
 const sportOptions = ["Badminton", "Football", "Tennis"];
 const durationOptions = [30, 60, 90, 120, 150, 180, 210, 240, 270, 300];
 
+type ApiErrorDetail = {
+  field?: string;
+  message?: string;
+};
+
 function money(value: number) {
   return new Intl.NumberFormat("vi-VN").format(value);
 }
@@ -100,7 +105,11 @@ export default function OwnerCourtsPage() {
     });
     const payload = response.status === 204 ? null : await response.json();
     if (!response.ok) {
-      throw new Error(payload?.error?.message ?? "Thao tác không thành công");
+      const firstDetail = payload?.error?.details?.[0] as ApiErrorDetail | undefined;
+      const detailMessage = firstDetail?.field
+        ? `${firstDetail.field}: ${firstDetail.message}`
+        : firstDetail?.message;
+      throw new Error(detailMessage ?? payload?.error?.message ?? "Thao tác không thành công");
     }
     return payload;
   }
@@ -162,8 +171,8 @@ export default function OwnerCourtsPage() {
         method: "POST",
         body: JSON.stringify({
           complex_id: courtComplexId,
-          name: courtName,
-          sub_court_name: subCourtName,
+          name: courtName.trim(),
+          sub_court_name: subCourtName.trim(),
           sport,
           status: "active",
           amenities: [],

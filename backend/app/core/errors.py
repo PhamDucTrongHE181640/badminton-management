@@ -18,8 +18,19 @@ class AppError(Exception):
         self.message = message
 
 
-def error_payload(*, code: str, message: str, request_id: str | None) -> dict[str, Any]:
-    return {"error": {"code": code, "message": message, "request_id": request_id}}
+def error_payload(
+    *,
+    code: str,
+    message: str,
+    request_id: str | None,
+    details: list[dict[str, str]] | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "error": {"code": code, "message": message, "request_id": request_id}
+    }
+    if details:
+        payload["error"]["details"] = details
+    return payload
 
 
 def request_id_from(request: Request) -> str | None:
@@ -55,12 +66,23 @@ def register_error_handlers(app: FastAPI) -> None:
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
         logger.info("validation_error", extra={"errors": exc.errors()})
+        details = [
+            {
+                "field": ".".join(
+                    str(part) for part in error.get("loc", ()) if part != "body"
+                ),
+                "message": str(error.get("msg", "Invalid value")),
+                "type": str(error.get("type", "validation_error")),
+            }
+            for error in exc.errors()
+        ]
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             content=error_payload(
                 code="validation_error",
                 message="Request validation failed",
                 request_id=request_id_from(request),
+                details=details,
             ),
         )
 

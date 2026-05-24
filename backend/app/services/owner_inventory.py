@@ -43,8 +43,14 @@ def _court_from_row(row: Any) -> dict[str, Any]:
         "max_rental_duration_minutes": int(row.max_rental_duration_minutes),
         "created_at": row.created_at,
         "updated_at": row.updated_at,
-        "complex_name": str(row.complex_name) if hasattr(row, "complex_name") else None,
-        "district": str(row.district) if hasattr(row, "district") else None,
+        "complex_name": (
+            str(row.complex_name)
+            if hasattr(row, "complex_name") and row.complex_name is not None
+            else None
+        ),
+        "district": (
+            str(row.district) if hasattr(row, "district") and row.district is not None else None
+        ),
     }
 
 
@@ -71,8 +77,16 @@ def _session_from_row(row: Any) -> dict[str, Any]:
         "allows_solo_join": bool(row.allows_solo_join),
         "created_at": row.created_at,
         "updated_at": row.updated_at,
-        "court_name": str(row.court_name) if hasattr(row, "court_name") else None,
-        "complex_name": str(row.complex_name) if hasattr(row, "complex_name") else None,
+        "court_name": (
+            str(row.court_name)
+            if hasattr(row, "court_name") and row.court_name is not None
+            else None
+        ),
+        "complex_name": (
+            str(row.complex_name)
+            if hasattr(row, "complex_name") and row.complex_name is not None
+            else None
+        ),
     }
 
 
