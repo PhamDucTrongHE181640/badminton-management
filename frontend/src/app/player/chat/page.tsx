@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "next/navigation";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -30,14 +30,14 @@ function toWebSocketUrl(httpBaseUrl: string): string {
 }
 
 export default function PlayerChatRoomPage() {
-  const params = useParams<{ poolPostId: string }>();
-  const poolPostId = params?.poolPostId ?? "";
+  const searchParams = useSearchParams();
+  const poolPostId = searchParams.get("poolPostId") ?? "";
   const wsRef = useRef<WebSocket | null>(null);
 
   const [room, setRoom] = useState<ChatRoom | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
-  const [message, setMessage] = useState("Đang khởi tạo room chat...");
+  const [message, setMessage] = useState("Nhập poolPostId từ discovery để mở room chat.");
   const [error, setError] = useState("");
   const [isSending, setIsSending] = useState(false);
 
@@ -62,6 +62,13 @@ export default function PlayerChatRoomPage() {
   const wsUrl = useMemo(() => toWebSocketUrl(apiBaseUrl), []);
 
   async function bootstrap() {
+    if (!poolPostId) {
+      setMessage("Thiếu poolPostId trên URL. Hãy vào discovery và bấm Vào chat pool.");
+      setRoom(null);
+      setMessages([]);
+      return;
+    }
+
     setError("");
     try {
       let activeRoom: ChatRoom | null = null;
@@ -89,7 +96,6 @@ export default function PlayerChatRoomPage() {
   }
 
   useEffect(() => {
-    if (!poolPostId) return;
     bootstrap();
   }, [poolPostId]);
 
@@ -174,7 +180,7 @@ export default function PlayerChatRoomPage() {
 
       <section className="mx-auto max-w-5xl px-6 py-6 lg:px-8">
         <div className="rounded border border-slate-200 bg-white p-5">
-          <p className="text-sm text-slate-600">Pool Post: {poolPostId}</p>
+          <p className="text-sm text-slate-600">Pool Post: {poolPostId || "-"}</p>
           <p className="mt-1 text-sm text-slate-600">
             Room: {room?.id ?? "chưa sẵn sàng"} · Trạng thái: {room?.status ?? "-"}
           </p>

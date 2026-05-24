@@ -59,6 +59,13 @@ python -m pytest
 - `POST /api/v1/admin/auth/logout`
 - `GET /api/v1/admin/auth/me`
 
+## Admin Operations Endpoints
+
+- `GET /api/v1/admin/config`
+- `PUT /api/v1/admin/config`
+- `GET /api/v1/admin/dashboard/metrics`
+- `GET /api/v1/admin/audit-logs`
+
 The dev container seeds a local admin account when `ADMIN_SEED_ENABLED=true`.
 
 ## User Auth Endpoints
@@ -105,6 +112,14 @@ transaction.
 
 - `GET /api/v1/owner/checkins`
 - `POST /api/v1/owner/checkins`
+
+## Match and Feedback Endpoints
+
+- `POST /api/v1/player/matches`
+- `GET /api/v1/player/matches/{match_id}`
+- `POST /api/v1/player/matches/{match_id}/feedback`
+- `POST /api/v1/player/matches/{match_id}/finalize`
+- `GET /api/v1/player/matches/history/list`
 
 API errors use:
 

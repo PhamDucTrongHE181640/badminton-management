@@ -157,6 +157,12 @@ export default function PlayerDiscoveryPage() {
             </Link>
             <Link
               className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              href="/player/matches"
+            >
+              Match history
+            </Link>
+            <Link
+              className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               href="/"
             >
               Trang chính
@@ -251,14 +257,14 @@ export default function PlayerDiscoveryPage() {
             <div className="mt-4 flex flex-wrap gap-2">
               <Link
                 className="rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-                href={`/player/booking/${item.id}`}
+                href={`/player/booking?sessionId=${item.id}`}
               >
                 Đặt sân
               </Link>
               {item.pool_post_id ? (
                 <Link
                   className="rounded border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
-                  href={`/player/chat/${item.pool_post_id}`}
+                  href={`/player/chat?poolPostId=${item.pool_post_id}`}
                 >
                   Vào chat pool
                 </Link>

@@ -32,6 +32,7 @@ Hidden admin routes:
 
 - `/_internal/netup-admin/login`
 - `/_internal/netup-admin/dashboard`
+- `/_internal/netup-admin/config`
 - `/_internal/netup-admin/owner-requests`
 
 Owner routes:
@@ -44,8 +45,9 @@ Player routes:
 
 - `/player/discovery`
 - `/player/assessment`
-- `/player/chat/[poolPostId]`
-- `/player/booking/[sessionId]`
+- `/player/matches`
+- `/player/chat?poolPostId=<pool-post-id>`
+- `/player/booking?sessionId=<session-id>`
 - `/player/bookings`
 
 Google auth callback:
@@ -73,4 +75,5 @@ Sprint 0 provides the operational dashboard and service health display. Sprint 1
 adds local admin login and Google auth callback handling. Sprint 2 adds owner
 onboarding, admin owner approval, and owner court/session inventory screens
 connected to the FastAPI backend. Sprint 3 adds player discovery and booking
-flows connected to live APIs.
+flows connected to live APIs. Sprint 8 adds admin config management, operations
+dashboard metrics, and audit trail viewer.

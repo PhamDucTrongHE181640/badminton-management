@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -50,14 +50,14 @@ function money(value: number) {
 }
 
 export default function PlayerBookingCreatePage() {
-  const params = useParams<{ sessionId: string }>();
-  const sessionId = params?.sessionId ?? "";
+  const searchParams = useSearchParams();
+  const sessionId = searchParams.get("sessionId") ?? "";
 
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [booking, setBooking] = useState<BookingResult | null>(null);
   const [depositIntent, setDepositIntent] = useState<DepositIntent | null>(null);
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("Đang tải chi tiết phiên sân...");
+  const [message, setMessage] = useState("Nhập session từ discovery để tạo booking.");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCreatingDeposit, setIsCreatingDeposit] = useState(false);
 
@@ -84,6 +84,12 @@ export default function PlayerBookingCreatePage() {
   }
 
   async function loadSession() {
+    if (!sessionId) {
+      setSession(null);
+      setMessage("Thiếu sessionId trên URL. Hãy vào discovery và bấm Đặt sân.");
+      return;
+    }
+
     setError("");
     try {
       const detail = await apiFetch<SessionDetail>(`/api/v1/player/sessions/${sessionId}`);
@@ -100,9 +106,7 @@ export default function PlayerBookingCreatePage() {
   }
 
   useEffect(() => {
-    if (sessionId) {
-      loadSession();
-    }
+    loadSession();
   }, [sessionId]);
 
   const estimate = useMemo(() => {
@@ -277,8 +281,7 @@ export default function PlayerBookingCreatePage() {
             <p className="mt-1">Mã booking: {booking.booking_code}</p>
             <p className="mt-1">Trạng thái: {booking.status}</p>
             <p className="mt-1">
-              Tổng phí: {money(booking.total_price_vnd)}đ · Cọc: {money(booking.deposit_required_vnd)}
-              đ · Còn lại: {money(booking.remaining_due_vnd)}đ
+              Tổng phí: {money(booking.total_price_vnd)}đ · Cọc: {money(booking.deposit_required_vnd)}đ · Còn lại: {money(booking.remaining_due_vnd)}đ
             </p>
             <button
               className="mt-4 rounded bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:bg-emerald-300"
@@ -295,7 +298,7 @@ export default function PlayerBookingCreatePage() {
               <p className="mt-1">Số tiền: {money(depositIntent.amount_vnd)}đ</p>
               <p className="mt-1">Trạng thái: {depositIntent.status}</p>
               <p className="mt-1">
-                Hết hạn:{" "}
+                Hết hạn: {" "}
                 {depositIntent.expires_at
                   ? new Date(depositIntent.expires_at).toLocaleString("vi-VN")
                   : "không có"}

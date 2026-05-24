@@ -42,12 +42,15 @@ Useful URLs:
 - API docs: http://localhost:8000/api/docs
 - Database UI: http://localhost:8080
 - Hidden admin login: http://localhost:3000/_internal/netup-admin/login
+- Admin dashboard: http://localhost:3000/_internal/netup-admin/dashboard
+- Admin config: http://localhost:3000/_internal/netup-admin/config
 - Admin owner approval: http://localhost:3000/_internal/netup-admin/owner-requests
 - Owner dashboard: http://localhost:3000/owner/dashboard
 - Owner courts: http://localhost:3000/owner/courts
 - Owner check-in: http://localhost:3000/owner/check-in
 - Player discovery: http://localhost:3000/player/discovery
 - Player bookings: http://localhost:3000/player/bookings
+- Player matches: http://localhost:3000/player/matches
 - Google login entry: http://localhost:8000/api/v1/auth/google/start
 
 Adminer login:

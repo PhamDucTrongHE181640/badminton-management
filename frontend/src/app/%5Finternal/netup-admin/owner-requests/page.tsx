@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+import { adminFetch, adminLogout } from "../_lib/auth";
 
 type OwnerRequest = {
   id: string;
@@ -35,34 +35,20 @@ export default function AdminOwnerRequestsPage() {
   const [reviewNote, setReviewNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  function accessToken() {
-    return window.localStorage.getItem("netup_admin_access_token");
-  }
-
   async function loadRequests() {
-    const token = accessToken();
-    if (!token) {
-      router.push("/_internal/netup-admin/login");
-      return;
-    }
-
     setError("");
     try {
-      const response = await fetch(`${apiBaseUrl}/api/v1/admin/owner-requests`, {
-        cache: "no-store",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const payload = await response.json();
-
-      if (!response.ok) {
-        setError(payload?.error?.message ?? "Không tải được hồ sơ owner");
-        return;
-      }
-
+      const payload = await adminFetch<OwnerRequest[]>("/api/v1/admin/owner-requests");
       setRequests(payload);
       setMessage("Danh sách owner request đã được đồng bộ");
-    } catch {
-      setError("Không kết nối được API admin");
+    } catch (caught) {
+      const nextError = caught instanceof Error ? caught.message : "Không tải được hồ sơ owner";
+      if (nextError === "admin_unauthorized") {
+        router.push("/_internal/netup-admin/login");
+        return;
+      }
+      setError(nextError);
+      setRequests([]);
     }
   }
 
@@ -71,40 +57,32 @@ export default function AdminOwnerRequestsPage() {
   }, []);
 
   async function review(requestId: string, action: "approve" | "reject") {
-    const token = accessToken();
-    if (!token) {
-      router.push("/_internal/netup-admin/login");
-      return;
-    }
-
     setIsSubmitting(true);
     setError("");
     try {
-      const response = await fetch(
-        `${apiBaseUrl}/api/v1/admin/owner-requests/${requestId}/${action}`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ review_note: reviewNote || null }),
-        },
-      );
-      const payload = await response.json();
-
-      if (!response.ok) {
-        setError(payload?.error?.message ?? "Không cập nhật được hồ sơ owner");
-        return;
-      }
-
+      await adminFetch(`/api/v1/admin/owner-requests/${requestId}/${action}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ review_note: reviewNote || null }),
+      });
       setReviewNote("");
       await loadRequests();
-    } catch {
-      setError("Không kết nối được API admin");
+    } catch (caught) {
+      const nextError =
+        caught instanceof Error ? caught.message : "Không cập nhật được hồ sơ owner";
+      if (nextError === "admin_unauthorized") {
+        router.push("/_internal/netup-admin/login");
+        return;
+      }
+      setError(nextError);
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  async function logout() {
+    await adminLogout();
+    router.push("/_internal/netup-admin/login");
   }
 
   return (
@@ -118,12 +96,26 @@ export default function AdminOwnerRequestsPage() {
             <h1 className="mt-2 text-3xl font-semibold">Duyệt hồ sơ chủ sân</h1>
             <p className="mt-2 text-sm text-slate-600">{message}</p>
           </div>
-          <Link
-            className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-            href="/_internal/netup-admin/dashboard"
-          >
-            Bảng điều khiển
-          </Link>
+          <div className="flex flex-wrap gap-3">
+            <Link
+              className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              href="/_internal/netup-admin/dashboard"
+            >
+              Dashboard
+            </Link>
+            <Link
+              className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              href="/_internal/netup-admin/config"
+            >
+              Cấu hình
+            </Link>
+            <button
+              className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              onClick={logout}
+            >
+              Đăng xuất
+            </button>
+          </div>
         </div>
       </section>
 
@@ -153,8 +145,7 @@ export default function AdminOwnerRequestsPage() {
                   </p>
                   <h2 className="mt-2 text-xl font-semibold">{request.business_name}</h2>
                   <p className="mt-2 text-sm text-slate-600">
-                    {request.user_full_name ?? "Người dùng"} ·{" "}
-                    {request.user_email ?? "chưa có email"}
+                    {request.user_full_name ?? "Người dùng"} · {request.user_email ?? "chưa có email"}
                   </p>
                   <p className="mt-1 text-sm text-slate-600">
                     Điện thoại: {request.contact_phone ?? "chưa có"}

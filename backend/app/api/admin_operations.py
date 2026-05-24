@@ -1,0 +1,127 @@
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Annotated, Any
+
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.core.dependencies import require_admin
+from app.services.admin_auth import AdminPrincipal
+from app.services.admin_operations import (
+    get_admin_config,
+    get_admin_dashboard_metrics,
+    list_admin_audit_logs,
+    update_admin_config,
+)
+
+router = APIRouter(prefix="/admin", tags=["admin-operations"])
+
+
+class AdminModel(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+
+class AdminConfigResponse(BaseModel):
+    platform_fee_rate: float
+    floor_fee_vnd: int
+    deposit_percent: float
+    matching_radius_km: float
+    no_show_strike_limit: int
+    auto_release_minutes: int
+    support_hotline_enabled: bool
+    updated_at: datetime
+
+
+class AdminConfigUpdateRequest(AdminModel):
+    change_reason: str = Field(min_length=3, max_length=500)
+    platform_fee_rate: float | None = None
+    floor_fee_vnd: int | None = None
+    deposit_percent: float | None = None
+    matching_radius_km: float | None = None
+    no_show_strike_limit: int | None = None
+    auto_release_minutes: int | None = None
+    support_hotline_enabled: bool | None = None
+
+
+class BookingMetricsResponse(BaseModel):
+    total: int
+    awaiting_deposit: int
+    checked_in: int
+    completed: int
+    last_7d: int
+
+
+class PaymentMetricsResponse(BaseModel):
+    total: int
+    paid: int
+    processing: int
+    paid_amount_vnd: int
+
+
+class CheckinMetricsResponse(BaseModel):
+    total: int
+    last_7d: int
+
+
+class OwnerRequestMetricsResponse(BaseModel):
+    pending: int
+    approved: int
+    rejected: int
+
+
+class AdminDashboardMetricsResponse(BaseModel):
+    bookings: BookingMetricsResponse
+    payments: PaymentMetricsResponse
+    checkins: CheckinMetricsResponse
+    owner_requests: OwnerRequestMetricsResponse
+
+
+class AdminAuditLogResponse(BaseModel):
+    id: str
+    actor_user_id: str | None
+    actor_email: str | None
+    actor_full_name: str | None
+    event_type: str
+    entity_type: str
+    entity_id: str
+    payload: dict[str, Any]
+    created_at: datetime
+
+
+@router.get("/config", response_model=AdminConfigResponse)
+def get_config(
+    _admin: Annotated[AdminPrincipal, Depends(require_admin)],
+) -> dict[str, Any]:
+    return get_admin_config()
+
+
+@router.put("/config", response_model=AdminConfigResponse)
+def put_config(
+    payload: AdminConfigUpdateRequest,
+    admin: Annotated[AdminPrincipal, Depends(require_admin)],
+) -> dict[str, Any]:
+    return update_admin_config(actor_user_id=admin.user_id, data=payload.model_dump())
+
+
+@router.get("/dashboard/metrics", response_model=AdminDashboardMetricsResponse)
+def get_dashboard_metrics(
+    _admin: Annotated[AdminPrincipal, Depends(require_admin)],
+) -> dict[str, Any]:
+    return get_admin_dashboard_metrics()
+
+
+@router.get("/audit-logs", response_model=list[AdminAuditLogResponse])
+def get_audit_logs(
+    _admin: Annotated[AdminPrincipal, Depends(require_admin)],
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    event_type: Annotated[str | None, Query(min_length=1, max_length=120)] = None,
+    entity_type: Annotated[str | None, Query(min_length=1, max_length=120)] = None,
+    actor_user_id: Annotated[str | None, Query(min_length=1, max_length=64)] = None,
+) -> list[dict[str, Any]]:
+    return list_admin_audit_logs(
+        limit=limit,
+        event_type=event_type,
+        entity_type=entity_type,
+        actor_user_id=actor_user_id,
+    )

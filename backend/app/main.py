@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.admin_auth import router as admin_auth_router
+from app.api.admin_operations import router as admin_operations_router
 from app.api.admin_owner_requests import router as admin_owner_requests_router
 from app.api.auth_google import router as auth_google_router
 from app.api.auth_user import router as auth_user_router
@@ -15,6 +16,7 @@ from app.api.player_assessment import router as player_assessment_router
 from app.api.player_booking import router as player_booking_router
 from app.api.player_chat import router as player_chat_router
 from app.api.player_chat import ws_router as player_chat_ws_router
+from app.api.player_matches import router as player_matches_router
 from app.api.player_payments import router as player_payments_router
 from app.core.config import get_settings
 from app.core.errors import register_error_handlers
@@ -47,12 +49,14 @@ def create_app() -> FastAPI:
     app.include_router(auth_google_router, prefix="/api/v1")
     app.include_router(auth_user_router, prefix="/api/v1")
     app.include_router(admin_auth_router, prefix="/api/v1")
+    app.include_router(admin_operations_router, prefix="/api/v1")
     app.include_router(owner_requests_router, prefix="/api/v1")
     app.include_router(admin_owner_requests_router, prefix="/api/v1")
     app.include_router(owner_inventory_router, prefix="/api/v1")
     app.include_router(owner_checkins_router, prefix="/api/v1")
     app.include_router(player_booking_router, prefix="/api/v1")
     app.include_router(player_assessment_router, prefix="/api/v1")
+    app.include_router(player_matches_router, prefix="/api/v1")
     app.include_router(player_chat_router, prefix="/api/v1")
     app.include_router(player_payments_router, prefix="/api/v1")
     app.include_router(health_router, prefix="/api/v1")

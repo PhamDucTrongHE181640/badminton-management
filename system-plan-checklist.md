@@ -41,11 +41,11 @@
 | Assessment/Elo | `POST /api/v1/player/assessments`, `GET /api/v1/player/skill-tier`, `GET /api/v1/player/elo-history` | Onboarding + lịch sử Elo |
 | Match/Feedback | `POST /api/v1/player/matches`, `POST /api/v1/player/matches/{id}/feedback`, `POST /api/v1/player/matches/{id}/finalize` | Kết quả trận + feedback + update Elo |
 | Pool Chat | `POST /api/v1/player/chat/rooms`, `POST /api/v1/player/chat/rooms/{id}/members`, `GET /api/v1/player/chat/rooms/{id}/messages`, `WS /ws/chat/rooms/{id}` | Group chat pool |
-| Admin Config | `GET/PUT /api/v1/admin/config` | Cấu hình hệ thống |
+| Admin Config | `GET/PUT /api/v1/admin/config`, `GET /api/v1/admin/dashboard/metrics`, `GET /api/v1/admin/audit-logs` | Cấu hình hệ thống + dashboard + audit |
 
 ### 4) Frontend Route Plan
 - Public: `/`.
-- Player: `/player/discovery`, `/player/assessment`, `/player/pool-posts`, `/player/rent-courts`, `/player/session/[id]`, `/player/booking/[sessionId]`, `/player/bookings`, `/player/matches`, `/player/chat/[poolPostId]`.
+- Player: `/player/discovery`, `/player/assessment`, `/player/pool-posts`, `/player/rent-courts`, `/player/session/[id]`, `/player/booking?sessionId=...`, `/player/bookings`, `/player/matches`, `/player/chat?poolPostId=...`.
 - Owner: `/owner/dashboard`, `/owner/courts`, `/owner/check-in`.
 - Hidden Admin: `/_internal/netup-admin/login`, `/_internal/netup-admin/dashboard`, `/_internal/netup-admin/config`, `/_internal/netup-admin/owner-requests`.
 - Middleware FE: chặn route admin nếu thiếu admin session; không render link admin ở nav public.
@@ -97,11 +97,11 @@
 - [x] Lưu `elo_rating_history` đầy đủ cho audit.
 
 ### Sprint 6 (22 SP) - Match Result + Peer Feedback + Elo Update
-- [ ] Tạo match event cho session đã chơi.
-- [ ] Nhập participants và kết quả trận.
-- [ ] Feedback teammate/opponent theo rule unique.
-- [ ] Elo recalculation sau finalize match.
-- [ ] Trang player history cho match + feedback + tier change summary.
+- [x] Tạo match event cho session đã chơi.
+- [x] Nhập participants và kết quả trận.
+- [x] Feedback teammate/opponent theo rule unique.
+- [x] Elo recalculation sau finalize match.
+- [x] Trang player history cho match + feedback + tier change summary.
 
 ### Sprint 7 (24 SP) - Pool Group Chat
 - [x] Tạo room chat khi có pool post.
@@ -112,10 +112,10 @@
 - [x] Frontend chat UI trong luồng pool.
 
 ### Sprint 8 (18 SP) - Admin Config + Operations Dashboard
-- [ ] Admin config API + UI (deposit %, fee, matching radius...).
-- [ ] Dashboard metrics: bookings, payments, check-ins, owner approvals.
-- [ ] Audit trail viewer cho thay đổi config/role/action.
-- [ ] Hard validation cho config change (range check + audit bắt buộc).
+- [x] Admin config API + UI (deposit %, fee, matching radius...).
+- [x] Dashboard metrics: bookings, payments, check-ins, owner approvals.
+- [x] Audit trail viewer cho thay đổi config/role/action.
+- [x] Hard validation cho config change (range check + audit bắt buộc).
 
 ### Sprint 9 (20 SP) - Hardening + UAT + Release
 - [ ] Security pass: auth, RBAC, rate limit, brute-force protection admin login.

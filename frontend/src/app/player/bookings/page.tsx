@@ -80,6 +80,12 @@ export default function PlayerBookingsPage() {
             </Link>
             <Link
               className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              href="/player/matches"
+            >
+              Match history
+            </Link>
+            <Link
+              className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               href="/"
             >
               Trang chính
