@@ -11,6 +11,12 @@ type HealthState = {
   databaseMessage: string;
 };
 
+type UserProfile = {
+  email: string;
+  full_name: string;
+  roles: string[];
+};
+
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
 const sprintItems = [
@@ -78,9 +84,39 @@ export default function Home() {
     apiMessage: "Đang kiểm tra API",
     databaseMessage: "Đang kiểm tra cơ sở dữ liệu",
   });
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [authMessage, setAuthMessage] = useState("Đang kiểm tra phiên đăng nhập");
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+
+    async function checkAuth() {
+      try {
+        const response = await fetch(`${apiBaseUrl}/api/v1/auth/me`, {
+          cache: "no-store",
+          credentials: "include",
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        if (!response.ok) {
+          setUser(null);
+          setAuthMessage("Chưa đăng nhập");
+          return;
+        }
+
+        setUser(await response.json());
+        setAuthMessage("Đã đăng nhập");
+      } catch {
+        if (!cancelled) {
+          setUser(null);
+          setAuthMessage("Chưa đọc được phiên đăng nhập");
+        }
+      }
+    }
 
     async function checkHealth() {
       const [liveResult, readyResult] = await Promise.allSettled([
@@ -105,6 +141,7 @@ export default function Home() {
       });
     }
 
+    checkAuth();
     checkHealth();
     const intervalId = window.setInterval(checkHealth, 10000);
 
@@ -113,6 +150,22 @@ export default function Home() {
       window.clearInterval(intervalId);
     };
   }, []);
+
+  async function logout() {
+    setIsLoggingOut(true);
+    try {
+      await fetch(`${apiBaseUrl}/api/v1/auth/logout`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+    } finally {
+      setUser(null);
+      setAuthMessage("Đã đăng xuất");
+      setIsLoggingOut(false);
+    }
+  }
 
   const completedCount = useMemo(() => sprintItems.length, []);
 
@@ -132,18 +185,43 @@ export default function Home() {
               cho các luồng Người chơi, Chủ sân và Quản trị.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
-              <a
-                className="rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-                href={`${apiBaseUrl}/api/v1/auth/google/start`}
-              >
-                Đăng nhập bằng Google
-              </a>
+              {user ? (
+                <button
+                  className="rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                  disabled={isLoggingOut}
+                  onClick={logout}
+                >
+                  {isLoggingOut ? "Đang đăng xuất" : "Đăng xuất"}
+                </button>
+              ) : (
+                <a
+                  className="rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+                  href={`${apiBaseUrl}/api/v1/auth/google/start`}
+                >
+                  Đăng nhập bằng Google
+                </a>
+              )}
               <a
                 className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                 href="/_internal/netup-admin/login"
               >
                 Vào trang quản trị
               </a>
+            </div>
+            <div className="mt-5 rounded border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-semibold uppercase text-slate-500">
+                Phiên người dùng
+              </p>
+              <p className="mt-2 text-sm font-semibold text-slate-900">{authMessage}</p>
+              {user ? (
+                <p className="mt-1 text-sm text-slate-600">
+                  {user.full_name} · {user.email} · Quyền: {user.roles.join(", ")}
+                </p>
+              ) : (
+                <p className="mt-1 text-sm text-slate-600">
+                  Đăng nhập bằng Google để tạo hoặc tiếp tục phiên người chơi.
+                </p>
+              )}
             </div>
           </div>
           <div className="grid min-w-72 grid-cols-2 gap-3 rounded border border-slate-200 bg-slate-50 p-4">

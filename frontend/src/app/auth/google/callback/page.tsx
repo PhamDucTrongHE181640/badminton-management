@@ -13,6 +13,7 @@ type UserProfile = {
 export default function GoogleCallbackPage() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [message, setMessage] = useState("Đang hoàn tất đăng nhập Google...");
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
     async function loadMe() {
@@ -31,6 +32,22 @@ export default function GoogleCallbackPage() {
     loadMe();
   }, []);
 
+  async function logout() {
+    setIsLoggingOut(true);
+    try {
+      await fetch(`${apiBaseUrl}/api/v1/auth/logout`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+    } finally {
+      setUser(null);
+      setMessage("Đã đăng xuất");
+      setIsLoggingOut(false);
+    }
+  }
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#f6f7f9] px-6 text-slate-950">
       <section className="w-full max-w-lg rounded border border-slate-200 bg-white p-6">
@@ -48,12 +65,23 @@ export default function GoogleCallbackPage() {
             </p>
           </div>
         ) : null}
-        <a
-          className="mt-6 inline-flex rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-          href="/"
-        >
-          Quay về trang chính
-        </a>
+        <div className="mt-6 flex flex-wrap gap-3">
+          <a
+            className="inline-flex rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+            href="/"
+          >
+            Quay về trang chính
+          </a>
+          {user ? (
+            <button
+              className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+              disabled={isLoggingOut}
+              onClick={logout}
+            >
+              {isLoggingOut ? "Đang đăng xuất" : "Đăng xuất"}
+            </button>
+          ) : null}
+        </div>
       </section>
     </main>
   );
