@@ -1,2 +1,22 @@
 .pnpm-store/
 .out/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Local env and runtime files
+.env
+.env.*
+!.env.example
+!**/.env.example
+*.log
+
+# Docker volumes / generated data
+postgres-data/
+redis-data/

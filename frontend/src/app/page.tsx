@@ -1,103 +1,246 @@
-import Image from "next/image";
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+
+type ServiceState = "checking" | "online" | "offline";
+
+type HealthState = {
+  api: ServiceState;
+  database: ServiceState;
+  apiMessage: string;
+  databaseMessage: string;
+};
+
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+
+const sprintItems = [
+  "Cấu trúc monorepo cho frontend và backend",
+  "FastAPI, healthcheck và chuẩn lỗi",
+  "Migration Postgres từ schema.sql",
+  "Nền tảng Docker Compose",
+  "CI cho lint, test, migration và build",
+];
+
+const services = [
+  { name: "frontend", port: "3000", purpose: "Giao diện Next.js 15" },
+  { name: "backend-api", port: "8000", purpose: "FastAPI và OpenAPI" },
+  { name: "postgres", port: "5432", purpose: "Cơ sở dữ liệu quan hệ NetUp" },
+  { name: "redis", port: "6379", purpose: "Cache, giới hạn tần suất và hàng đợi nền" },
+  { name: "adminer", port: "8080", purpose: "Giao diện quản trị cơ sở dữ liệu" },
+];
+
+const roles = [
+  {
+    name: "Người chơi",
+    title: "Tìm sân, đặt sân, thanh toán",
+    description: "Luồng đăng nhập và đặt sân được triển khai trong Sprint 1-4.",
+  },
+  {
+    name: "Chủ sân",
+    title: "Quản lý sân và check-in",
+    description: "Onboarding chủ sân và CRUD sân bắt đầu ở Sprint 2.",
+  },
+  {
+    name: "Quản trị",
+    title: "Cấu hình và vận hành",
+    description: "Đăng nhập admin local và route ẩn bắt đầu ở Sprint 1.",
+  },
+];
+
+function StatusPill({ state }: { state: ServiceState }) {
+  const styles: Record<ServiceState, string> = {
+    checking: "border-slate-300 bg-slate-100 text-slate-700",
+    online: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    offline: "border-red-200 bg-red-50 text-red-700",
+  };
+  const labels: Record<ServiceState, string> = {
+    checking: "đang kiểm tra",
+    online: "sẵn sàng",
+    offline: "mất kết nối",
+  };
+
+  return (
+    <span className={`rounded border px-2 py-1 text-xs font-semibold uppercase ${styles[state]}`}>
+      {labels[state]}
+    </span>
+  );
+}
+
+async function readHealth(path: string): Promise<boolean> {
+  const response = await fetch(`${apiBaseUrl}${path}`, { cache: "no-store" });
+  return response.ok;
+}
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [health, setHealth] = useState<HealthState>({
+    api: "checking",
+    database: "checking",
+    apiMessage: "Đang kiểm tra API",
+    databaseMessage: "Đang kiểm tra cơ sở dữ liệu",
+  });
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
+  useEffect(() => {
+    let cancelled = false;
+
+    async function checkHealth() {
+      const [liveResult, readyResult] = await Promise.allSettled([
+        readHealth("/api/v1/health/live"),
+        readHealth("/api/v1/health/ready"),
+      ]);
+
+      if (cancelled) {
+        return;
+      }
+
+      const apiOnline = liveResult.status === "fulfilled" && liveResult.value;
+      const databaseOnline = readyResult.status === "fulfilled" && readyResult.value;
+
+      setHealth({
+        api: apiOnline ? "online" : "offline",
+        database: databaseOnline ? "online" : "offline",
+        apiMessage: apiOnline ? "FastAPI đang phản hồi" : "Không kết nối được FastAPI",
+        databaseMessage: databaseOnline
+          ? "Postgres đã sẵn sàng"
+          : "Postgres chưa sẵn sàng",
+      });
+    }
+
+    checkHealth();
+    const intervalId = window.setInterval(checkHealth, 10000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  const completedCount = useMemo(() => sprintItems.length, []);
+
+  return (
+    <main className="min-h-screen bg-[#f6f7f9] text-slate-950">
+      <section className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-7xl flex-col gap-8 px-6 py-8 lg:flex-row lg:items-end lg:justify-between lg:px-8">
+          <div className="max-w-3xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
+              NetUp Sprint 0
+            </p>
+            <h1 className="mt-3 text-4xl font-semibold tracking-normal text-slate-950 sm:text-5xl">
+              Nền tảng vận hành
+            </h1>
+            <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
+              FastAPI, Postgres, Redis, Docker Compose, migration, CI và giao diện đầu tiên
+              cho các luồng Người chơi, Chủ sân và Quản trị.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <a
+                className="rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+                href={`${apiBaseUrl}/api/v1/auth/google/start`}
+              >
+                Đăng nhập bằng Google
+              </a>
+              <a
+                className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                href="/_internal/netup-admin/login"
+              >
+                Vào trang quản trị
+              </a>
+            </div>
+          </div>
+          <div className="grid min-w-72 grid-cols-2 gap-3 rounded border border-slate-200 bg-slate-50 p-4">
+            <div>
+              <p className="text-xs font-semibold uppercase text-slate-500">API</p>
+              <div className="mt-2">
+                <StatusPill state={health.api} />
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase text-slate-500">Cơ sở dữ liệu</p>
+              <div className="mt-2">
+                <StatusPill state={health.database} />
+              </div>
+            </div>
+            <p className="col-span-2 text-sm text-slate-600">{health.apiMessage}</p>
+            <p className="col-span-2 text-sm text-slate-600">{health.databaseMessage}</p>
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto grid max-w-7xl gap-6 px-6 py-8 lg:grid-cols-[1.1fr_0.9fr] lg:px-8">
+        <div className="rounded border border-slate-200 bg-white p-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold text-slate-950">Checklist sprint</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                {completedCount} hạng mục nền tảng đã sẵn sàng để kiểm tra Sprint 0.
+              </p>
+            </div>
+            <div className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
+              Sẵn sàng kiểm tra
+            </div>
+          </div>
+          <div className="mt-6 grid gap-3 sm:grid-cols-2">
+            {sprintItems.map((item) => (
+              <div key={item} className="rounded border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-medium text-slate-900">{item}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded border border-slate-200 bg-white p-6">
+          <h2 className="text-xl font-semibold text-slate-950">Hợp đồng API</h2>
+          <div className="mt-5 space-y-3">
+            <div className="rounded border border-slate-200 bg-slate-50 p-4">
+              <p className="font-mono text-sm text-slate-900">GET /api/v1/health/live</p>
+              <p className="mt-1 text-sm text-slate-600">
+                Kiểm tra tiến trình API, không phụ thuộc cơ sở dữ liệu.
+              </p>
+            </div>
+            <div className="rounded border border-slate-200 bg-slate-50 p-4">
+              <p className="font-mono text-sm text-slate-900">GET /api/v1/health/ready</p>
+              <p className="mt-1 text-sm text-slate-600">
+                Kiểm tra Postgres bằng truy vấn SELECT 1.
+              </p>
+            </div>
+          </div>
           <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
+            className="mt-5 inline-flex rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+            href={`${apiBaseUrl}/api/docs`}
             target="_blank"
-            rel="noopener noreferrer"
+            rel="noreferrer"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
+            Mở tài liệu API
           </a>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+      </section>
+
+      <section className="mx-auto grid max-w-7xl gap-6 px-6 pb-8 lg:grid-cols-5 lg:px-8">
+        {services.map((service) => (
+          <div key={service.name} className="rounded border border-slate-200 bg-white p-5">
+            <p className="font-mono text-sm font-semibold text-slate-950">{service.name}</p>
+            <p className="mt-3 text-3xl font-semibold text-slate-950">{service.port}</p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">{service.purpose}</p>
+          </div>
+        ))}
+      </section>
+
+      <section className="mx-auto grid max-w-7xl gap-6 px-6 pb-10 lg:grid-cols-3 lg:px-8">
+        {roles.map((role) => (
+          <div key={role.name} className="rounded border border-slate-200 bg-white p-6">
+            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-500">
+              {role.name}
+            </p>
+            <h2 className="mt-3 text-xl font-semibold text-slate-950">{role.title}</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">{role.description}</p>
+            <button
+              className="mt-5 w-full rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-500"
+              disabled
+            >
+              Sẽ mở ở sprint tiếp theo
+            </button>
+          </div>
+        ))}
+      </section>
+    </main>
   );
 }

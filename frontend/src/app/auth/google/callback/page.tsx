@@ -1,0 +1,60 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+
+type UserProfile = {
+  email: string;
+  full_name: string;
+  roles: string[];
+};
+
+export default function GoogleCallbackPage() {
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [message, setMessage] = useState("Đang hoàn tất đăng nhập Google...");
+
+  useEffect(() => {
+    async function loadMe() {
+      const response = await fetch(`${apiBaseUrl}/api/v1/auth/me`, {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        setMessage("Không đọc được phiên đăng nhập. Vui lòng thử lại.");
+        return;
+      }
+
+      setUser(await response.json());
+      setMessage("Đăng nhập Google thành công");
+    }
+
+    loadMe();
+  }, []);
+
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-[#f6f7f9] px-6 text-slate-950">
+      <section className="w-full max-w-lg rounded border border-slate-200 bg-white p-6">
+        <p className="text-sm font-semibold uppercase tracking-[0.16em] text-emerald-700">
+          NetUp
+        </p>
+        <h1 className="mt-3 text-3xl font-semibold">{message}</h1>
+        {user ? (
+          <div className="mt-5 rounded border border-slate-200 bg-slate-50 p-4">
+            <p className="text-sm text-slate-600">Tài khoản</p>
+            <p className="mt-1 font-semibold">{user.full_name}</p>
+            <p className="mt-1 text-sm text-slate-600">{user.email}</p>
+            <p className="mt-3 text-sm text-slate-600">
+              Quyền hiện tại: {user.roles.join(", ")}
+            </p>
+          </div>
+        ) : null}
+        <a
+          className="mt-6 inline-flex rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+          href="/"
+        >
+          Quay về trang chính
+        </a>
+      </section>
+    </main>
+  );
+}

@@ -1,14 +1,87 @@
 services:
-  node24:
-    image: node:24-bookworm
-    container_name: node24
-    working_dir: /app
-    stdin_open: true
-    tty: true
+  postgres:
+    image: postgres:16-bookworm
+    container_name: netup-postgres
+    restart: unless-stopped
     environment:
-      - COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+      POSTGRES_DB: netup
+      POSTGRES_USER: netup
+      POSTGRES_PASSWORD: netup
+    ports:
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U netup -d netup"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7.4-bookworm
+    container_name: netup-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  adminer:
+    image: adminer:latest
+    container_name: netup-adminer
+    restart: unless-stopped
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    ports:
+      - "${ADMINER_HOST_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend-api:
+    build:
+      context: ./backend
+    container_name: netup-backend-api
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    ports:
+      - "${BACKEND_HOST_PORT:-8000}:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    image: node:24-bookworm
+    container_name: netup-frontend
+    working_dir: /app
+    restart: unless-stopped
+    env_file:
+      - ./frontend/.env
+    environment:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+    ports:
+      - "${FRONTEND_HOST_PORT:-3000}:3000"
     volumes:
       - ./frontend:/app
-    ports:
-      - "3000:3000"
-    command: sh -c "corepack enable && corepack prepare pnpm@11.2.2 --activate && pnpm dev --hostname 0.0.0.0 --port 3000"
+    command: >
+      sh -c "corepack enable &&
+      corepack prepare pnpm@11.2.2 --activate &&
+      pnpm install --frozen-lockfile &&
+      pnpm dev --hostname 0.0.0.0 --port 3000"
+    depends_on:
+      backend-api:
+        condition: service_started
+
+volumes:
+  postgres-data:
+  redis-data:
