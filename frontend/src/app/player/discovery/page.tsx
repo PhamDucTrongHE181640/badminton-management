@@ -12,6 +12,11 @@ type UserProfile = {
   roles: string[];
 };
 
+type SkillTierSummary = {
+  visible_skill_tier: string;
+  has_assessment: boolean;
+};
+
 type Session = {
   id: string;
   title: string;
@@ -32,6 +37,12 @@ type Session = {
   complex_name: string;
   district: string;
   address: string;
+  pool_post_id?: string | null;
+  player_skill_tier?: string | null;
+  recommendation_score?: number | null;
+  recommendation_label?: string | null;
+  distance_bucket?: string | null;
+  slot_fit_score?: number | null;
 };
 
 const sportOptions = ["", "Badminton", "Football", "Tennis"];
@@ -42,6 +53,7 @@ function money(value: number) {
 
 export default function PlayerDiscoveryPage() {
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [skillTier, setSkillTier] = useState<SkillTierSummary | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("Đang tải dữ liệu discovery...");
@@ -77,16 +89,21 @@ export default function PlayerDiscoveryPage() {
     setIsLoading(true);
     setError("");
     try {
-      const [nextUser, nextSessions] = await Promise.all([
+      const [nextUser, nextTier, nextSessions] = await Promise.all([
         apiFetch<UserProfile>("/api/v1/auth/me"),
+        apiFetch<SkillTierSummary>("/api/v1/player/skill-tier"),
         apiFetch<Session[]>(`/api/v1/player/discovery/sessions${query ? `?${query}` : ""}`),
       ]);
       setUser(nextUser);
+      setSkillTier(nextTier);
       setSessions(nextSessions);
-      setMessage(`Đang hiển thị ${nextSessions.length} phiên sân phù hợp`);
+      setMessage(
+        `Đang hiển thị ${nextSessions.length} phiên sân được ưu tiên theo tier + khoảng cách + slot`
+      );
     } catch (caught) {
       setSessions([]);
       setUser(null);
+      setSkillTier(null);
       setError(caught instanceof Error ? caught.message : "Không tải được discovery");
       setMessage("Vui lòng đăng nhập Google để dùng khu vực người chơi");
     } finally {
@@ -118,8 +135,20 @@ export default function PlayerDiscoveryPage() {
                 {user.full_name} · {user.email}
               </p>
             ) : null}
+            {skillTier ? (
+              <p className="mt-1 text-sm text-slate-700">
+                Tier hiện tại:{" "}
+                <span className="font-semibold">{skillTier.visible_skill_tier}</span>
+              </p>
+            ) : null}
           </div>
           <div className="flex flex-wrap gap-3">
+            <Link
+              className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              href="/player/assessment"
+            >
+              Assessment
+            </Link>
             <Link
               className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               href="/player/bookings"
@@ -212,6 +241,13 @@ export default function PlayerDiscoveryPage() {
               {item.open_slots}/{item.max_slots} slot · {money(item.slot_price_vnd)}đ/slot ·{" "}
               {money(item.full_court_price_vnd)}đ/nguyên sân
             </p>
+            <p className="mt-1 text-sm text-slate-600">
+              Đề xuất:{" "}
+              <span className="font-semibold text-slate-800">
+                {item.recommendation_label ?? "n/a"}
+              </span>{" "}
+              · Điểm: {item.recommendation_score ?? 0}
+            </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <Link
                 className="rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
@@ -219,6 +255,17 @@ export default function PlayerDiscoveryPage() {
               >
                 Đặt sân
               </Link>
+              {item.pool_post_id ? (
+                <Link
+                  className="rounded border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
+                  href={`/player/chat/${item.pool_post_id}`}
+                >
+                  Vào chat pool
+                </Link>
+              ) : null}
+              <span className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                Tier của bạn: {item.player_skill_tier ?? skillTier?.visible_skill_tier ?? "Beginner"}
+              </span>
               <span className="rounded border border-slate-300 px-3 py-2 text-sm text-slate-700">
                 {item.sport}
               </span>

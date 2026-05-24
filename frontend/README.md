@@ -43,6 +43,8 @@ Owner routes:
 Player routes:
 
 - `/player/discovery`
+- `/player/assessment`
+- `/player/chat/[poolPostId]`
 - `/player/booking/[sessionId]`
 - `/player/bookings`
 

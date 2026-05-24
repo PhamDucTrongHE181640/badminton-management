@@ -13,6 +13,7 @@ from app.core.errors import AppError
 from app.db.session import get_engine
 
 SESSION_DISCOVERY_STATUSES = {"scheduled", "locked"}
+SKILL_RANKS = {"Beginner": 1, "Intermediate": 2, "Advanced": 3}
 
 
 def _round_money(value: Decimal) -> int:
@@ -48,6 +49,36 @@ def _session_from_row(row: Any) -> dict[str, Any]:
         "address": str(row.address),
         "latitude": float(row.latitude) if row.latitude is not None else None,
         "longitude": float(row.longitude) if row.longitude is not None else None,
+        "pool_post_id": (
+            str(row.pool_post_id)
+            if hasattr(row, "pool_post_id") and row.pool_post_id is not None
+            else None
+        ),
+        "player_skill_tier": (
+            str(row.player_skill_tier)
+            if hasattr(row, "player_skill_tier") and row.player_skill_tier is not None
+            else None
+        ),
+        "recommendation_score": (
+            int(row.recommendation_score)
+            if hasattr(row, "recommendation_score") and row.recommendation_score is not None
+            else None
+        ),
+        "recommendation_label": (
+            str(row.recommendation_label)
+            if hasattr(row, "recommendation_label") and row.recommendation_label is not None
+            else None
+        ),
+        "distance_bucket": (
+            str(row.distance_bucket)
+            if hasattr(row, "distance_bucket") and row.distance_bucket is not None
+            else None
+        ),
+        "slot_fit_score": (
+            int(row.slot_fit_score)
+            if hasattr(row, "slot_fit_score") and row.slot_fit_score is not None
+            else None
+        ),
     }
 
 
@@ -146,16 +177,110 @@ def _session_select_sql(where_clause: str) -> str:
           cc.district,
           cc.address,
           cc.latitude,
-          cc.longitude
+          cc.longitude,
+          p.id AS pool_post_id
         FROM public.sessions s
         JOIN public.courts c ON c.id = s.court_id
         JOIN public.court_complexes cc ON cc.id = c.complex_id
+        LEFT JOIN public.pool_posts p ON p.session_id = s.id
         {where_clause}
     """
 
 
+def _load_player_tier(connection: Any, *, player_user_id: str) -> str:
+    rating_row = connection.execute(
+        text(
+            """
+            SELECT visible_skill_tier::text AS visible_skill_tier
+            FROM public.elo_ratings
+            WHERE player_user_id = :player_user_id
+            LIMIT 1
+            """
+        ),
+        {"player_user_id": player_user_id},
+    ).first()
+    if rating_row is not None:
+        return str(rating_row.visible_skill_tier)
+
+    assessment_row = connection.execute(
+        text(
+            """
+            SELECT computed_skill_tier::text AS computed_skill_tier
+            FROM public.player_assessments
+            WHERE player_user_id = :player_user_id
+            ORDER BY updated_at DESC
+            LIMIT 1
+            """
+        ),
+        {"player_user_id": player_user_id},
+    ).first()
+    if assessment_row is not None:
+        return str(assessment_row.computed_skill_tier)
+    return "Beginner"
+
+
+def _load_player_preferred_district(connection: Any, *, player_user_id: str) -> str | None:
+    row = connection.execute(
+        text(
+            """
+            SELECT cc.district
+            FROM public.bookings b
+            JOIN public.sessions s ON s.id = b.session_id
+            JOIN public.courts c ON c.id = s.court_id
+            JOIN public.court_complexes cc ON cc.id = c.complex_id
+            WHERE b.player_user_id = :player_user_id
+            ORDER BY b.created_at DESC
+            LIMIT 1
+            """
+        ),
+        {"player_user_id": player_user_id},
+    ).first()
+    if row is None or row.district is None:
+        return None
+    return str(row.district)
+
+
+def _tier_fit_score(*, player_tier: str, required_min: str, required_max: str) -> int:
+    player_rank = SKILL_RANKS.get(player_tier, 1)
+    min_rank = SKILL_RANKS.get(required_min, 1)
+    max_rank = SKILL_RANKS.get(required_max, 3)
+    if min_rank <= player_rank <= max_rank:
+        return 60
+    rank_gap = min(abs(player_rank - min_rank), abs(player_rank - max_rank))
+    if rank_gap == 1:
+        return 35
+    return 15
+
+
+def _distance_score(*, session_district: str, preferred_district: str | None) -> tuple[int, str]:
+    if not preferred_district:
+        return 20, "unknown"
+    if session_district.strip().lower() == preferred_district.strip().lower():
+        return 30, "same_district"
+    return 10, "different_district"
+
+
+def _slot_fit_score(*, open_slots: int, max_slots: int, allows_solo_join: bool) -> int:
+    if open_slots <= 0:
+        return 0
+    ratio = open_slots / max(max_slots, 1)
+    score = 20 if ratio >= 0.5 else 12
+    if allows_solo_join:
+        score += 5
+    return min(score, 30)
+
+
+def _recommendation_label(score: int) -> str:
+    if score >= 88:
+        return "high"
+    if score >= 68:
+        return "medium"
+    return "low"
+
+
 def list_discovery_sessions(
     *,
+    player_user_id: str | None = None,
     sport: str | None = None,
     district: str | None = None,
     starts_from: datetime | None = None,
@@ -199,8 +324,48 @@ def list_discovery_sessions(
     where_clause = f"WHERE {' AND '.join(where_parts)} ORDER BY s.starts_at ASC LIMIT 200"
     query = _session_select_sql(where_clause)
     with get_engine().begin() as connection:
+        player_tier = (
+            _load_player_tier(connection, player_user_id=player_user_id)
+            if player_user_id
+            else "Beginner"
+        )
+        preferred_district = (
+            _load_player_preferred_district(connection, player_user_id=player_user_id)
+            if player_user_id
+            else None
+        )
         rows = connection.execute(text(query), params).all()
-    return [_session_from_row(row) for row in rows]
+    sessions = [_session_from_row(row) for row in rows]
+
+    for item in sessions:
+        tier_score = _tier_fit_score(
+            player_tier=player_tier,
+            required_min=str(item["required_skill_min"]),
+            required_max=str(item["required_skill_max"]),
+        )
+        distance_score, distance_bucket = _distance_score(
+            session_district=str(item["district"]),
+            preferred_district=preferred_district,
+        )
+        slot_score = _slot_fit_score(
+            open_slots=int(item["open_slots"]),
+            max_slots=int(item["max_slots"]),
+            allows_solo_join=bool(item["allows_solo_join"]),
+        )
+        total_score = tier_score + distance_score + slot_score
+        item["player_skill_tier"] = player_tier
+        item["recommendation_score"] = total_score
+        item["recommendation_label"] = _recommendation_label(total_score)
+        item["distance_bucket"] = distance_bucket
+        item["slot_fit_score"] = slot_score
+
+    sessions.sort(
+        key=lambda item: (
+            -int(item.get("recommendation_score") or 0),
+            item["starts_at"],
+        )
+    )
+    return sessions
 
 
 def get_session_detail(*, session_id: str) -> dict[str, Any]:

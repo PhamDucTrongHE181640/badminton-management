@@ -90,11 +90,11 @@
 - [x] Frontend booking success + owner check-in màn hình thật.
 
 ### Sprint 5 (20 SP) - Assessment + Elo Bootstrap
-- [ ] Assessment form theo môn thể thao.
-- [ ] Compute tier + Elo nội bộ ban đầu.
-- [ ] Không hiển thị Elo raw trên UI, chỉ hiển thị tier.
-- [ ] Recommendation v1 trong discovery dựa trên tier + distance + slot fit.
-- [ ] Lưu `elo_rating_history` đầy đủ cho audit.
+- [x] Assessment form theo môn thể thao.
+- [x] Compute tier + Elo nội bộ ban đầu.
+- [x] Không hiển thị Elo raw trên UI, chỉ hiển thị tier.
+- [x] Recommendation v1 trong discovery dựa trên tier + distance + slot fit.
+- [x] Lưu `elo_rating_history` đầy đủ cho audit.
 
 ### Sprint 6 (22 SP) - Match Result + Peer Feedback + Elo Update
 - [ ] Tạo match event cho session đã chơi.
@@ -104,12 +104,12 @@
 - [ ] Trang player history cho match + feedback + tier change summary.
 
 ### Sprint 7 (24 SP) - Pool Group Chat
-- [ ] Tạo room chat khi có pool post.
-- [ ] Membership rule: host hoặc người có booking hợp lệ.
-- [ ] REST load history + WebSocket realtime message.
-- [ ] System messages (join/leave/close room).
-- [ ] Auto close room khi session complete/cancelled.
-- [ ] Frontend chat UI trong luồng pool.
+- [x] Tạo room chat khi có pool post.
+- [x] Membership rule: host hoặc người có booking hợp lệ.
+- [x] REST load history + WebSocket realtime message.
+- [x] System messages (join/leave/close room).
+- [x] Auto close room khi session complete/cancelled.
+- [x] Frontend chat UI trong luồng pool.
 
 ### Sprint 8 (18 SP) - Admin Config + Operations Dashboard
 - [ ] Admin config API + UI (deposit %, fee, matching radius...).

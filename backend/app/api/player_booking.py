@@ -65,6 +65,12 @@ class DiscoverySessionResponse(BaseModel):
     address: str
     latitude: float | None = None
     longitude: float | None = None
+    pool_post_id: str | None = None
+    player_skill_tier: str | None = None
+    recommendation_score: int | None = None
+    recommendation_label: str | None = None
+    distance_bucket: str | None = None
+    slot_fit_score: int | None = None
 
 
 class BookingCreate(PlayerModel):
@@ -116,8 +122,8 @@ def get_discovery_sessions(
     has_open_slots: Annotated[bool | None, Query()] = None,
     post_type: Annotated[SessionPostType | None, Query()] = None,
 ) -> list[dict[str, object]]:
-    _ = user
     return list_discovery_sessions(
+        player_user_id=user.id,
         sport=sport,
         district=district,
         starts_from=starts_from,

@@ -788,6 +788,37 @@ def create_session(*, owner_user_id: str, data: dict[str, Any]) -> dict[str, Any
             ),
             {"owner_user_id": owner_user_id, **data, "status": session_status},
         ).one()
+        if str(row.post_type) == "pool":
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO public.pool_posts (
+                      session_id,
+                      host_user_id,
+                      status,
+                      total_slots,
+                      host_slots,
+                      description
+                    )
+                    VALUES (
+                      :session_id,
+                      :host_user_id,
+                      CAST('open' AS public.pool_post_status),
+                      :total_slots,
+                      :host_slots,
+                      :description
+                    )
+                    ON CONFLICT (session_id) DO NOTHING
+                    """
+                ),
+                {
+                    "session_id": str(row.id),
+                    "host_user_id": owner_user_id,
+                    "total_slots": int(row.max_slots),
+                    "host_slots": 1,
+                    "description": f"Pool cho session {row.title}",
+                },
+            )
         _audit(
             connection,
             actor_user_id=owner_user_id,
