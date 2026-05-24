@@ -30,6 +30,9 @@ ADMIN_SEED_PASSWORD=admin12345
 GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-google-client-secret
 GOOGLE_REDIRECT_URI=http://localhost:8000/api/v1/auth/google/callback
+ADMIN_LOGIN_MAX_ATTEMPTS=5
+ADMIN_LOGIN_WINDOW_MINUTES=15
+ADMIN_LOGIN_BLOCK_MINUTES=15
 ```
 
 ## Migrations
@@ -67,6 +70,8 @@ python -m pytest
 - `GET /api/v1/admin/audit-logs`
 
 The dev container seeds a local admin account when `ADMIN_SEED_ENABLED=true`.
+Admin login brute-force protection applies per username/IP window and returns
+`429 admin_login_rate_limited` when the threshold is exceeded.
 
 ## User Auth Endpoints
 

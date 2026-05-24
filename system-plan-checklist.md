@@ -118,12 +118,12 @@
 - [x] Hard validation cho config change (range check + audit bắt buộc).
 
 ### Sprint 9 (20 SP) - Hardening + UAT + Release
-- [ ] Security pass: auth, RBAC, rate limit, brute-force protection admin login.
-- [ ] Concurrency test booking để tránh overbook.
-- [ ] Load test discovery + booking + chat peak.
-- [ ] E2E regression cho 3 role.
-- [ ] Backup/restore drill cho Postgres.
-- [ ] Production runbook + incident playbook + release checklist.
+- [x] Security pass: auth, RBAC, rate limit, brute-force protection admin login.
+- [x] Concurrency test booking để tránh overbook.
+- [x] Load test discovery + booking + chat peak.
+- [x] E2E regression cho 3 role.
+- [x] Backup/restore drill cho Postgres.
+- [x] Production runbook + incident playbook + release checklist.
 
 ## Test Plan (Acceptance Scenarios)
 - [ ] Player đăng nhập Google, làm assessment, tạo booking, thanh toán cọc, nhận code check-in thành công.

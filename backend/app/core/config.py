@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     user_refresh_token_days: int = 30
     admin_access_token_minutes: int = 30
     admin_refresh_token_days: int = 14
+    admin_login_max_attempts: int = 5
+    admin_login_window_minutes: int = 15
+    admin_login_block_minutes: int = 15
     auth_cookie_secure: bool = False
     admin_seed_enabled: bool = False
     admin_seed_email: str = "admin@netup.local"
