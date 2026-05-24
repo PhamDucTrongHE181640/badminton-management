@@ -87,6 +87,18 @@ Session creation and updates validate owner ownership, duration limits, skill
 range, open slot capacity, and active-session time overlap before writing to
 Postgres.
 
+## Player Discovery and Booking Endpoints
+
+- `GET /api/v1/player/discovery/sessions`
+- `GET /api/v1/player/sessions/{id}`
+- `POST /api/v1/player/bookings`
+- `GET /api/v1/player/bookings`
+- `GET /api/v1/player/bookings/{id}`
+
+Booking creation enforces slot limits (`solo` and `full_court`), creates payment
+plan transactions (`deposit` + `remaining`), and locks session slots in one
+transaction.
+
 API errors use:
 
 ```json

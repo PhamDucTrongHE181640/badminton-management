@@ -75,11 +75,11 @@
 - [x] Frontend owner dashboard/courts tích hợp API thật.
 
 ### Sprint 3 (24 SP) - Discovery + Booking
-- [ ] Discovery API list/map/filter (sport, district, time window, slot state).
-- [ ] Session detail API.
-- [ ] Booking API cho `solo` và `full_court`.
-- [ ] Đồng bộ booking state machine ở service.
-- [ ] Frontend player discovery + booking flow thay mock data.
+- [x] Discovery API list/map/filter (sport, district, time window, slot state).
+- [x] Session detail API.
+- [x] Booking API cho `solo` và `full_court`.
+- [x] Đồng bộ booking state machine ở service.
+- [x] Frontend player discovery + booking flow thay mock data.
 
 ### Sprint 4 (22 SP) - Payments + Check-in
 - [ ] Tạo payment plan: deposit bắt buộc, remaining online/cash.

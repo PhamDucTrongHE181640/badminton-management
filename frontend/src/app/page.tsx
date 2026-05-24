@@ -39,8 +39,8 @@ const roles = [
   {
     name: "Người chơi",
     title: "Tìm sân, đặt sân, thanh toán",
-    description: "Luồng đăng nhập và đặt sân được triển khai trong Sprint 1-4.",
-    href: "",
+    description: "Discovery, xem phiên sân, tạo booking solo/full-court đã nối API ở Sprint 3.",
+    href: "/player/discovery",
   },
   {
     name: "Chủ sân",
@@ -215,6 +215,12 @@ export default function Home() {
                 href="/owner/dashboard"
               >
                 Vào khu chủ sân
+              </a>
+              <a
+                className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                href="/player/discovery"
+              >
+                Vào khu người chơi
               </a>
             </div>
             <div className="mt-5 rounded border border-slate-200 bg-slate-50 p-4">

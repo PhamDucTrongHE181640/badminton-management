@@ -39,6 +39,12 @@ Owner routes:
 - `/owner/dashboard`
 - `/owner/courts`
 
+Player routes:
+
+- `/player/discovery`
+- `/player/booking/[sessionId]`
+- `/player/bookings`
+
 Google auth callback:
 
 - `/auth/google/callback`
@@ -54,4 +60,5 @@ pnpm build
 Sprint 0 provides the operational dashboard and service health display. Sprint 1
 adds local admin login and Google auth callback handling. Sprint 2 adds owner
 onboarding, admin owner approval, and owner court/session inventory screens
-connected to the FastAPI backend.
+connected to the FastAPI backend. Sprint 3 adds player discovery and booking
+flows connected to live APIs.

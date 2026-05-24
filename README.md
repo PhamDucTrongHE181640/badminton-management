@@ -45,6 +45,8 @@ Useful URLs:
 - Admin owner approval: http://localhost:3000/_internal/netup-admin/owner-requests
 - Owner dashboard: http://localhost:3000/owner/dashboard
 - Owner courts: http://localhost:3000/owner/courts
+- Player discovery: http://localhost:3000/player/discovery
+- Player bookings: http://localhost:3000/player/bookings
 - Google login entry: http://localhost:8000/api/v1/auth/google/start
 
 Adminer login:
