@@ -40,16 +40,19 @@ const roles = [
     name: "Người chơi",
     title: "Tìm sân, đặt sân, thanh toán",
     description: "Luồng đăng nhập và đặt sân được triển khai trong Sprint 1-4.",
+    href: "",
   },
   {
     name: "Chủ sân",
     title: "Quản lý sân và check-in",
-    description: "Onboarding chủ sân và CRUD sân bắt đầu ở Sprint 2.",
+    description: "Onboarding chủ sân và quản lý inventory sân đã nối API thật ở Sprint 2.",
+    href: "/owner/dashboard",
   },
   {
     name: "Quản trị",
     title: "Cấu hình và vận hành",
-    description: "Đăng nhập admin local và route ẩn bắt đầu ở Sprint 1.",
+    description: "Đăng nhập admin local và duyệt owner request qua route ẩn.",
+    href: "/_internal/netup-admin/login",
   },
 ];
 
@@ -207,6 +210,12 @@ export default function Home() {
               >
                 Vào trang quản trị
               </a>
+              <a
+                className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                href="/owner/dashboard"
+              >
+                Vào khu chủ sân
+              </a>
             </div>
             <div className="mt-5 rounded border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-semibold uppercase text-slate-500">
@@ -310,12 +319,21 @@ export default function Home() {
             </p>
             <h2 className="mt-3 text-xl font-semibold text-slate-950">{role.title}</h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">{role.description}</p>
-            <button
-              className="mt-5 w-full rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-500"
-              disabled
-            >
-              Sẽ mở ở sprint tiếp theo
-            </button>
+            {role.href ? (
+              <a
+                className="mt-5 inline-flex w-full justify-center rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                href={role.href}
+              >
+                Mở khu vực
+              </a>
+            ) : (
+              <button
+                className="mt-5 w-full rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-500"
+                disabled
+              >
+                Sẽ mở ở sprint tiếp theo
+              </button>
+            )}
           </div>
         ))}
       </section>

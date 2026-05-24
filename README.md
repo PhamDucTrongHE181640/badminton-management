@@ -42,6 +42,9 @@ Useful URLs:
 - API docs: http://localhost:8000/api/docs
 - Database UI: http://localhost:8080
 - Hidden admin login: http://localhost:3000/_internal/netup-admin/login
+- Admin owner approval: http://localhost:3000/_internal/netup-admin/owner-requests
+- Owner dashboard: http://localhost:3000/owner/dashboard
+- Owner courts: http://localhost:3000/owner/courts
 - Google login entry: http://localhost:8000/api/v1/auth/google/start
 
 Adminer login:

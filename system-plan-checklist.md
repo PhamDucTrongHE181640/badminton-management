@@ -68,11 +68,11 @@
 - [x] RBAC middleware cho player/owner/admin contexts.
 
 ### Sprint 2 (24 SP) - Owner Onboarding + Court Inventory
-- [ ] API owner service request.
-- [ ] API admin approve/reject owner.
-- [ ] CRUD `court_complexes`, `courts`, `sessions` cho owner.
-- [ ] Enforce session overlap + duration rule từ DB lên service validation.
-- [ ] Frontend owner dashboard/courts tích hợp API thật.
+- [x] API owner service request.
+- [x] API admin approve/reject owner.
+- [x] CRUD `court_complexes`, `courts`, `sessions` cho owner.
+- [x] Enforce session overlap + duration rule từ DB lên service validation.
+- [x] Frontend owner dashboard/courts tích hợp API thật.
 
 ### Sprint 3 (24 SP) - Discovery + Booking
 - [ ] Discovery API list/map/filter (sport, district, time window, slot state).

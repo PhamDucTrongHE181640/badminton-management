@@ -46,6 +46,24 @@ def _roles_for_user(connection: Any, user_id: str) -> list[str]:
     return [str(row.role) for row in rows]
 
 
+def user_has_active_role(user_id: str, role: str) -> bool:
+    with get_engine().begin() as connection:
+        row = connection.execute(
+            text(
+                """
+                SELECT 1
+                FROM public.user_role_assignments
+                WHERE user_id = :user_id
+                  AND role = CAST(:role AS public.user_role)
+                  AND revoked_at IS NULL
+                LIMIT 1
+                """
+            ),
+            {"user_id": user_id, "role": role},
+        ).first()
+        return row is not None
+
+
 def create_user_access_token(user: UserPrincipal) -> str:
     settings = get_settings()
     return create_signed_token(

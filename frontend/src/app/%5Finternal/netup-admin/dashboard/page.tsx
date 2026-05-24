@@ -93,6 +93,12 @@ export default function AdminDashboardPage() {
           <p className="mt-2 text-sm text-slate-600">
             Các màn hình nghiệp vụ sẽ được nối sau khi API domain hoàn tất.
           </p>
+          <a
+            className="mt-5 inline-flex rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+            href="/_internal/netup-admin/owner-requests"
+          >
+            Mở duyệt owner
+          </a>
         </div>
       </section>
     </main>

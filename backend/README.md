@@ -69,6 +69,24 @@ The dev container seeds a local admin account when `ADMIN_SEED_ENABLED=true`.
 - `POST /api/v1/auth/refresh`
 - `POST /api/v1/auth/logout`
 
+## Owner Onboarding Endpoints
+
+- `POST /api/v1/owner/requests`
+- `GET /api/v1/owner/requests/me`
+- `GET /api/v1/admin/owner-requests`
+- `POST /api/v1/admin/owner-requests/{id}/approve`
+- `POST /api/v1/admin/owner-requests/{id}/reject`
+
+## Owner Inventory Endpoints
+
+- `GET/POST/PATCH/DELETE /api/v1/owner/court-complexes`
+- `GET/POST/PATCH/DELETE /api/v1/owner/courts`
+- `GET/POST/PATCH/DELETE /api/v1/owner/sessions`
+
+Session creation and updates validate owner ownership, duration limits, skill
+range, open slot capacity, and active-session time overlap before writing to
+Postgres.
+
 API errors use:
 
 ```json

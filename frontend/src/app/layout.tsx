@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "NetUp Sprint 0",
-  description: "Bảng điều khiển nền tảng vận hành NetUp",
+  title: "NetUp",
+  description: "Nền tảng đặt sân và vận hành chủ sân NetUp",
 };
 
 export default function RootLayout({

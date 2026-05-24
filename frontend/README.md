@@ -32,6 +32,12 @@ Hidden admin routes:
 
 - `/_internal/netup-admin/login`
 - `/_internal/netup-admin/dashboard`
+- `/_internal/netup-admin/owner-requests`
+
+Owner routes:
+
+- `/owner/dashboard`
+- `/owner/courts`
 
 Google auth callback:
 
@@ -46,5 +52,6 @@ pnpm build
 ## Current Scope
 
 Sprint 0 provides the operational dashboard and service health display. Sprint 1
-adds local admin login and Google auth callback handling. Player and Owner domain
-workflows remain placeholders until their API sprints are implemented.
+adds local admin login and Google auth callback handling. Sprint 2 adds owner
+onboarding, admin owner approval, and owner court/session inventory screens
+connected to the FastAPI backend.

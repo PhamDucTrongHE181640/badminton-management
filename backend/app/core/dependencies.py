@@ -7,7 +7,11 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.errors import AppError
 from app.services.admin_auth import AdminPrincipal, principal_from_access_token
-from app.services.user_auth import UserPrincipal, principal_from_user_access_token
+from app.services.user_auth import (
+    UserPrincipal,
+    principal_from_user_access_token,
+    user_has_active_role,
+)
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -54,7 +58,7 @@ def require_user(
 
 def require_role(required_role: str):
     def dependency(user: Annotated[UserPrincipal, Depends(require_user)]) -> UserPrincipal:
-        if required_role not in user.roles:
+        if required_role not in user.roles and not user_has_active_role(user.id, required_role):
             raise AppError(
                 status_code=403,
                 code="role_forbidden",
