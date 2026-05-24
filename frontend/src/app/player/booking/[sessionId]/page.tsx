@@ -35,6 +35,16 @@ type BookingResult = {
   payment_method: string;
 };
 
+type DepositIntent = {
+  booking_id: string;
+  payment_transaction_id: string;
+  external_ref: string;
+  amount_vnd: number;
+  status: string;
+  expires_at: string | null;
+  payment_url: string;
+};
+
 function money(value: number) {
   return new Intl.NumberFormat("vi-VN").format(value);
 }
@@ -45,9 +55,11 @@ export default function PlayerBookingCreatePage() {
 
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [booking, setBooking] = useState<BookingResult | null>(null);
+  const [depositIntent, setDepositIntent] = useState<DepositIntent | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("Đang tải chi tiết phiên sân...");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCreatingDeposit, setIsCreatingDeposit] = useState(false);
 
   const [mode, setMode] = useState<"solo" | "full_court">("solo");
   const [paymentMethod, setPaymentMethod] = useState<"vnpay" | "cash">("cash");
@@ -126,6 +138,25 @@ export default function PlayerBookingCreatePage() {
       setMessage("Booking thất bại");
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function createDepositIntent() {
+    if (!booking) return;
+    setIsCreatingDeposit(true);
+    setError("");
+    try {
+      const intent = await apiFetch<DepositIntent>(
+        `/api/v1/player/bookings/${booking.id}/deposit-payment`,
+        { method: "POST" }
+      );
+      setDepositIntent(intent);
+      setMessage("Đã tạo giao dịch cọc VNPay. Chờ callback webhook ở Sprint 4.");
+    } catch (caught) {
+      setDepositIntent(null);
+      setError(caught instanceof Error ? caught.message : "Không tạo được giao dịch cọc");
+    } finally {
+      setIsCreatingDeposit(false);
     }
   }
 
@@ -249,7 +280,36 @@ export default function PlayerBookingCreatePage() {
               Tổng phí: {money(booking.total_price_vnd)}đ · Cọc: {money(booking.deposit_required_vnd)}
               đ · Còn lại: {money(booking.remaining_due_vnd)}đ
             </p>
+            <button
+              className="mt-4 rounded bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:bg-emerald-300"
+              onClick={createDepositIntent}
+              disabled={isCreatingDeposit}
+            >
+              {isCreatingDeposit ? "Đang tạo giao dịch cọc..." : "Tạo giao dịch cọc VNPay"}
+            </button>
           </div>
+          {depositIntent ? (
+            <div className="mt-4 rounded border border-slate-200 bg-white p-5 text-sm text-slate-700">
+              <p className="font-semibold text-slate-900">Deposit transaction</p>
+              <p className="mt-1">Ref: {depositIntent.external_ref}</p>
+              <p className="mt-1">Số tiền: {money(depositIntent.amount_vnd)}đ</p>
+              <p className="mt-1">Trạng thái: {depositIntent.status}</p>
+              <p className="mt-1">
+                Hết hạn:{" "}
+                {depositIntent.expires_at
+                  ? new Date(depositIntent.expires_at).toLocaleString("vi-VN")
+                  : "không có"}
+              </p>
+              <a
+                className="mt-3 inline-flex rounded border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                href={depositIntent.payment_url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Mở URL thanh toán VNPay (sandbox)
+              </a>
+            </div>
+          ) : null}
         </section>
       ) : null}
     </main>

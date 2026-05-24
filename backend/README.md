@@ -94,10 +94,17 @@ Postgres.
 - `POST /api/v1/player/bookings`
 - `GET /api/v1/player/bookings`
 - `GET /api/v1/player/bookings/{id}`
+- `POST /api/v1/player/bookings/{id}/deposit-payment`
+- `POST /api/v1/payments/vnpay/webhook`
 
 Booking creation enforces slot limits (`solo` and `full_court`), creates payment
 plan transactions (`deposit` + `remaining`), and locks session slots in one
 transaction.
+
+## Owner Check-in Endpoints
+
+- `GET /api/v1/owner/checkins`
+- `POST /api/v1/owner/checkins`
 
 API errors use:
 

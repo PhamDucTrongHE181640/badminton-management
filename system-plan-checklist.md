@@ -82,12 +82,12 @@
 - [x] Frontend player discovery + booking flow thay mock data.
 
 ### Sprint 4 (22 SP) - Payments + Check-in
-- [ ] Tạo payment plan: deposit bắt buộc, remaining online/cash.
-- [ ] Tích hợp VNPay tạo giao dịch cọc.
-- [ ] Webhook idempotent update `payment_transactions` + `bookings`.
-- [ ] Owner check-in bằng booking code/QR.
-- [ ] Cash collection khi check-in + ghi nhận payment transaction.
-- [ ] Frontend booking success + owner check-in màn hình thật.
+- [x] Tạo payment plan: deposit bắt buộc, remaining online/cash.
+- [x] Tích hợp VNPay tạo giao dịch cọc.
+- [x] Webhook idempotent update `payment_transactions` + `bookings`.
+- [x] Owner check-in bằng booking code/QR.
+- [x] Cash collection khi check-in + ghi nhận payment transaction.
+- [x] Frontend booking success + owner check-in màn hình thật.
 
 ### Sprint 5 (20 SP) - Assessment + Elo Bootstrap
 - [ ] Assessment form theo môn thể thao.

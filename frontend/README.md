@@ -38,6 +38,7 @@ Owner routes:
 
 - `/owner/dashboard`
 - `/owner/courts`
+- `/owner/check-in`
 
 Player routes:
 
@@ -53,6 +54,15 @@ Google auth callback:
 
 ```bash
 pnpm build
+```
+
+## Troubleshooting
+
+- If you hit runtime errors like `Cannot find module './979.js'`, clear the Next.js build cache:
+
+```bash
+rm -rf .next
+pnpm dev
 ```
 
 ## Current Scope
