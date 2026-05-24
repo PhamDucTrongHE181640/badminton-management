@@ -1,22 +1,63 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f6f7f9;
-  --foreground: #0f172a;
+  --background: #f3f4f6;
+  --foreground: #1f232b;
+  --ink: #1f232b;
+  --steel: #5b6270;
+  --accent: #b4232a;
+  --mint: #9ca3af;
+  --ember: #7f1d1d;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-ink: var(--ink);
+  --color-steel: var(--steel);
+  --color-accent: var(--accent);
+  --color-mint: var(--mint);
+  --color-ember: var(--ember);
+  --font-sans: var(--font-manrope);
+  --font-heading: var(--font-sora);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
+  font-family: var(--font-manrope), sans-serif;
 }
 
 button:disabled {
   cursor: not-allowed;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.font-heading {
+  font-family: var(--font-sora), sans-serif;
+}
+
+.bg-noise-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+}
+
+.fade-up {
+  animation: fade-up 420ms ease-out both;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }

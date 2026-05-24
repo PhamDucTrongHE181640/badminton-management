@@ -1,15 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+
+import { API_BASE_URL, apiFetch } from "@/lib/http";
 
 type ServiceState = "checking" | "online" | "offline";
-
-type HealthState = {
-  api: ServiceState;
-  database: ServiceState;
-  apiMessage: string;
-  databaseMessage: string;
-};
 
 type UserProfile = {
   email: string;
@@ -17,42 +13,26 @@ type UserProfile = {
   roles: string[];
 };
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+type HealthState = {
+  api: ServiceState;
+  database: ServiceState;
+};
 
-const sprintItems = [
-  "Cấu trúc monorepo cho frontend và backend",
-  "FastAPI, healthcheck và chuẩn lỗi",
-  "Migration Postgres từ schema.sql",
-  "Nền tảng Docker Compose",
-  "CI cho lint, test, migration và build",
-];
-
-const services = [
-  { name: "frontend", port: "3000", purpose: "Giao diện Next.js 15" },
-  { name: "backend-api", port: "8000", purpose: "FastAPI và OpenAPI" },
-  { name: "postgres", port: "5432", purpose: "Cơ sở dữ liệu quan hệ NetUp" },
-  { name: "redis", port: "6379", purpose: "Cache, giới hạn tần suất và hàng đợi nền" },
-  { name: "adminer", port: "8080", purpose: "Giao diện quản trị cơ sở dữ liệu" },
-];
-
-const roles = [
+const roleCards = [
   {
-    name: "Người chơi",
-    title: "Tìm sân, đặt sân, thanh toán",
-    description: "Discovery, xem phiên sân, tạo booking solo/full-court đã nối API ở Sprint 3.",
+    title: "Người chơi",
+    description: "Discovery, booking, assessment, match history và chat pool.",
     href: "/player/discovery",
   },
   {
-    name: "Chủ sân",
-    title: "Quản lý sân và check-in",
-    description: "Onboarding chủ sân và quản lý inventory sân đã nối API thật ở Sprint 2.",
+    title: "Chủ sân",
+    description: "Vận hành sân, quản lý slot và check-in người chơi theo booking.",
     href: "/owner/dashboard",
   },
   {
-    name: "Quản trị",
-    title: "Cấu hình và vận hành",
-    description: "Đăng nhập admin local và duyệt owner request qua route ẩn.",
-    href: "/_internal/netup-admin/login",
+    title: "Quản trị",
+    description: "Dashboard vận hành, cấu hình hệ thống và audit trail.",
+    href: "/_internal/netup-admin/dashboard",
   },
 ];
 
@@ -69,24 +49,14 @@ function StatusPill({ state }: { state: ServiceState }) {
   };
 
   return (
-    <span className={`rounded border px-2 py-1 text-xs font-semibold uppercase ${styles[state]}`}>
+    <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold uppercase ${styles[state]}`}>
       {labels[state]}
     </span>
   );
 }
 
-async function readHealth(path: string): Promise<boolean> {
-  const response = await fetch(`${apiBaseUrl}${path}`, { cache: "no-store" });
-  return response.ok;
-}
-
-export default function Home() {
-  const [health, setHealth] = useState<HealthState>({
-    api: "checking",
-    database: "checking",
-    apiMessage: "Đang kiểm tra API",
-    databaseMessage: "Đang kiểm tra cơ sở dữ liệu",
-  });
+export default function HomePage() {
+  const [health, setHealth] = useState<HealthState>({ api: "checking", database: "checking" });
   const [user, setUser] = useState<UserProfile | null>(null);
   const [authMessage, setAuthMessage] = useState("Đang kiểm tra phiên đăng nhập");
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -94,255 +64,133 @@ export default function Home() {
   useEffect(() => {
     let cancelled = false;
 
-    async function checkAuth() {
-      try {
-        const response = await fetch(`${apiBaseUrl}/api/v1/auth/me`, {
-          cache: "no-store",
-          credentials: "include",
-        });
-
-        if (cancelled) {
-          return;
-        }
-
-        if (!response.ok) {
-          setUser(null);
-          setAuthMessage("Chưa đăng nhập");
-          return;
-        }
-
-        setUser(await response.json());
-        setAuthMessage("Đã đăng nhập");
-      } catch {
-        if (!cancelled) {
-          setUser(null);
-          setAuthMessage("Chưa đọc được phiên đăng nhập");
-        }
-      }
-    }
-
     async function checkHealth() {
-      const [liveResult, readyResult] = await Promise.allSettled([
-        readHealth("/api/v1/health/live"),
-        readHealth("/api/v1/health/ready"),
+      const [apiResult, dbResult] = await Promise.allSettled([
+        fetch(`${API_BASE_URL}/api/v1/health/live`, { cache: "no-store" }),
+        fetch(`${API_BASE_URL}/api/v1/health/ready`, { cache: "no-store" }),
       ]);
 
-      if (cancelled) {
-        return;
-      }
-
-      const apiOnline = liveResult.status === "fulfilled" && liveResult.value;
-      const databaseOnline = readyResult.status === "fulfilled" && readyResult.value;
+      if (cancelled) return;
 
       setHealth({
-        api: apiOnline ? "online" : "offline",
-        database: databaseOnline ? "online" : "offline",
-        apiMessage: apiOnline ? "FastAPI đang phản hồi" : "Không kết nối được FastAPI",
-        databaseMessage: databaseOnline
-          ? "Postgres đã sẵn sàng"
-          : "Postgres chưa sẵn sàng",
+        api: apiResult.status === "fulfilled" && apiResult.value.ok ? "online" : "offline",
+        database: dbResult.status === "fulfilled" && dbResult.value.ok ? "online" : "offline",
       });
     }
 
-    checkAuth();
-    checkHealth();
-    const intervalId = window.setInterval(checkHealth, 10000);
+    async function checkAuth() {
+      try {
+        const profile = await apiFetch<UserProfile>("/api/v1/auth/me", {
+          credentials: "include",
+        });
+        if (cancelled) return;
+        setUser(profile);
+        setAuthMessage("Đã đăng nhập");
+      } catch {
+        if (cancelled) return;
+        setUser(null);
+        setAuthMessage("Chưa đăng nhập");
+      }
+    }
+
+    void checkHealth();
+    void checkAuth();
+    const timer = window.setInterval(checkHealth, 15000);
 
     return () => {
       cancelled = true;
-      window.clearInterval(intervalId);
+      window.clearInterval(timer);
     };
   }, []);
 
   async function logout() {
     setIsLoggingOut(true);
     try {
-      await fetch(`${apiBaseUrl}/api/v1/auth/logout`, {
+      await apiFetch("/api/v1/auth/logout", {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
       });
-    } finally {
       setUser(null);
       setAuthMessage("Đã đăng xuất");
+    } catch {
+      setAuthMessage("Không thể đăng xuất lúc này");
+    } finally {
       setIsLoggingOut(false);
     }
   }
 
-  const completedCount = useMemo(() => sprintItems.length, []);
-
   return (
-    <main className="min-h-screen bg-[#f6f7f9] text-slate-950">
-      <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-8 px-6 py-8 lg:flex-row lg:items-end lg:justify-between lg:px-8">
-          <div className="max-w-3xl">
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">
-              NetUp Sprint 0
-            </p>
-            <h1 className="mt-3 text-4xl font-semibold tracking-normal text-slate-950 sm:text-5xl">
-              Nền tảng vận hành
-            </h1>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
-              FastAPI, Postgres, Redis, Docker Compose, migration, CI và giao diện đầu tiên
-              cho các luồng Người chơi, Chủ sân và Quản trị.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              {user ? (
-                <button
-                  className="rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-                  disabled={isLoggingOut}
-                  onClick={logout}
-                >
-                  {isLoggingOut ? "Đang đăng xuất" : "Đăng xuất"}
-                </button>
-              ) : (
-                <a
-                  className="rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-                  href={`${apiBaseUrl}/api/v1/auth/google/start`}
-                >
-                  Đăng nhập bằng Google
-                </a>
-              )}
-              <a
-                className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                href="/_internal/netup-admin/login"
-              >
-                Vào trang quản trị
-              </a>
-              <a
-                className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                href="/owner/dashboard"
-              >
-                Vào khu chủ sân
-              </a>
-              <a
-                className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-                href="/player/discovery"
-              >
-                Vào khu người chơi
-              </a>
-            </div>
-            <div className="mt-5 rounded border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-semibold uppercase text-slate-500">
-                Phiên người dùng
-              </p>
-              <p className="mt-2 text-sm font-semibold text-slate-900">{authMessage}</p>
-              {user ? (
-                <p className="mt-1 text-sm text-slate-600">
-                  {user.full_name} · {user.email} · Quyền: {user.roles.join(", ")}
-                </p>
-              ) : (
-                <p className="mt-1 text-sm text-slate-600">
-                  Đăng nhập bằng Google để tạo hoặc tiếp tục phiên người chơi.
-                </p>
-              )}
-            </div>
-          </div>
-          <div className="grid min-w-72 grid-cols-2 gap-3 rounded border border-slate-200 bg-slate-50 p-4">
-            <div>
-              <p className="text-xs font-semibold uppercase text-slate-500">API</p>
-              <div className="mt-2">
-                <StatusPill state={health.api} />
-              </div>
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase text-slate-500">Cơ sở dữ liệu</p>
-              <div className="mt-2">
-                <StatusPill state={health.database} />
-              </div>
-            </div>
-            <p className="col-span-2 text-sm text-slate-600">{health.apiMessage}</p>
-            <p className="col-span-2 text-sm text-slate-600">{health.databaseMessage}</p>
-          </div>
-        </div>
-      </section>
+    <div className="fade-up space-y-6">
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+        <p className="text-sm font-semibold uppercase tracking-[0.16em] text-red-700">NetUp Platform</p>
+        <h1 className="mt-3 max-w-3xl font-heading text-3xl font-semibold leading-tight text-ink sm:text-5xl">
+          Nền tảng đặt sân thể thao và vận hành chủ sân, sẵn sàng đưa vào sử dụng.
+        </h1>
+        <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600 sm:text-base">
+          Hệ thống gồm đầy đủ luồng player-owner-admin: discovery, booking, payments, check-in,
+          assessment, match feedback, chat pool, cấu hình vận hành và audit logs.
+        </p>
 
-      <section className="mx-auto grid max-w-7xl gap-6 px-6 py-8 lg:grid-cols-[1.1fr_0.9fr] lg:px-8">
-        <div className="rounded border border-slate-200 bg-white p-6">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h2 className="text-xl font-semibold text-slate-950">Checklist sprint</h2>
-              <p className="mt-1 text-sm text-slate-600">
-                {completedCount} hạng mục nền tảng đã sẵn sàng để kiểm tra Sprint 0.
-              </p>
-            </div>
-            <div className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
-              Sẵn sàng kiểm tra
-            </div>
-          </div>
-          <div className="mt-6 grid gap-3 sm:grid-cols-2">
-            {sprintItems.map((item) => (
-              <div key={item} className="rounded border border-slate-200 bg-slate-50 p-4">
-                <p className="text-sm font-medium text-slate-900">{item}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="rounded border border-slate-200 bg-white p-6">
-          <h2 className="text-xl font-semibold text-slate-950">Hợp đồng API</h2>
-          <div className="mt-5 space-y-3">
-            <div className="rounded border border-slate-200 bg-slate-50 p-4">
-              <p className="font-mono text-sm text-slate-900">GET /api/v1/health/live</p>
-              <p className="mt-1 text-sm text-slate-600">
-                Kiểm tra tiến trình API, không phụ thuộc cơ sở dữ liệu.
-              </p>
-            </div>
-            <div className="rounded border border-slate-200 bg-slate-50 p-4">
-              <p className="font-mono text-sm text-slate-900">GET /api/v1/health/ready</p>
-              <p className="mt-1 text-sm text-slate-600">
-                Kiểm tra Postgres bằng truy vấn SELECT 1.
-              </p>
-            </div>
-          </div>
-          <a
-            className="mt-5 inline-flex rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
-            href={`${apiBaseUrl}/api/docs`}
-            target="_blank"
-            rel="noreferrer"
+        <div className="mt-6 flex flex-wrap gap-3">
+          {user ? (
+            <button
+              className="rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-400"
+              onClick={logout}
+              disabled={isLoggingOut}
+            >
+              {isLoggingOut ? "Đang đăng xuất..." : "Đăng xuất"}
+            </button>
+          ) : (
+            <a
+              href={`${API_BASE_URL}/api/v1/auth/google/start`}
+              className="rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+            >
+              Đăng nhập Google
+            </a>
+          )}
+          <Link
+            href="/_internal/netup-admin/login"
+            className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
           >
-            Mở tài liệu API
-          </a>
+            Đăng nhập quản trị
+          </Link>
+        </div>
+
+        <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+          <p className="font-semibold text-slate-900">Trạng thái phiên: {authMessage}</p>
+          {user ? <p className="mt-1">{user.full_name} · {user.email} · {user.roles.join(", ")}</p> : null}
         </div>
       </section>
 
-      <section className="mx-auto grid max-w-7xl gap-6 px-6 pb-8 lg:grid-cols-5 lg:px-8">
-        {services.map((service) => (
-          <div key={service.name} className="rounded border border-slate-200 bg-white p-5">
-            <p className="font-mono text-sm font-semibold text-slate-950">{service.name}</p>
-            <p className="mt-3 text-3xl font-semibold text-slate-950">{service.port}</p>
-            <p className="mt-2 text-sm leading-6 text-slate-600">{service.purpose}</p>
-          </div>
+      <section className="grid gap-4 md:grid-cols-3">
+        {roleCards.map((card) => (
+          <article key={card.href} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="font-heading text-xl font-semibold text-ink">{card.title}</h2>
+            <p className="mt-2 text-sm text-slate-600">{card.description}</p>
+            <Link
+              href={card.href}
+              className="mt-4 inline-flex rounded-full border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Mở khu vực
+            </Link>
+          </article>
         ))}
       </section>
 
-      <section className="mx-auto grid max-w-7xl gap-6 px-6 pb-10 lg:grid-cols-3 lg:px-8">
-        {roles.map((role) => (
-          <div key={role.name} className="rounded border border-slate-200 bg-white p-6">
-            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-500">
-              {role.name}
-            </p>
-            <h2 className="mt-3 text-xl font-semibold text-slate-950">{role.title}</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">{role.description}</p>
-            {role.href ? (
-              <a
-                className="mt-5 inline-flex w-full justify-center rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                href={role.href}
-              >
-                Mở khu vực
-              </a>
-            ) : (
-              <button
-                className="mt-5 w-full rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-500"
-                disabled
-              >
-                Sẽ mở ở sprint tiếp theo
-              </button>
-            )}
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="font-heading text-xl font-semibold text-ink">Sức khoẻ hệ thống</h2>
+        <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-slate-600">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-slate-900">API</span>
+            <StatusPill state={health.api} />
           </div>
-        ))}
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-slate-900">Database</span>
+            <StatusPill state={health.database} />
+          </div>
+        </div>
       </section>
-    </main>
+    </div>
   );
 }

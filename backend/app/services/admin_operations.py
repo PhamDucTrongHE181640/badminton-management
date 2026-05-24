@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -50,9 +51,21 @@ def _audit(
             "event_type": event_type,
             "entity_type": entity_type,
             "entity_id": entity_id,
-            "payload": Jsonb(payload or {}),
+            "payload": Jsonb(_json_safe(payload or {})),
         },
     )
+
+
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, list | tuple):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, datetime | date):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return float(value)
+    return value
 
 
 def _config_from_row(row: Any) -> dict[str, Any]:

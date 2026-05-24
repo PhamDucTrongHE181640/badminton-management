@@ -60,6 +60,18 @@ Google auth callback:
 pnpm build
 ```
 
+Static export output path:
+
+```bash
+frontend/out
+```
+
+Nginx production sample config:
+
+```bash
+ops/production/nginx/netup-static.conf
+```
+
 ## Troubleshooting
 
 - If you hit runtime errors like `Cannot find module './979.js'`, clear the Next.js build cache:
@@ -69,6 +81,9 @@ rm -rf .next
 pnpm dev
 ```
 
+- If running in Docker and seeing repeated chunk-missing errors, follow:
+  `fix-next-cannot-find-module.md`
+
 ## Current Scope
 
 Sprint 0 provides the operational dashboard and service health display. Sprint 1
@@ -76,4 +91,5 @@ adds local admin login and Google auth callback handling. Sprint 2 adds owner
 onboarding, admin owner approval, and owner court/session inventory screens
 connected to the FastAPI backend. Sprint 3 adds player discovery and booking
 flows connected to live APIs. Sprint 8 adds admin config management, operations
-dashboard metrics, and audit trail viewer.
+dashboard metrics, and audit trail viewer. UI shell is now aligned to the
+DEMO layouts pattern (root shell + role navigation for player/owner/admin).

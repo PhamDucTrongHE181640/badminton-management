@@ -111,3 +111,4 @@ docker compose up -d postgres redis adminer backend-api frontend
 - Table overview: `backend/database/tables-overview.md`
 - Use case to table mapping: `backend/database/usecase-flow-table-mapping.md`
 - Sprint 9 ops docs: `ops/sprint9/`
+- Production nginx static config: `ops/production/nginx/netup-static.conf`

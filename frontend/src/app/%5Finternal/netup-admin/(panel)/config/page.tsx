@@ -4,7 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { adminFetch, adminLogout } from "../_lib/auth";
+import { adminFetch, adminLogout } from "../../_lib/auth";
 
 type AdminConfig = {
   platform_fee_rate: number;

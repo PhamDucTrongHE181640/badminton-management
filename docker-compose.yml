@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: netup
       POSTGRES_PASSWORD: netup
     ports:
-      - "${POSTGRES_HOST_PORT:-55432}:55432"
+      - "${POSTGRES_HOST_PORT:-55432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -75,9 +75,8 @@ services:
     volumes:
       - ./frontend:/app
       - frontend-node-modules:/app/node_modules
-      - frontend-next:/app/.next
     command: >
-      sh -c "rm -rf /app/.next/* &&
+      sh -c "rm -rf /app/.next &&
       corepack enable &&
       corepack prepare pnpm@11.2.2 --activate &&
       pnpm install --frozen-lockfile &&
@@ -90,4 +89,3 @@ volumes:
   postgres-data:
   redis-data:
   frontend-node-modules:
-  frontend-next:
