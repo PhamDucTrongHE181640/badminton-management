@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { Badge, Button, ButtonLink, Card, Notice, PageHero, StatCard } from "@/components/ui";
 import { API_BASE_URL, apiFetch } from "@/lib/http";
 
 type ServiceState = "checking" | "online" | "offline";
@@ -37,10 +38,10 @@ const roleCards = [
 ];
 
 function StatusPill({ state }: { state: ServiceState }) {
-  const styles: Record<ServiceState, string> = {
-    checking: "border-slate-300 bg-slate-100 text-slate-700",
-    online: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    offline: "border-red-200 bg-red-50 text-red-700",
+  const tone: Record<ServiceState, "neutral" | "success" | "danger"> = {
+    checking: "neutral",
+    online: "success",
+    offline: "danger",
   };
   const labels: Record<ServiceState, string> = {
     checking: "đang kiểm tra",
@@ -48,11 +49,7 @@ function StatusPill({ state }: { state: ServiceState }) {
     offline: "mất kết nối",
   };
 
-  return (
-    <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold uppercase ${styles[state]}`}>
-      {labels[state]}
-    </span>
-  );
+  return <Badge tone={tone[state]}>{labels[state]}</Badge>;
 }
 
 export default function HomePage() {
@@ -121,75 +118,73 @@ export default function HomePage() {
   }
 
   return (
-    <div className="fade-up space-y-6">
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-        <p className="text-sm font-semibold uppercase tracking-[0.16em] text-red-700">NetUp Platform</p>
-        <h1 className="mt-3 max-w-3xl font-heading text-3xl font-semibold leading-tight text-ink sm:text-5xl">
-          Nền tảng đặt sân thể thao và vận hành chủ sân, sẵn sàng đưa vào sử dụng.
-        </h1>
-        <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600 sm:text-base">
-          Hệ thống gồm đầy đủ luồng player-owner-admin: discovery, booking, payments, check-in,
-          assessment, match feedback, chat pool, cấu hình vận hành và audit logs.
-        </p>
-
-        <div className="mt-6 flex flex-wrap gap-3">
+    <div className="fade-up space-y-5">
+      <PageHero
+        eyebrow="NetUp Platform"
+        title="Đặt sân, ghép kèo và vận hành sân trong một sản phẩm."
+        description="NetUp gom các luồng chính cho người chơi, chủ sân và quản trị: tìm sân, booking, đặt cọc, check-in, đánh giá level, lịch đấu và cấu hình vận hành."
+        actions={
+          <>
           {user ? (
-            <button
-              className="rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-400"
-              onClick={logout}
-              disabled={isLoggingOut}
-            >
+            <Button onClick={logout} disabled={isLoggingOut}>
               {isLoggingOut ? "Đang đăng xuất..." : "Đăng xuất"}
-            </button>
+            </Button>
           ) : (
             <a
               href={`${API_BASE_URL}/api/v1/auth/google/start`}
-              className="rounded-full bg-ink px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+              className="inline-flex items-center justify-center rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
             >
               Đăng nhập Google
             </a>
           )}
-          <Link
-            href="/_internal/netup-admin/login"
-            className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-          >
+          <ButtonLink href="/_internal/netup-admin/login" variant="outline">
             Đăng nhập quản trị
-          </Link>
-        </div>
+          </ButtonLink>
+          </>
+        }
+        aside={
+          <div
+            className="min-h-[240px] rounded-lg bg-cover bg-center"
+            style={{
+              backgroundImage:
+                "linear-gradient(130deg, rgba(15,23,42,0.18), rgba(127,29,29,0.34)), url('/courts/football1.jpeg')",
+            }}
+            aria-hidden="true"
+          />
+        }
+      />
 
-        <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-          <p className="font-semibold text-slate-900">Trạng thái phiên: {authMessage}</p>
-          {user ? <p className="mt-1">{user.full_name} · {user.email} · {user.roles.join(", ")}</p> : null}
-        </div>
-      </section>
+      <Notice tone={user ? "success" : "info"}>
+        <p className="font-semibold">Trạng thái phiên: {authMessage}</p>
+        {user ? <p>{user.full_name} · {user.email} · {user.roles.join(", ")}</p> : null}
+      </Notice>
 
       <section className="grid gap-4 md:grid-cols-3">
         {roleCards.map((card) => (
-          <article key={card.href} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <Card key={card.href} className="flex flex-col">
             <h2 className="font-heading text-xl font-semibold text-ink">{card.title}</h2>
-            <p className="mt-2 text-sm text-slate-600">{card.description}</p>
+            <p className="mt-2 flex-1 text-sm leading-6 text-slate-600">{card.description}</p>
             <Link
               href={card.href}
-              className="mt-4 inline-flex rounded-full border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              className="mt-4 inline-flex items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
             >
               Mở khu vực
             </Link>
-          </article>
+          </Card>
         ))}
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="font-heading text-xl font-semibold text-ink">Sức khoẻ hệ thống</h2>
-        <div className="mt-4 flex flex-wrap items-center gap-4 text-sm text-slate-600">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-slate-900">API</span>
-            <StatusPill state={health.api} />
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-slate-900">Database</span>
-            <StatusPill state={health.database} />
-          </div>
-        </div>
+      <section className="grid gap-4 sm:grid-cols-2">
+        <StatCard
+          label="API"
+          value={<StatusPill state={health.api} />}
+          helper="Dịch vụ backend xử lý booking, auth và vận hành."
+        />
+        <StatCard
+          label="Database"
+          value={<StatusPill state={health.database} />}
+          helper="PostgreSQL lưu dữ liệu phiên sân, booking, payment và audit."
+        />
       </section>
     </div>
   );

@@ -1,10 +1,24 @@
 "use client";
 
-import Link from "next/link";
+import { FormEvent, Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { FormEvent, useEffect, useMemo, useState } from "react";
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+import { Badge, Button, ButtonLink, Card, EmptyState, Field, Notice, PageHero, inputClassName } from "@/components/ui";
+import { apiFetch } from "@/lib/http";
+import {
+  bookingModeLabel,
+  bookingStatusLabel,
+  courtImageForSport,
+  errorMessage,
+  formatTimeRange,
+  formatVnd,
+  paymentMethodLabel,
+  postTypeLabel,
+  sportLabel,
+} from "@/lib/format";
+
+type BookingMode = "solo" | "full_court";
+type PaymentMethod = "vnpay" | "cash";
 
 type SessionDetail = {
   id: string;
@@ -23,6 +37,7 @@ type SessionDetail = {
   sport: string;
   complex_name: string;
   district: string;
+  address?: string;
 };
 
 type BookingResult = {
@@ -37,6 +52,7 @@ type BookingResult = {
 
 type DepositIntent = {
   booking_id: string;
+  booking_code: string;
   payment_transaction_id: string;
   external_ref: string;
   amount_vnd: number;
@@ -45,73 +61,54 @@ type DepositIntent = {
   payment_url: string;
 };
 
-function money(value: number) {
-  return new Intl.NumberFormat("vi-VN").format(value);
-}
-
-export default function PlayerBookingCreatePage() {
+function BookingCreateContent() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("sessionId") ?? "";
+  const modeParam = searchParams.get("mode");
 
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [booking, setBooking] = useState<BookingResult | null>(null);
   const [depositIntent, setDepositIntent] = useState<DepositIntent | null>(null);
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("Nhập session từ discovery để tạo booking.");
+  const [message, setMessage] = useState("Đang chuẩn bị thông tin đặt sân...");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCreatingDeposit, setIsCreatingDeposit] = useState(false);
 
-  const [mode, setMode] = useState<"solo" | "full_court">("solo");
-  const [paymentMethod, setPaymentMethod] = useState<"vnpay" | "cash">("cash");
+  const [mode, setMode] = useState<BookingMode>(modeParam === "full_court" ? "full_court" : "solo");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [seatsBooked, setSeatsBooked] = useState("1");
-
-  async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await fetch(`${apiBaseUrl}${path}`, {
-      ...init,
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-        ...(init?.headers ?? {}),
-      },
-      cache: "no-store",
-    });
-    const payload = response.status === 204 ? null : await response.json();
-    if (!response.ok) {
-      const detail = payload?.error?.details?.[0];
-      throw new Error(detail?.field ? `${detail.field}: ${detail.message}` : payload?.error?.message);
-    }
-    return payload as T;
-  }
 
   async function loadSession() {
     if (!sessionId) {
       setSession(null);
-      setMessage("Thiếu sessionId trên URL. Hãy vào discovery và bấm Đặt sân.");
+      setMessage("Hãy chọn một khung giờ từ trang đặt sân trước.");
       return;
     }
 
     setError("");
     try {
-      const detail = await apiFetch<SessionDetail>(`/api/v1/player/sessions/${sessionId}`);
+      const detail = await apiFetch<SessionDetail>(`/api/v1/player/sessions/${sessionId}`, {
+        credentials: "include",
+      });
       setSession(detail);
-      if (!detail.allows_solo_join) {
+      if (!detail.allows_solo_join || modeParam === "full_court") {
         setMode("full_court");
       }
-      setMessage("Vui lòng chọn phương án booking");
+      setMessage("Kiểm tra lại thông tin rồi xác nhận booking.");
     } catch (caught) {
       setSession(null);
-      setError(caught instanceof Error ? caught.message : "Không tải được chi tiết phiên sân");
-      setMessage("Không thể khởi tạo form booking");
+      setError(errorMessage(caught, "Không tải được chi tiết phiên sân"));
+      setMessage("Không thể mở form booking.");
     }
   }
 
   useEffect(() => {
-    loadSession();
+    void loadSession();
   }, [sessionId]);
 
   const estimate = useMemo(() => {
     if (!session) return null;
-    const seats = mode === "full_court" ? session.max_slots : Number(seatsBooked || "1");
+    const seats = mode === "full_court" ? session.max_slots : Math.max(1, Math.min(2, Number(seatsBooked || "1")));
     const base = mode === "full_court" ? session.full_court_price_vnd : session.slot_price_vnd * seats;
     return { seats, base };
   }, [mode, seatsBooked, session]);
@@ -121,6 +118,7 @@ export default function PlayerBookingCreatePage() {
     if (!session) return;
     setIsSubmitting(true);
     setError("");
+    setDepositIntent(null);
     try {
       const payload: Record<string, unknown> = {
         session_id: session.id,
@@ -128,18 +126,19 @@ export default function PlayerBookingCreatePage() {
         payment_method: paymentMethod,
       };
       if (mode === "solo") {
-        payload.seats_booked = Number(seatsBooked);
+        payload.seats_booked = Math.max(1, Math.min(2, Number(seatsBooked || "1")));
       }
       const created = await apiFetch<BookingResult>("/api/v1/player/bookings", {
         method: "POST",
+        credentials: "include",
         body: JSON.stringify(payload),
       });
       setBooking(created);
-      setMessage("Đã tạo booking. Hoàn tất đặt cọc ở Sprint 4.");
+      setMessage("Booking đã được tạo. Bước tiếp theo là thanh toán tiền cọc.");
     } catch (caught) {
       setBooking(null);
-      setError(caught instanceof Error ? caught.message : "Không tạo được booking");
-      setMessage("Booking thất bại");
+      setError(errorMessage(caught, "Không tạo được booking"));
+      setMessage("Booking chưa thành công.");
     } finally {
       setIsSubmitting(false);
     }
@@ -150,171 +149,252 @@ export default function PlayerBookingCreatePage() {
     setIsCreatingDeposit(true);
     setError("");
     try {
-      const intent = await apiFetch<DepositIntent>(
-        `/api/v1/player/bookings/${booking.id}/deposit-payment`,
-        { method: "POST" }
-      );
+      const intent = await apiFetch<DepositIntent>(`/api/v1/player/bookings/${booking.id}/deposit-payment`, {
+        method: "POST",
+        credentials: "include",
+      });
       setDepositIntent(intent);
-      setMessage("Đã tạo giao dịch cọc VNPay. Chờ callback webhook ở Sprint 4.");
+      setMessage("Đã tạo giao dịch cọc. Mở VNPay sandbox để hoàn tất thanh toán.");
     } catch (caught) {
       setDepositIntent(null);
-      setError(caught instanceof Error ? caught.message : "Không tạo được giao dịch cọc");
+      setError(errorMessage(caught, "Không tạo được giao dịch cọc"));
     } finally {
       setIsCreatingDeposit(false);
     }
   }
 
+  if (!sessionId) {
+    return (
+      <EmptyState
+        title="Chưa chọn khung giờ"
+        description="Bạn cần vào trang đặt sân và chọn một khung giờ trước khi tạo booking."
+        action={<ButtonLink href="/player/discovery">Tìm sân ngay</ButtonLink>}
+      />
+    );
+  }
+
   return (
-    <main className="min-h-screen bg-[#f6f7f9] text-slate-950">
-      <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-4xl flex-col gap-4 px-6 py-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-emerald-700">
-              NetUp Booking
-            </p>
-            <h1 className="mt-2 text-3xl font-semibold">Tạo booking</h1>
-            <p className="mt-2 text-sm text-slate-600">{message}</p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Link
-              className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              href="/player/discovery"
-            >
-              Quay lại discovery
-            </Link>
-            <Link
-              className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              href="/player/bookings"
-            >
+    <div className="space-y-5">
+      <PageHero
+        eyebrow="Xác nhận booking"
+        title={session ? session.sub_court_name : "Đang tải khung giờ"}
+        description={message}
+        actions={
+          <>
+            <ButtonLink href="/player/discovery" variant="outline">
+              Chọn khung giờ khác
+            </ButtonLink>
+            <ButtonLink href="/player/bookings" variant="outline">
               Booking của tôi
-            </Link>
-          </div>
-        </div>
-      </section>
+            </ButtonLink>
+          </>
+        }
+        aside={
+          <div
+            className="min-h-[220px] rounded-lg bg-cover bg-center"
+            style={{
+              backgroundImage: `linear-gradient(130deg, rgba(15,23,42,0.2), rgba(127,29,29,0.36)), url('${courtImageForSport(
+                session?.sport,
+              )}')`,
+            }}
+            aria-hidden="true"
+          />
+        }
+      />
 
-      <section className="mx-auto grid max-w-4xl gap-6 px-6 py-8 lg:grid-cols-2 lg:px-8">
-        <div className="rounded border border-slate-200 bg-white p-5">
-          <h2 className="text-lg font-semibold">Chi tiết phiên sân</h2>
-          {session ? (
-            <div className="mt-4 space-y-2 text-sm text-slate-700">
-              <p className="font-semibold text-slate-900">{session.title}</p>
-              <p>
-                {session.complex_name} · {session.court_name} - {session.sub_court_name}
-              </p>
-              <p>{session.district}</p>
-              <p>{new Date(session.starts_at).toLocaleString("vi-VN")}</p>
-              <p>
-                {session.open_slots}/{session.max_slots} slot · {session.sport}
-              </p>
-              <p>
-                {money(session.slot_price_vnd)}đ/slot · {money(session.full_court_price_vnd)}đ/nguyên sân
-              </p>
+      {error ? <Notice tone="danger">{error}</Notice> : null}
+
+      <section className="grid gap-5 lg:grid-cols-[1fr_420px]">
+        <div className="space-y-5">
+          <Card className="space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="font-heading text-xl font-semibold text-ink">
+                  {session?.title ?? "Chưa có thông tin sân"}
+                </h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  {session
+                    ? `${session.complex_name} · ${session.court_name} - ${session.sub_court_name}`
+                    : "Đang tải dữ liệu"}
+                </p>
+              </div>
+              {session ? <Badge tone="accent">{postTypeLabel(session.post_type)}</Badge> : null}
             </div>
-          ) : (
-            <p className="mt-4 text-sm text-slate-600">Chưa đọc được phiên sân</p>
-          )}
-        </div>
 
-        <form onSubmit={submitBooking} className="rounded border border-slate-200 bg-white p-5">
-          <h2 className="text-lg font-semibold">Form booking</h2>
-          <label className="mt-4 grid gap-2 text-sm font-semibold text-slate-700">
-            Mode
-            <select
-              className="rounded border border-slate-300 px-3 py-2 font-normal outline-none focus:border-slate-900"
-              value={mode}
-              onChange={(event) => setMode(event.target.value as "solo" | "full_court")}
-            >
-              <option value="solo" disabled={session ? !session.allows_solo_join : false}>
-                solo
-              </option>
-              <option value="full_court">full_court</option>
-            </select>
-          </label>
-          <label className="mt-3 grid gap-2 text-sm font-semibold text-slate-700">
-            Phương thức thanh toán phần còn lại
-            <select
-              className="rounded border border-slate-300 px-3 py-2 font-normal outline-none focus:border-slate-900"
-              value={paymentMethod}
-              onChange={(event) => setPaymentMethod(event.target.value as "vnpay" | "cash")}
-            >
-              <option value="cash">cash</option>
-              <option value="vnpay">vnpay</option>
-            </select>
-          </label>
-          {mode === "solo" ? (
-            <label className="mt-3 grid gap-2 text-sm font-semibold text-slate-700">
-              Số slot (1-2)
-              <input
-                className="rounded border border-slate-300 px-3 py-2 font-normal outline-none focus:border-slate-900"
-                value={seatsBooked}
-                onChange={(event) => setSeatsBooked(event.target.value)}
-                inputMode="numeric"
-              />
-            </label>
+            {session ? (
+              <div className="grid gap-3 text-sm text-slate-700 sm:grid-cols-2">
+                <p>
+                  <span className="font-semibold text-slate-950">Thời gian:</span>{" "}
+                  {formatTimeRange(session.starts_at, session.duration_minutes)}
+                </p>
+                <p>
+                  <span className="font-semibold text-slate-950">Môn:</span> {sportLabel(session.sport)}
+                </p>
+                <p>
+                  <span className="font-semibold text-slate-950">Khu vực:</span> {session.district}
+                </p>
+                <p>
+                  <span className="font-semibold text-slate-950">Slot còn:</span> {session.open_slots}/
+                  {session.max_slots}
+                </p>
+                <p>
+                  <span className="font-semibold text-slate-950">Giá ghép:</span>{" "}
+                  {formatVnd(session.slot_price_vnd)}
+                </p>
+                <p>
+                  <span className="font-semibold text-slate-950">Bao sân:</span>{" "}
+                  {formatVnd(session.full_court_price_vnd)}
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm text-slate-600">Chưa đọc được phiên sân.</p>
+            )}
+          </Card>
+
+          {booking ? (
+            <Card className="space-y-4 border-emerald-200 bg-emerald-50">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-emerald-800">Tạo booking thành công</p>
+                  <h2 className="mt-1 font-heading text-2xl font-semibold text-emerald-950">
+                    {booking.booking_code}
+                  </h2>
+                </div>
+                <Badge tone="success">{bookingStatusLabel(booking.status)}</Badge>
+              </div>
+              <div className="grid gap-3 text-sm text-emerald-950 sm:grid-cols-3">
+                <p>
+                  <span className="block text-emerald-800">Tổng tiền</span>
+                  <strong>{formatVnd(booking.total_price_vnd)}</strong>
+                </p>
+                <p>
+                  <span className="block text-emerald-800">Tiền cọc</span>
+                  <strong>{formatVnd(booking.deposit_required_vnd)}</strong>
+                </p>
+                <p>
+                  <span className="block text-emerald-800">Còn lại</span>
+                  <strong>{formatVnd(booking.remaining_due_vnd)}</strong>
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={createDepositIntent} disabled={isCreatingDeposit} variant="secondary">
+                  {isCreatingDeposit ? "Đang tạo giao dịch..." : "Thanh toán cọc VNPay"}
+                </Button>
+                <ButtonLink href="/player/bookings" variant="outline">
+                  Xem booking của tôi
+                </ButtonLink>
+              </div>
+            </Card>
           ) : null}
-          <div className="mt-4 rounded border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-            <p>Ước tính ghế: {estimate?.seats ?? "-"}</p>
-            <p>Ước tính base price: {estimate ? `${money(estimate.base)}đ` : "-"}</p>
-            <p>Đặt cọc được tính theo cấu hình hệ thống từ backend.</p>
-          </div>
-          <button
-            className="mt-5 w-full rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-400"
-            disabled={!session || isSubmitting}
-          >
-            {isSubmitting ? "Đang tạo booking..." : "Xác nhận booking"}
-          </button>
-        </form>
-      </section>
 
-      {error ? (
-        <section className="mx-auto max-w-4xl px-6 pb-4 lg:px-8">
-          <p className="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </p>
-        </section>
-      ) : null}
-
-      {booking ? (
-        <section className="mx-auto max-w-4xl px-6 pb-10 lg:px-8">
-          <div className="rounded border border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-900">
-            <p className="font-semibold">Tạo booking thành công</p>
-            <p className="mt-1">Mã booking: {booking.booking_code}</p>
-            <p className="mt-1">Trạng thái: {booking.status}</p>
-            <p className="mt-1">
-              Tổng phí: {money(booking.total_price_vnd)}đ · Cọc: {money(booking.deposit_required_vnd)}đ · Còn lại: {money(booking.remaining_due_vnd)}đ
-            </p>
-            <button
-              className="mt-4 rounded bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:bg-emerald-300"
-              onClick={createDepositIntent}
-              disabled={isCreatingDeposit}
-            >
-              {isCreatingDeposit ? "Đang tạo giao dịch cọc..." : "Tạo giao dịch cọc VNPay"}
-            </button>
-          </div>
           {depositIntent ? (
-            <div className="mt-4 rounded border border-slate-200 bg-white p-5 text-sm text-slate-700">
-              <p className="font-semibold text-slate-900">Deposit transaction</p>
-              <p className="mt-1">Ref: {depositIntent.external_ref}</p>
-              <p className="mt-1">Số tiền: {money(depositIntent.amount_vnd)}đ</p>
-              <p className="mt-1">Trạng thái: {depositIntent.status}</p>
-              <p className="mt-1">
-                Hết hạn: {" "}
-                {depositIntent.expires_at
-                  ? new Date(depositIntent.expires_at).toLocaleString("vi-VN")
-                  : "không có"}
-              </p>
+            <Card className="space-y-3">
+              <h2 className="font-heading text-xl font-semibold text-ink">Giao dịch cọc đã sẵn sàng</h2>
+              <div className="grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
+                <p>
+                  <span className="font-semibold text-slate-950">Mã giao dịch:</span>{" "}
+                  {depositIntent.external_ref}
+                </p>
+                <p>
+                  <span className="font-semibold text-slate-950">Số tiền:</span>{" "}
+                  {formatVnd(depositIntent.amount_vnd)}
+                </p>
+                <p>
+                  <span className="font-semibold text-slate-950">Trạng thái:</span> {depositIntent.status}
+                </p>
+                <p>
+                  <span className="font-semibold text-slate-950">Hết hạn:</span>{" "}
+                  {depositIntent.expires_at
+                    ? new Date(depositIntent.expires_at).toLocaleString("vi-VN")
+                    : "Không có"}
+                </p>
+              </div>
               <a
-                className="mt-3 inline-flex rounded border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                className="inline-flex items-center justify-center rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
                 href={depositIntent.payment_url}
                 target="_blank"
                 rel="noreferrer"
               >
-                Mở URL thanh toán VNPay (sandbox)
+                Mở VNPay sandbox
               </a>
-            </div>
+            </Card>
           ) : null}
-        </section>
-      ) : null}
-    </main>
+        </div>
+
+        <form onSubmit={submitBooking} className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div>
+            <h2 className="font-heading text-xl font-semibold text-ink">Chọn cách đặt</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-600">
+              Tiền cọc luôn thanh toán online. Phần còn lại có thể trả tại sân hoặc qua VNPay.
+            </p>
+          </div>
+
+          <Field label="Kiểu booking">
+            <select
+              className={inputClassName}
+              value={mode}
+              onChange={(event) => setMode(event.target.value as BookingMode)}
+            >
+              <option value="solo" disabled={session ? !session.allows_solo_join : false}>
+                Ghép lẻ theo slot
+              </option>
+              <option value="full_court">Bao nguyên sân</option>
+            </select>
+          </Field>
+
+          {mode === "solo" ? (
+            <Field label="Số slot" helper="Mỗi booking ghép lẻ hiện cho phép 1-2 slot.">
+              <input
+                className={inputClassName}
+                value={seatsBooked}
+                onChange={(event) => setSeatsBooked(event.target.value)}
+                inputMode="numeric"
+                min={1}
+                max={2}
+              />
+            </Field>
+          ) : (
+            <Notice tone="info">Bạn đang bao trọn sân cho nhóm riêng.</Notice>
+          )}
+
+          <Field label="Thanh toán phần còn lại">
+            <select
+              className={inputClassName}
+              value={paymentMethod}
+              onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)}
+            >
+              <option value="cash">Trả tại sân</option>
+              <option value="vnpay">Thanh toán VNPay</option>
+            </select>
+          </Field>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            {[
+              ["Loại đặt", bookingModeLabel(mode)],
+              ["Tạm tính", estimate ? formatVnd(estimate.base) : "-"],
+              ["Số slot", String(estimate?.seats ?? "-")],
+              ["Thanh toán", paymentMethodLabel(paymentMethod)],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</p>
+                <p className="mt-1 text-sm font-semibold text-slate-950">{value}</p>
+              </div>
+            ))}
+          </div>
+
+          <Button className="w-full" disabled={!session || isSubmitting}>
+            {isSubmitting ? "Đang tạo booking..." : "Xác nhận booking"}
+          </Button>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+export default function PlayerBookingCreatePage() {
+  return (
+    <Suspense fallback={<EmptyState title="Đang mở booking" description="NetUp đang chuẩn bị form đặt sân." />}>
+      <BookingCreateContent />
+    </Suspense>
   );
 }

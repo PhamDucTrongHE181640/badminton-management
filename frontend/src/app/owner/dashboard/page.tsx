@@ -1,9 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+import { Badge, Button, ButtonLink, Card, Field, Notice, PageHero, StatCard, inputClassName } from "@/components/ui";
+import { API_BASE_URL, apiFetch } from "@/lib/http";
+import { errorMessage, formatFullDateTime, requestStatusLabel } from "@/lib/format";
 
 type UserProfile = {
   email: string;
@@ -22,16 +23,25 @@ type OwnerRequest = {
   review_note: string | null;
 };
 
-const statusLabel: Record<string, string> = {
-  pending: "Đang chờ duyệt",
-  approved: "Đã duyệt",
-  rejected: "Đã từ chối",
-  cancelled: "Đã hủy",
-};
+type CourtComplex = { id: string };
+type Court = { id: string; status: string };
+type Session = { id: string; starts_at: string; open_slots: number; max_slots: number };
+type Checkin = { id: string };
+
+function requestTone(status: string | undefined): "success" | "warning" | "danger" | "neutral" {
+  if (status === "approved") return "success";
+  if (status === "pending") return "warning";
+  if (status === "rejected") return "danger";
+  return "neutral";
+}
 
 export default function OwnerDashboardPage() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [requests, setRequests] = useState<OwnerRequest[]>([]);
+  const [complexes, setComplexes] = useState<CourtComplex[]>([]);
+  const [courts, setCourts] = useState<Court[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [checkins, setCheckins] = useState<Checkin[]>([]);
   const [businessName, setBusinessName] = useState("");
   const [contactPhone, setContactPhone] = useState("");
   const [facilityOverview, setFacilityOverview] = useState("");
@@ -40,40 +50,45 @@ export default function OwnerDashboardPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const latestRequest = useMemo(() => requests[0] ?? null, [requests]);
-  const isOwner = user?.roles.includes("owner") || latestRequest?.status === "approved";
+  const isOwner = Boolean(user?.roles.includes("owner") || latestRequest?.status === "approved");
 
   async function loadDashboard() {
     setError("");
     try {
-      const [meResponse, requestsResponse] = await Promise.all([
-        fetch(`${apiBaseUrl}/api/v1/auth/me`, {
-          cache: "no-store",
-          credentials: "include",
-        }),
-        fetch(`${apiBaseUrl}/api/v1/owner/requests/me`, {
-          cache: "no-store",
-          credentials: "include",
-        }),
+      const [nextUser, nextRequests] = await Promise.all([
+        apiFetch<UserProfile>("/api/v1/auth/me", { credentials: "include" }),
+        apiFetch<OwnerRequest[]>("/api/v1/owner/requests/me", { credentials: "include" }),
       ]);
+      setUser(nextUser);
+      setRequests(nextRequests);
 
-      if (!meResponse.ok) {
-        setUser(null);
-        setMessage("Bạn cần đăng nhập Google trước khi đăng ký chủ sân");
-        return;
+      if (nextUser.roles.includes("owner") || nextRequests[0]?.status === "approved") {
+        const [nextComplexes, nextCourts, nextSessions, nextCheckins] = await Promise.allSettled([
+          apiFetch<CourtComplex[]>("/api/v1/owner/court-complexes", { credentials: "include" }),
+          apiFetch<Court[]>("/api/v1/owner/courts", { credentials: "include" }),
+          apiFetch<Session[]>("/api/v1/owner/sessions", { credentials: "include" }),
+          apiFetch<Checkin[]>("/api/v1/owner/checkins", { credentials: "include" }),
+        ]);
+        setComplexes(nextComplexes.status === "fulfilled" ? nextComplexes.value : []);
+        setCourts(nextCourts.status === "fulfilled" ? nextCourts.value : []);
+        setSessions(nextSessions.status === "fulfilled" ? nextSessions.value : []);
+        setCheckins(nextCheckins.status === "fulfilled" ? nextCheckins.value : []);
       }
-
-      setUser(await meResponse.json());
-      if (requestsResponse.ok) {
-        setRequests(await requestsResponse.json());
-      }
-      setMessage("Thông tin chủ sân đã sẵn sàng");
-    } catch {
-      setError("Không kết nối được API chủ sân");
+      setMessage("Khu vực chủ sân đã sẵn sàng.");
+    } catch (caught) {
+      setUser(null);
+      setRequests([]);
+      setComplexes([]);
+      setCourts([]);
+      setSessions([]);
+      setCheckins([]);
+      setError(errorMessage(caught, "Không kết nối được API chủ sân"));
+      setMessage("Bạn cần đăng nhập Google trước khi đăng ký hoặc vận hành sân.");
     }
   }
 
   useEffect(() => {
-    loadDashboard();
+    void loadDashboard();
   }, []);
 
   async function submitOwnerRequest(event: FormEvent<HTMLFormElement>) {
@@ -82,169 +97,147 @@ export default function OwnerDashboardPage() {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/api/v1/owner/requests`, {
+      await apiFetch<OwnerRequest>("/api/v1/owner/requests", {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           business_name: businessName,
           contact_phone: contactPhone || null,
           facility_overview: facilityOverview || null,
         }),
       });
-      const payload = await response.json();
-
-      if (!response.ok) {
-        setError(payload?.error?.message ?? "Không gửi được hồ sơ chủ sân");
-        return;
-      }
-
       setBusinessName("");
       setContactPhone("");
       setFacilityOverview("");
       await loadDashboard();
-    } catch {
-      setError("Không kết nối được API chủ sân");
+    } catch (caught) {
+      setError(errorMessage(caught, "Không gửi được hồ sơ chủ sân"));
     } finally {
       setIsSubmitting(false);
     }
   }
 
+  const upcomingSessions = sessions.filter((item) => new Date(item.starts_at) > new Date()).length;
+  const activeCourts = courts.filter((item) => item.status === "active").length;
+  const openSlots = sessions.reduce((total, item) => total + item.open_slots, 0);
+
   return (
-    <main className="min-h-screen bg-[#f6f7f9] text-slate-950">
-      <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-emerald-700">
-              NetUp Chủ sân
-            </p>
-            <h1 className="mt-2 text-3xl font-semibold">Bảng điều khiển chủ sân</h1>
-            <p className="mt-2 text-sm text-slate-600">{message}</p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Link
-              className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              href="/"
-            >
-              Trang chính
-            </Link>
-            {isOwner ? (
+    <div className="space-y-5">
+      <PageHero
+        eyebrow="NetUp chủ sân"
+        title="Quản lý hồ sơ, sân và check-in tại quầy."
+        description={message}
+        actions={
+          <>
+            {user ? (
               <>
-                <Link
-                  className="rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-                  href="/owner/courts"
-                >
-                  Quản lý sân
-                </Link>
-                <Link
-                  className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                  href="/owner/check-in"
-                >
-                  Check-in booking
-                </Link>
+                <ButtonLink href="/owner/courts">Quản lý sân</ButtonLink>
+                <ButtonLink href="/owner/check-in" variant="outline">
+                  Mở check-in
+                </ButtonLink>
               </>
-            ) : null}
-          </div>
-        </div>
+            ) : (
+              <a
+                href={`${API_BASE_URL}/api/v1/auth/google/start`}
+                className="inline-flex items-center justify-center rounded-lg bg-ink px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+              >
+                Đăng nhập Google
+              </a>
+            )}
+          </>
+        }
+        aside={
+          <div
+            className="min-h-[220px] rounded-lg bg-cover bg-center"
+            style={{
+              backgroundImage:
+                "linear-gradient(130deg, rgba(15,23,42,0.2), rgba(127,29,29,0.34)), url('/courts/tennis1.jpg')",
+            }}
+            aria-hidden="true"
+          />
+        }
+      />
+
+      {error ? <Notice tone="danger">{error}</Notice> : null}
+
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Cụm sân" value={complexes.length} helper="Địa điểm đang quản lý" />
+        <StatCard label="Sân hoạt động" value={`${activeCourts}/${courts.length}`} helper="Sân sẵn sàng nhận lịch" tone="accent" />
+        <StatCard label="Khung giờ sắp tới" value={upcomingSessions} helper={`${openSlots} slot còn trống`} />
+        <StatCard label="Check-in" value={checkins.length} helper="Lượt đã xác nhận tại sân" tone="success" />
       </section>
 
-      <section className="mx-auto grid max-w-7xl gap-6 px-6 py-8 lg:grid-cols-[0.9fr_1.1fr] lg:px-8">
-        <div className="rounded border border-slate-200 bg-white p-6">
-          <p className="text-sm font-semibold uppercase text-slate-500">Tài khoản</p>
-          <h2 className="mt-3 text-xl font-semibold">
-            {user?.full_name ?? "Chưa đăng nhập"}
-          </h2>
-          <p className="mt-1 text-sm text-slate-600">{user?.email ?? "Không có phiên"}</p>
-          <p className="mt-4 text-sm text-slate-600">
-            Quyền hiện tại: {user?.roles.join(", ") ?? "chưa có"}
-          </p>
-          {!user ? (
-            <a
-              className="mt-5 inline-flex rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-              href={`${apiBaseUrl}/api/v1/auth/google/start`}
-            >
-              Đăng nhập bằng Google
-            </a>
-          ) : null}
-        </div>
+      <section className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+        <Card className="space-y-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Tài khoản</p>
+            <h2 className="mt-2 font-heading text-xl font-semibold text-ink">
+              {user?.full_name ?? "Chưa đăng nhập"}
+            </h2>
+            <p className="mt-1 text-sm text-slate-600">{user?.email ?? "Không có phiên đăng nhập"}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(user?.roles ?? ["guest"]).map((role) => (
+              <Badge key={role} tone={role === "owner" ? "success" : "neutral"}>
+                {role}
+              </Badge>
+            ))}
+          </div>
+          {isOwner ? (
+            <Notice tone="success">Tài khoản đã có quyền vận hành sân trên NetUp.</Notice>
+          ) : (
+            <Notice tone="info">Sau khi admin duyệt, bạn sẽ mở được quản lý sân và check-in.</Notice>
+          )}
+        </Card>
 
-        <div className="rounded border border-slate-200 bg-white p-6">
-          <div className="flex items-start justify-between gap-4">
+        <Card className="space-y-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold uppercase text-slate-500">Hồ sơ owner</p>
-              <h2 className="mt-3 text-xl font-semibold">
-                {latestRequest
-                  ? statusLabel[latestRequest.status] ?? latestRequest.status
-                  : "Chưa gửi yêu cầu"}
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Hồ sơ chủ sân</p>
+              <h2 className="mt-2 font-heading text-xl font-semibold text-ink">
+                {latestRequest ? requestStatusLabel(latestRequest.status) : "Chưa gửi yêu cầu"}
               </h2>
             </div>
-            {isOwner ? (
-              <span className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
-                Có quyền vận hành
-              </span>
+            {latestRequest ? (
+              <Badge tone={requestTone(latestRequest.status)}>{requestStatusLabel(latestRequest.status)}</Badge>
             ) : null}
           </div>
 
           {latestRequest ? (
-            <div className="mt-5 rounded border border-slate-200 bg-slate-50 p-4">
-              <p className="font-semibold text-slate-900">{latestRequest.business_name}</p>
-              <p className="mt-2 text-sm text-slate-600">
-                Điện thoại: {latestRequest.contact_phone ?? "chưa có"}
-              </p>
-              <p className="mt-2 text-sm text-slate-600">
-                {latestRequest.facility_overview ?? "Chưa có mô tả cơ sở"}
-              </p>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+              <p className="font-semibold text-slate-950">{latestRequest.business_name}</p>
+              <p className="mt-1">Điện thoại: {latestRequest.contact_phone ?? "chưa có"}</p>
+              <p className="mt-1">{latestRequest.facility_overview ?? "Chưa có mô tả cơ sở"}</p>
+              <p className="mt-2 text-slate-500">Gửi lúc: {formatFullDateTime(latestRequest.submitted_at)}</p>
               {latestRequest.review_note ? (
-                <p className="mt-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                <Notice tone="warning" className="mt-3">
                   Ghi chú duyệt: {latestRequest.review_note}
-                </p>
+                </Notice>
               ) : null}
             </div>
           ) : null}
 
           {user && !isOwner && latestRequest?.status !== "pending" ? (
-            <form onSubmit={submitOwnerRequest} className="mt-6 grid gap-4">
-              <label className="grid gap-2 text-sm font-semibold text-slate-700">
-                Tên cơ sở kinh doanh
-                <input
-                  className="rounded border border-slate-300 px-3 py-2 font-normal outline-none focus:border-slate-900"
-                  value={businessName}
-                  onChange={(event) => setBusinessName(event.target.value)}
-                  required
-                />
-              </label>
-              <label className="grid gap-2 text-sm font-semibold text-slate-700">
-                Số điện thoại liên hệ
-                <input
-                  className="rounded border border-slate-300 px-3 py-2 font-normal outline-none focus:border-slate-900"
-                  value={contactPhone}
-                  onChange={(event) => setContactPhone(event.target.value)}
-                />
-              </label>
-              <label className="grid gap-2 text-sm font-semibold text-slate-700">
-                Mô tả cơ sở
+            <form onSubmit={submitOwnerRequest} className="grid gap-4">
+              <Field label="Tên cơ sở kinh doanh">
+                <input className={inputClassName} value={businessName} onChange={(event) => setBusinessName(event.target.value)} required />
+              </Field>
+              <Field label="Số điện thoại liên hệ">
+                <input className={inputClassName} value={contactPhone} onChange={(event) => setContactPhone(event.target.value)} />
+              </Field>
+              <Field label="Mô tả cơ sở">
                 <textarea
-                  className="min-h-28 rounded border border-slate-300 px-3 py-2 font-normal outline-none focus:border-slate-900"
+                  className={`${inputClassName} min-h-28`}
                   value={facilityOverview}
                   onChange={(event) => setFacilityOverview(event.target.value)}
+                  placeholder="Số lượng sân, môn thể thao, khu vực phục vụ..."
                 />
-              </label>
-              <button
-                className="rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-400"
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? "Đang gửi..." : "Gửi yêu cầu chủ sân"}
-              </button>
+              </Field>
+              <Button disabled={isSubmitting}>{isSubmitting ? "Đang gửi..." : "Gửi yêu cầu chủ sân"}</Button>
             </form>
           ) : null}
-
-          {error ? (
-            <p className="mt-5 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              {error}
-            </p>
-          ) : null}
-        </div>
+        </Card>
       </section>
-    </main>
+    </div>
   );
 }

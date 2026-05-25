@@ -1,11 +1,11 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f3f4f6;
+  --background: #f5f6f8;
   --foreground: #1f232b;
   --ink: #1f232b;
   --steel: #5b6270;
-  --accent: #b4232a;
+  --accent: #991b1b;
   --mint: #9ca3af;
   --ember: #7f1d1d;
 }
@@ -43,8 +43,12 @@ a {
 
 .bg-noise-grid {
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+    linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
+}
+
+::selection {
+  background: rgba(153, 27, 27, 0.16);
 }
 
 .fade-up {

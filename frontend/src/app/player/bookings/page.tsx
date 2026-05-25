@@ -1,9 +1,18 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+import { Badge, Button, ButtonLink, Card, EmptyState, Notice, PageHero, StatCard } from "@/components/ui";
+import { apiFetch } from "@/lib/http";
+import {
+  bookingModeLabel,
+  bookingStatusLabel,
+  errorMessage,
+  formatDateTime,
+  formatVnd,
+  paymentMethodLabel,
+  sportLabel,
+} from "@/lib/format";
 
 type Booking = {
   id: string;
@@ -18,118 +27,146 @@ type Booking = {
   deposit_required_vnd: number;
   remaining_due_vnd: number;
   complex_name: string | null;
+  district: string | null;
   court_name: string | null;
   sub_court_name: string | null;
+  sport: string | null;
+  qr_payload?: string;
 };
 
-function money(value: number) {
-  return new Intl.NumberFormat("vi-VN").format(value);
+function statusTone(status: string): "success" | "warning" | "danger" | "neutral" {
+  if (["confirmed", "checked_in", "completed", "deposit_paid"].includes(status)) return "success";
+  if (["awaiting_deposit", "expired"].includes(status)) return "warning";
+  if (status === "cancelled") return "danger";
+  return "neutral";
 }
 
 export default function PlayerBookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
-  const [message, setMessage] = useState("Đang tải danh sách booking...");
+  const [message, setMessage] = useState("Đang tải lịch đặt sân của bạn...");
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   async function loadBookings() {
+    setIsLoading(true);
     setError("");
     try {
-      const response = await fetch(`${apiBaseUrl}/api/v1/player/bookings`, {
+      const items = await apiFetch<Booking[]>("/api/v1/player/bookings", {
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        cache: "no-store",
       });
-      const payload = response.status === 204 ? null : await response.json();
-      if (!response.ok) {
-        const detail = payload?.error?.details?.[0];
-        throw new Error(
-          detail?.field ? `${detail.field}: ${detail.message}` : payload?.error?.message
-        );
-      }
-      const items = payload as Booking[];
       setBookings(items);
-      setMessage(`Đang có ${items.length} booking`);
+      setMessage(items.length ? `Bạn đang có ${items.length} booking.` : "Bạn chưa có booking nào.");
     } catch (caught) {
       setBookings([]);
-      setError(caught instanceof Error ? caught.message : "Không tải được booking");
-      setMessage("Vui lòng đăng nhập để xem booking");
+      setError(errorMessage(caught, "Không tải được booking"));
+      setMessage("Vui lòng đăng nhập để xem booking.");
+    } finally {
+      setIsLoading(false);
     }
   }
 
   useEffect(() => {
-    loadBookings();
+    void loadBookings();
   }, []);
 
+  const stats = useMemo(() => {
+    const upcoming = bookings.filter((item) => item.session_starts_at && new Date(item.session_starts_at) > new Date()).length;
+    const needsDeposit = bookings.filter((item) => item.status === "awaiting_deposit").length;
+    const checkedIn = bookings.filter((item) => item.status === "checked_in").length;
+    const totalValue = bookings.reduce((total, item) => total + item.total_price_vnd, 0);
+    return { upcoming, needsDeposit, checkedIn, totalValue };
+  }, [bookings]);
+
   return (
-    <main className="min-h-screen bg-[#f6f7f9] text-slate-950">
-      <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-emerald-700">
-              NetUp Người chơi
-            </p>
-            <h1 className="mt-2 text-3xl font-semibold">Booking của tôi</h1>
-            <p className="mt-2 text-sm text-slate-600">{message}</p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Link
-              className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              href="/player/discovery"
-            >
-              Tiếp tục discovery
-            </Link>
-            <Link
-              className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              href="/player/matches"
-            >
-              Match history
-            </Link>
-            <Link
-              className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              href="/"
-            >
-              Trang chính
-            </Link>
-          </div>
-        </div>
+    <div className="space-y-5">
+      <PageHero
+        eyebrow="Booking của tôi"
+        title="Theo dõi lịch chơi, tiền cọc và mã check-in."
+        description={message}
+        actions={
+          <>
+            <ButtonLink href="/player/discovery">Đặt sân tiếp</ButtonLink>
+            <ButtonLink href="/player/matches" variant="outline">
+              Lịch đấu
+            </ButtonLink>
+          </>
+        }
+      />
+
+      {error ? <Notice tone="danger">{error}</Notice> : null}
+
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Booking" value={bookings.length} helper={isLoading ? "Đang đồng bộ..." : "Tổng lịch đặt"} />
+        <StatCard label="Sắp tới" value={stats.upcoming} helper="Khung giờ chưa diễn ra" tone="accent" />
+        <StatCard label="Chờ cọc" value={stats.needsDeposit} helper="Cần hoàn tất thanh toán" tone="warning" />
+        <StatCard label="Tổng giá trị" value={formatVnd(stats.totalValue)} helper={`${stats.checkedIn} đã check-in`} />
       </section>
 
-      {error ? (
-        <section className="mx-auto max-w-7xl px-6 py-4 lg:px-8">
-          <p className="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </p>
+      {bookings.length === 0 && !isLoading ? (
+        <EmptyState
+          title="Bạn chưa có booking nào"
+          description="Chọn kèo chờ ghép hoặc thuê nguyên sân để tạo booking đầu tiên."
+          action={<ButtonLink href="/player/discovery">Tìm sân ngay</ButtonLink>}
+        />
+      ) : (
+        <section className="grid gap-4 lg:grid-cols-2">
+          {bookings.map((item) => (
+            <Card key={item.id} className="space-y-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="font-heading text-xl font-semibold text-ink">
+                    {item.session_title ?? "Phiên sân"}
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    {item.complex_name ?? "Khu sân"} · {item.court_name ?? "Sân"} -{" "}
+                    {item.sub_court_name ?? ""}
+                  </p>
+                </div>
+                <Badge tone={statusTone(item.status)}>{bookingStatusLabel(item.status)}</Badge>
+              </div>
+
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <p className="font-heading text-2xl font-semibold tracking-wide text-ink">{item.booking_code}</p>
+                <p className="mt-1 text-sm text-slate-600">Đưa mã này cho quầy để check-in.</p>
+              </div>
+
+              <div className="grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
+                <p>
+                  <span className="font-semibold text-slate-950">Thời gian:</span>{" "}
+                  {formatDateTime(item.session_starts_at)}
+                </p>
+                <p>
+                  <span className="font-semibold text-slate-950">Môn:</span> {sportLabel(item.sport)}
+                </p>
+                <p>
+                  <span className="font-semibold text-slate-950">Kiểu đặt:</span>{" "}
+                  {bookingModeLabel(item.mode)} · {item.seats_booked} slot
+                </p>
+                <p>
+                  <span className="font-semibold text-slate-950">Thanh toán:</span>{" "}
+                  {paymentMethodLabel(item.payment_method)}
+                </p>
+                <p>
+                  <span className="font-semibold text-slate-950">Tổng tiền:</span>{" "}
+                  {formatVnd(item.total_price_vnd)}
+                </p>
+                <p>
+                  <span className="font-semibold text-slate-950">Cọc / còn lại:</span>{" "}
+                  {formatVnd(item.deposit_required_vnd)} / {formatVnd(item.remaining_due_vnd)}
+                </p>
+              </div>
+            </Card>
+          ))}
         </section>
-      ) : null}
+      )}
 
-      <section className="mx-auto grid max-w-7xl gap-4 px-6 py-8 lg:grid-cols-2 lg:px-8">
-        {bookings.map((item) => (
-          <article key={item.id} className="rounded border border-slate-200 bg-white p-5">
-            <div className="flex items-center justify-between gap-3">
-              <p className="font-semibold">{item.booking_code}</p>
-              <span className="rounded border border-slate-300 bg-slate-50 px-2 py-1 text-xs font-semibold uppercase text-slate-700">
-                {item.status}
-              </span>
-            </div>
-            <p className="mt-2 text-sm text-slate-700">{item.session_title ?? "Phiên sân"}</p>
-            <p className="mt-1 text-sm text-slate-600">
-              {item.complex_name ?? ""} · {item.court_name ?? "Sân"} - {item.sub_court_name ?? ""}
-            </p>
-            <p className="mt-1 text-sm text-slate-600">
-              {item.session_starts_at
-                ? new Date(item.session_starts_at).toLocaleString("vi-VN")
-                : "Chưa có thời gian"}
-            </p>
-            <p className="mt-1 text-sm text-slate-600">
-              {item.mode} · {item.seats_booked} slot · {item.payment_method}
-            </p>
-            <p className="mt-1 text-sm text-slate-600">
-              Tổng: {money(item.total_price_vnd)}đ · Cọc: {money(item.deposit_required_vnd)}đ · Còn
-              lại: {money(item.remaining_due_vnd)}đ
-            </p>
-          </article>
-        ))}
-      </section>
-    </main>
+      {isLoading ? (
+        <div className="flex justify-center">
+          <Button variant="outline" disabled>
+            Đang tải booking...
+          </Button>
+        </div>
+      ) : null}
+    </div>
   );
 }

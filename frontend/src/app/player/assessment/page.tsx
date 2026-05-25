@@ -1,9 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+import { Badge, Button, ButtonLink, Card, Field, Notice, PageHero, StatCard, inputClassName } from "@/components/ui";
+import { apiFetch } from "@/lib/http";
+import { errorMessage, formatFullDateTime, sportLabel } from "@/lib/format";
 
 type Sport = "Badminton" | "Football" | "Tennis";
 
@@ -36,32 +37,33 @@ type Question = {
   label: string;
   min: number;
   max: number;
+  helper: string;
 };
 
 const questionBySport: Record<Sport, Question[]> = {
   Badminton: [
-    { key: "racket_control", label: "Kiểm soát cầu", min: 1, max: 5 },
-    { key: "footwork", label: "Di chuyển chân", min: 1, max: 5 },
-    { key: "stamina", label: "Thể lực", min: 1, max: 5 },
-    { key: "match_reading", label: "Đọc tình huống", min: 1, max: 5 },
-    { key: "weekly_sessions", label: "Số buổi/tuần", min: 0, max: 14 },
-    { key: "experience_years", label: "Số năm kinh nghiệm", min: 0, max: 20 },
+    { key: "racket_control", label: "Kiểm soát cầu", min: 1, max: 5, helper: "Khả năng điều cầu đúng ý." },
+    { key: "footwork", label: "Di chuyển chân", min: 1, max: 5, helper: "Độ linh hoạt khi đổi hướng." },
+    { key: "stamina", label: "Thể lực", min: 1, max: 5, helper: "Giữ nhịp trong cả trận." },
+    { key: "match_reading", label: "Đọc tình huống", min: 1, max: 5, helper: "Chọn vị trí và xử lý pha cầu." },
+    { key: "weekly_sessions", label: "Số buổi mỗi tuần", min: 0, max: 14, helper: "Tần suất chơi gần đây." },
+    { key: "experience_years", label: "Số năm kinh nghiệm", min: 0, max: 20, helper: "Kinh nghiệm thi đấu hoặc luyện tập." },
   ],
   Football: [
-    { key: "ball_control", label: "Kiểm soát bóng", min: 1, max: 5 },
-    { key: "tactical_awareness", label: "Tư duy chiến thuật", min: 1, max: 5 },
-    { key: "team_play", label: "Phối hợp đội", min: 1, max: 5 },
-    { key: "stamina", label: "Thể lực", min: 1, max: 5 },
-    { key: "weekly_sessions", label: "Số buổi/tuần", min: 0, max: 14 },
-    { key: "experience_years", label: "Số năm kinh nghiệm", min: 0, max: 20 },
+    { key: "ball_control", label: "Kiểm soát bóng", min: 1, max: 5, helper: "Giữ bóng và xử lý bước một." },
+    { key: "tactical_awareness", label: "Tư duy chiến thuật", min: 1, max: 5, helper: "Đọc vị trí và khoảng trống." },
+    { key: "team_play", label: "Phối hợp đội", min: 1, max: 5, helper: "Di chuyển và chuyền theo đội." },
+    { key: "stamina", label: "Thể lực", min: 1, max: 5, helper: "Duy trì cường độ trong trận." },
+    { key: "weekly_sessions", label: "Số buổi mỗi tuần", min: 0, max: 14, helper: "Tần suất chơi gần đây." },
+    { key: "experience_years", label: "Số năm kinh nghiệm", min: 0, max: 20, helper: "Kinh nghiệm thi đấu hoặc luyện tập." },
   ],
   Tennis: [
-    { key: "serve_consistency", label: "Ổn định giao bóng", min: 1, max: 5 },
-    { key: "rally_control", label: "Duy trì rally", min: 1, max: 5 },
-    { key: "footwork", label: "Di chuyển chân", min: 1, max: 5 },
-    { key: "mental_focus", label: "Tập trung thi đấu", min: 1, max: 5 },
-    { key: "weekly_sessions", label: "Số buổi/tuần", min: 0, max: 14 },
-    { key: "experience_years", label: "Số năm kinh nghiệm", min: 0, max: 20 },
+    { key: "serve_consistency", label: "Ổn định giao bóng", min: 1, max: 5, helper: "Tỷ lệ giao bóng vào sân." },
+    { key: "rally_control", label: "Duy trì rally", min: 1, max: 5, helper: "Khả năng giữ bóng qua lại." },
+    { key: "footwork", label: "Di chuyển chân", min: 1, max: 5, helper: "Tiếp cận bóng đúng nhịp." },
+    { key: "mental_focus", label: "Tập trung thi đấu", min: 1, max: 5, helper: "Giữ ổn định khi điểm căng." },
+    { key: "weekly_sessions", label: "Số buổi mỗi tuần", min: 0, max: 14, helper: "Tần suất chơi gần đây." },
+    { key: "experience_years", label: "Số năm kinh nghiệm", min: 0, max: 20, helper: "Kinh nghiệm thi đấu hoặc luyện tập." },
   ],
 };
 
@@ -69,53 +71,41 @@ function seedAnswers(sport: Sport): Record<string, number> {
   return Object.fromEntries(questionBySport[sport].map((question) => [question.key, question.min]));
 }
 
+function trendText(delta: number) {
+  if (delta > 0) return "Tăng hạng";
+  if (delta < 0) return "Cần cải thiện";
+  return "Ổn định";
+}
+
 export default function PlayerAssessmentPage() {
   const [sport, setSport] = useState<Sport>("Badminton");
   const [answers, setAnswers] = useState<Record<string, number>>(seedAnswers("Badminton"));
   const [summary, setSummary] = useState<SkillTierSummary | null>(null);
   const [history, setHistory] = useState<EloHistoryItem[]>([]);
-  const [message, setMessage] = useState("Hoàn tất assessment để hệ thống đề xuất kèo phù hợp.");
+  const [message, setMessage] = useState("Hoàn tất tự đánh giá để NetUp đề xuất kèo vừa sức hơn.");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const questions = useMemo(() => questionBySport[sport], [sport]);
 
-  async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await fetch(`${apiBaseUrl}${path}`, {
-      ...init,
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-        ...(init?.headers ?? {}),
-      },
-      cache: "no-store",
-    });
-    const payload = response.status === 204 ? null : await response.json();
-    if (!response.ok) {
-      const detail = payload?.error?.details?.[0];
-      throw new Error(detail?.field ? `${detail.field}: ${detail.message}` : payload?.error?.message);
-    }
-    return payload as T;
-  }
-
   async function loadSummary() {
     setError("");
     try {
       const [skillTier, eloHistory] = await Promise.all([
-        apiFetch<SkillTierSummary>("/api/v1/player/skill-tier"),
-        apiFetch<EloHistoryItem[]>("/api/v1/player/elo-history?limit=10"),
+        apiFetch<SkillTierSummary>("/api/v1/player/skill-tier", { credentials: "include" }),
+        apiFetch<EloHistoryItem[]>("/api/v1/player/elo-history?limit=10", { credentials: "include" }),
       ]);
       setSummary(skillTier);
       setHistory(eloHistory);
     } catch (caught) {
       setSummary(null);
       setHistory([]);
-      setError(caught instanceof Error ? caught.message : "Không tải được dữ liệu assessment");
+      setError(errorMessage(caught, "Không tải được dữ liệu đánh giá"));
     }
   }
 
   useEffect(() => {
-    loadSummary();
+    void loadSummary();
   }, []);
 
   function onSportChange(nextSport: Sport) {
@@ -135,157 +125,158 @@ export default function PlayerAssessmentPage() {
     try {
       await apiFetch("/api/v1/player/assessments", {
         method: "POST",
+        credentials: "include",
         body: JSON.stringify({
           sport,
           form_version: "v1",
           answers,
         }),
       });
-      setMessage("Assessment đã lưu. Tier hiển thị đã được cập nhật.");
+      setMessage("Đã lưu tự đánh giá. Level hiển thị của bạn đã được cập nhật.");
       await loadSummary();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Không lưu được assessment");
+      setError(errorMessage(caught, "Không lưu được tự đánh giá"));
     } finally {
       setIsSubmitting(false);
     }
   }
 
   return (
-    <main className="min-h-screen bg-[#f6f7f9] text-slate-950">
-      <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-6 py-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-emerald-700">
-              NetUp Assessment
-            </p>
-            <h1 className="mt-2 text-3xl font-semibold">Đánh giá năng lực người chơi</h1>
-            <p className="mt-2 text-sm text-slate-600">{message}</p>
-            {summary ? (
-              <p className="mt-1 text-sm text-slate-700">
-                Tier hiện tại: <span className="font-semibold">{summary.visible_skill_tier}</span>
-              </p>
-            ) : null}
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Link
-              className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              href="/player/discovery"
-            >
-              Discovery
-            </Link>
-            <Link
-              className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              href="/player/bookings"
-            >
-              Booking của tôi
-            </Link>
-            <Link
-              className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              href="/player/matches"
-            >
-              Match history
-            </Link>
-            <Link
-              className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              href="/"
-            >
-              Trang chính
-            </Link>
-          </div>
-        </div>
+    <div className="space-y-5">
+      <PageHero
+        eyebrow="Level người chơi"
+        title="Tự đánh giá nhanh để ghép kèo đúng trình."
+        description={message}
+        actions={
+          <>
+            <ButtonLink href="/player/discovery">Tìm sân phù hợp</ButtonLink>
+            <ButtonLink href="/player/matches" variant="outline">
+              Xem lịch đấu
+            </ButtonLink>
+          </>
+        }
+      />
+
+      {error ? <Notice tone="danger">{error}</Notice> : null}
+
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          label="Level hiện tại"
+          value={summary?.visible_skill_tier ?? "Chưa có"}
+          helper={summary?.has_assessment ? "Dùng để xếp gợi ý" : "Hãy làm tự đánh giá"}
+          tone="accent"
+        />
+        <StatCard label="Trận đã chơi" value={summary?.matches_played ?? 0} helper="Dữ liệu lịch đấu" />
+        <StatCard label="Thắng / Hòa / Thua" value={`${summary?.wins ?? 0}/${summary?.draws ?? 0}/${summary?.losses ?? 0}`} />
+        <StatCard
+          label="Lần đánh giá gần nhất"
+          value={summary?.last_assessment ? sportLabel(summary.last_assessment.sport) : "Chưa có"}
+          helper={summary?.last_assessment ? formatFullDateTime(summary.last_assessment.updated_at) : undefined}
+        />
       </section>
 
-      <section className="mx-auto grid max-w-6xl gap-5 px-6 py-6 lg:grid-cols-[1.1fr_0.9fr] lg:px-8">
-        <form onSubmit={onSubmit} className="rounded border border-slate-200 bg-white p-5">
-          <label className="grid gap-2 text-sm font-semibold text-slate-700">
-            Môn thể thao
+      <section className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
+        <form onSubmit={onSubmit} className="space-y-5 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div>
+            <h2 className="font-heading text-xl font-semibold text-ink">Bảng tự đánh giá</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-600">
+              Chọn môn và kéo thang điểm đúng với khả năng hiện tại. NetUp không hiển thị điểm nội bộ thô cho người chơi.
+            </p>
+          </div>
+
+          <Field label="Môn thể thao">
             <select
-              className="rounded border border-slate-300 px-3 py-2 font-normal outline-none focus:border-slate-900"
+              className={inputClassName}
               value={sport}
               onChange={(event) => onSportChange(event.target.value as Sport)}
             >
-              <option value="Badminton">Badminton</option>
-              <option value="Football">Football</option>
+              <option value="Badminton">Cầu lông</option>
+              <option value="Football">Bóng đá</option>
               <option value="Tennis">Tennis</option>
             </select>
-          </label>
+          </Field>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             {questions.map((question) => (
-              <label key={question.key} className="grid gap-2 text-sm font-semibold text-slate-700">
-                {question.label}
+              <div key={question.key} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">{question.label}</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">{question.helper}</p>
+                  </div>
+                  <Badge tone="info">{answers[question.key] ?? question.min}</Badge>
+                </div>
                 <input
-                  className="rounded border border-slate-300 px-3 py-2 font-normal outline-none focus:border-slate-900"
-                  type="number"
+                  className="mt-4 w-full accent-red-800"
+                  type="range"
                   min={question.min}
                   max={question.max}
                   value={answers[question.key] ?? question.min}
                   onChange={(event) => onAnswerChange(question.key, event.target.value)}
                 />
-              </label>
+                <div className="mt-1 flex justify-between text-xs text-slate-500">
+                  <span>{question.min}</span>
+                  <span>{question.max}</span>
+                </div>
+              </div>
             ))}
           </div>
 
-          <button
-            className="mt-5 rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-400"
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? "Đang lưu assessment..." : "Lưu assessment"}
-          </button>
+          <Button disabled={isSubmitting}>{isSubmitting ? "Đang lưu..." : "Lưu tự đánh giá"}</Button>
         </form>
 
-        <div className="rounded border border-slate-200 bg-white p-5">
-          <h2 className="text-lg font-semibold">Tóm tắt tier</h2>
-          {summary ? (
-            <div className="mt-3 space-y-2 text-sm text-slate-700">
-              <p>
-                Tier hiển thị: <span className="font-semibold">{summary.visible_skill_tier}</span>
-              </p>
-              <p>
-                Trận đã chơi: {summary.matches_played} · W/L/D: {summary.wins}/{summary.losses}/
-                {summary.draws}
-              </p>
-              <p>
-                Assessment gần nhất:{" "}
-                {summary.last_assessment
-                  ? `${summary.last_assessment.sport} · ${new Date(
-                      summary.last_assessment.updated_at
-                    ).toLocaleString("vi-VN")}`
-                  : "chưa có"}
-              </p>
-            </div>
-          ) : (
-            <p className="mt-3 text-sm text-slate-600">Chưa có dữ liệu.</p>
-          )}
-
-          <h3 className="mt-5 text-base font-semibold">Lịch sử biến động tier</h3>
-          <div className="mt-3 grid gap-2">
-            {history.length === 0 ? (
-              <p className="text-sm text-slate-600">Chưa có lịch sử.</p>
-            ) : (
-              history.map((item) => (
-                <div key={item.id} className="rounded border border-slate-200 bg-slate-50 p-3 text-sm">
-                  <p className="font-semibold text-slate-900">
-                    {item.skill_tier_before} → {item.skill_tier_after}
+        <div className="space-y-5">
+          <Card className="space-y-3">
+            <h2 className="font-heading text-xl font-semibold text-ink">Tóm tắt level</h2>
+            {summary ? (
+              <div className="space-y-3 text-sm text-slate-700">
+                <div className="rounded-lg border border-red-100 bg-red-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-red-800">
+                    Level hiển thị
                   </p>
-                  <p className="mt-1 text-slate-700">
-                    Delta: {item.delta > 0 ? `+${item.delta}` : item.delta}
+                  <p className="mt-1 font-heading text-2xl font-semibold text-red-950">
+                    {summary.visible_skill_tier}
                   </p>
-                  <p className="mt-1 text-slate-600">{new Date(item.created_at).toLocaleString("vi-VN")}</p>
                 </div>
-              ))
+                <p>
+                  Thành tích hiện tại: {summary.wins} thắng, {summary.draws} hòa, {summary.losses} thua.
+                </p>
+                <p>
+                  Đánh giá gần nhất:{" "}
+                  {summary.last_assessment
+                    ? `${sportLabel(summary.last_assessment.sport)} · ${formatFullDateTime(summary.last_assessment.updated_at)}`
+                    : "chưa có"}
+                </p>
+              </div>
+            ) : (
+              <p className="text-sm leading-6 text-slate-600">
+                Đăng nhập và lưu tự đánh giá để NetUp tính level hiển thị.
+              </p>
             )}
-          </div>
+          </Card>
+
+          <Card className="space-y-3">
+            <h2 className="font-heading text-xl font-semibold text-ink">Lịch sử cập nhật</h2>
+            {history.length === 0 ? (
+              <p className="text-sm text-slate-600">Chưa có lịch sử thay đổi level.</p>
+            ) : (
+              <div className="grid gap-3">
+                {history.map((item) => (
+                  <div key={item.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-semibold text-slate-900">
+                        {item.skill_tier_before} sang {item.skill_tier_after}
+                      </p>
+                      <Badge tone={item.delta >= 0 ? "success" : "warning"}>{trendText(item.delta)}</Badge>
+                    </div>
+                    <p className="mt-1 text-slate-600">{formatFullDateTime(item.created_at)}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
         </div>
       </section>
-
-      {error ? (
-        <section className="mx-auto max-w-6xl px-6 pb-6 lg:px-8">
-          <p className="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </p>
-        </section>
-      ) : null}
-    </main>
+    </div>
   );
 }

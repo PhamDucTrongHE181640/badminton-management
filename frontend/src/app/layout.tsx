@@ -34,22 +34,23 @@ export default function RootLayout({
   return (
     <html lang="vi">
       <body className={`${manrope.variable} ${sora.variable} antialiased`}>
-        <div className="relative min-h-screen bg-[#f3f4f6] text-ink">
-          <div className="pointer-events-none absolute inset-0 bg-noise-grid bg-[size:24px_24px] opacity-40" />
-          <div className="pointer-events-none absolute -top-28 right-0 h-[300px] w-[300px] rounded-full bg-red-300/30 blur-3xl" />
-          <div className="pointer-events-none absolute bottom-0 left-0 h-[280px] w-[280px] rounded-full bg-slate-300/35 blur-3xl" />
+        <div className="relative min-h-screen bg-[#f5f6f8] text-ink">
+          <div className="pointer-events-none absolute inset-0 bg-noise-grid bg-[size:32px_32px] opacity-70" />
 
-          <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/85 backdrop-blur">
+          <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/90 backdrop-blur">
             <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
-              <Link href="/" className="font-heading text-xl font-semibold tracking-tight text-ink">
-                NetUp
+              <Link href="/" className="flex items-center gap-2 font-heading text-xl font-semibold tracking-tight text-ink">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-800 text-sm text-white">
+                  N
+                </span>
+                <span>NetUp</span>
               </Link>
               <nav className="hidden items-center gap-2 sm:flex">
                 {entryLinks.map((link) => (
                   <Link
                     key={link.href}
                     href={link.href}
-                    className="rounded-full px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100"
+                    className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
                   >
                     {link.label}
                   </Link>
@@ -58,7 +59,7 @@ export default function RootLayout({
             </div>
           </header>
 
-          <div className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6">{children}</div>
+          <div className="relative mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:py-8">{children}</div>
         </div>
       </body>
     </html>

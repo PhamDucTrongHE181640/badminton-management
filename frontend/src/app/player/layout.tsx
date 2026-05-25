@@ -8,10 +8,10 @@ export default function PlayerLayout({ children }: { children: React.ReactNode }
       </p>
       <RoleNav
         links={[
-          { href: "/player/discovery", label: "Discovery" },
+          { href: "/player/discovery", label: "Đặt sân" },
           { href: "/player/bookings", label: "Booking của tôi" },
-          { href: "/player/assessment", label: "Assessment" },
-          { href: "/player/matches", label: "Match history" },
+          { href: "/player/assessment", label: "Tự đánh giá level" },
+          { href: "/player/matches", label: "Lịch đấu" },
         ]}
       />
       {children}
