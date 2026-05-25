@@ -18,7 +18,7 @@ export default function GlobalError({
       <h2 className="font-heading text-2xl font-semibold text-ink">Ứng dụng gặp lỗi</h2>
       <p className="mt-2 text-sm text-slate-600">{error.message || "Đã xảy ra lỗi không mong muốn."}</p>
       <button
-        className="mt-5 rounded bg-ink px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+        className="mt-5 rounded bg-red-800 px-4 py-2 text-sm font-semibold text-white hover:bg-red-900"
         onClick={reset}
       >
         Thử lại

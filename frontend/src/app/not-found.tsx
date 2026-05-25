@@ -8,7 +8,7 @@ export default function NotFound() {
       <p className="mt-2 text-sm text-slate-600">Liên kết có thể đã thay đổi hoặc không còn tồn tại.</p>
       <Link
         href="/"
-        className="mt-5 inline-flex rounded bg-ink px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+        className="mt-5 inline-flex rounded bg-red-800 px-4 py-2 text-sm font-semibold text-white hover:bg-red-900"
       >
         Về trang chủ
       </Link>

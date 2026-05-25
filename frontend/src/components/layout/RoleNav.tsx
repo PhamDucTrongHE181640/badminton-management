@@ -24,7 +24,7 @@ export function RoleNav({ links }: RoleNavProps) {
             key={link.href}
             href={link.href}
             className={`shrink-0 rounded-md px-3 py-2 text-sm font-semibold transition ${
-              isActive ? "bg-ink text-white shadow-sm" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+              isActive ? "bg-red-800 text-white shadow-sm hover:bg-red-900" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
             }`}
           >
             {link.label}

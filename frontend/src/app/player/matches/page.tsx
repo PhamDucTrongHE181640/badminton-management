@@ -376,7 +376,7 @@ export default function PlayerMatchesPage() {
             </label>
           </div>
           <button
-            className="mt-5 rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-400"
+            className="mt-5 rounded bg-red-800 px-4 py-2 text-sm font-semibold text-white hover:bg-red-900 disabled:bg-slate-400"
             disabled={isCreating}
           >
             {isCreating ? "Đang ghi nhận..." : "Ghi nhận trận"}
@@ -478,7 +478,7 @@ export default function PlayerMatchesPage() {
           </label>
 
           <button
-            className="mt-5 rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-400"
+            className="mt-5 rounded bg-red-800 px-4 py-2 text-sm font-semibold text-white hover:bg-red-900 disabled:bg-slate-400"
             disabled={!activeMatch || isSendingFeedback}
           >
             {isSendingFeedback ? "Đang gửi phản hồi..." : "Gửi phản hồi"}

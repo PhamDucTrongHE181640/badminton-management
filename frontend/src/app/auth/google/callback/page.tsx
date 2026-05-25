@@ -67,7 +67,7 @@ export default function GoogleCallbackPage() {
         ) : null}
         <div className="mt-6 flex flex-wrap gap-3">
           <a
-            className="inline-flex rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+            className="inline-flex rounded bg-red-800 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-900"
             href="/"
           >
             Quay về trang chính

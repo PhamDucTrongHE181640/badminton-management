@@ -12,7 +12,7 @@ const buttonBase =
   "inline-flex items-center justify-center rounded-lg font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-800/25 disabled:cursor-not-allowed disabled:opacity-50";
 
 const buttonVariants: Record<ButtonVariant, string> = {
-  primary: "bg-ink text-white shadow-sm hover:bg-slate-800",
+  primary: "bg-red-800 text-white shadow-sm hover:bg-red-900",
   secondary: "bg-red-800 text-white shadow-sm hover:bg-red-900",
   outline: "border border-slate-300 bg-white text-slate-800 hover:border-slate-400 hover:bg-slate-50",
   ghost: "text-slate-700 hover:bg-slate-100",

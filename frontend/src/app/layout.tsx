@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Manrope, Sora } from "next/font/google";
+import { HeaderUserAuth } from "@/components/layout";
 import "./globals.css";
 
 const manrope = Manrope({
@@ -39,6 +40,7 @@ export default function RootLayout({
                 </span>
                 <span>NetUp</span>
               </Link>
+              <HeaderUserAuth />
             </div>
           </header>
 
