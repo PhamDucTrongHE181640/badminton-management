@@ -1,8 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+
+import { Badge, Button, ButtonLink, Card, Field, Notice, PageHero, StatCard, inputClassName } from "@/components/ui";
+import { formatFullDateTime, formatVnd } from "@/lib/format";
 
 import { adminFetch, adminLogout } from "../../_lib/auth";
 
@@ -65,7 +67,7 @@ export default function AdminConfigPage() {
   }
 
   useEffect(() => {
-    loadConfig();
+    void loadConfig();
   }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -109,152 +111,100 @@ export default function AdminConfigPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f6f7f9] text-slate-950">
-      <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-emerald-700">
-              NetUp Quản trị
-            </p>
-            <h1 className="mt-2 text-3xl font-semibold">Cấu hình hệ thống</h1>
-            <p className="mt-2 text-sm text-slate-600">{message}</p>
-            {config ? (
-              <p className="mt-1 text-sm text-slate-600">
-                Cập nhật lần cuối: {new Date(config.updated_at).toLocaleString("vi-VN")}
-              </p>
-            ) : null}
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Link
-              className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              href="/_internal/netup-admin/dashboard"
-            >
+    <div className="space-y-5">
+      <PageHero
+        eyebrow="Cấu hình vận hành"
+        title="Điều chỉnh phí, cọc và quy tắc matching."
+        description={message}
+        actions={
+          <>
+            <ButtonLink href="/_internal/netup-admin/dashboard" variant="outline">
               Dashboard
-            </Link>
-            <Link
-              className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              href="/_internal/netup-admin/owner-requests"
-            >
+            </ButtonLink>
+            <ButtonLink href="/_internal/netup-admin/owner-requests" variant="outline">
               Duyệt owner
-            </Link>
-            <button
-              className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              onClick={logout}
-            >
+            </ButtonLink>
+            <Button variant="outline" onClick={logout}>
               Đăng xuất
-            </button>
-          </div>
-        </div>
+            </Button>
+          </>
+        }
+      />
+
+      {error ? <Notice tone="danger">{error}</Notice> : null}
+
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Platform fee" value={`${platformFeePercent}%`} helper="Tính trên booking mới" tone="accent" />
+        <StatCard label="Phí sàn" value={formatVnd(Number(floorFeeVnd))} helper="Áp dụng cho booking solo" />
+        <StatCard label="Tiền cọc" value={`${depositPercent}%`} helper="Bắt buộc thanh toán online" tone="warning" />
+        <StatCard label="Matching radius" value={`${matchingRadiusKm} km`} helper="Bán kính gợi ý sân" />
       </section>
 
-      <section className="mx-auto max-w-4xl px-6 py-8 lg:px-8">
-        {error ? (
-          <p className="mb-5 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </p>
-        ) : null}
-
-        <form onSubmit={submit} className="rounded border border-slate-200 bg-white p-5">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="grid gap-2 text-sm font-semibold text-slate-700">
-              Platform fee (%)
-              <input
-                className="rounded border border-slate-300 px-3 py-2 font-normal outline-none focus:border-slate-900"
-                type="number"
-                step="0.01"
-                min={0}
-                max={30}
-                value={platformFeePercent}
-                onChange={(event) => setPlatformFeePercent(event.target.value)}
-              />
-            </label>
-            <label className="grid gap-2 text-sm font-semibold text-slate-700">
-              Floor fee (VND)
-              <input
-                className="rounded border border-slate-300 px-3 py-2 font-normal outline-none focus:border-slate-900"
-                type="number"
-                min={0}
-                max={200000}
-                value={floorFeeVnd}
-                onChange={(event) => setFloorFeeVnd(event.target.value)}
-              />
-            </label>
-            <label className="grid gap-2 text-sm font-semibold text-slate-700">
-              Deposit percent (%)
-              <input
-                className="rounded border border-slate-300 px-3 py-2 font-normal outline-none focus:border-slate-900"
-                type="number"
-                step="0.01"
-                min={5}
-                max={80}
-                value={depositPercent}
-                onChange={(event) => setDepositPercent(event.target.value)}
-              />
-            </label>
-            <label className="grid gap-2 text-sm font-semibold text-slate-700">
-              Matching radius (km)
-              <input
-                className="rounded border border-slate-300 px-3 py-2 font-normal outline-none focus:border-slate-900"
-                type="number"
-                step="0.1"
-                min={1}
-                max={30}
-                value={matchingRadiusKm}
-                onChange={(event) => setMatchingRadiusKm(event.target.value)}
-              />
-            </label>
-            <label className="grid gap-2 text-sm font-semibold text-slate-700">
-              No-show strike limit
-              <input
-                className="rounded border border-slate-300 px-3 py-2 font-normal outline-none focus:border-slate-900"
-                type="number"
-                min={1}
-                max={10}
-                value={noShowStrikeLimit}
-                onChange={(event) => setNoShowStrikeLimit(event.target.value)}
-              />
-            </label>
-            <label className="grid gap-2 text-sm font-semibold text-slate-700">
-              Auto release minutes
-              <input
-                className="rounded border border-slate-300 px-3 py-2 font-normal outline-none focus:border-slate-900"
-                type="number"
-                min={5}
-                max={120}
-                value={autoReleaseMinutes}
-                onChange={(event) => setAutoReleaseMinutes(event.target.value)}
-              />
-            </label>
+      <section className="grid gap-5 lg:grid-cols-[1fr_360px]">
+        <form onSubmit={submit} className="space-y-5 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div>
+            <h2 className="font-heading text-xl font-semibold text-ink">Thông số hệ thống</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-600">
+              Mỗi thay đổi cần có lý do để audit trail ghi lại rõ ràng.
+            </p>
           </div>
 
-          <label className="mt-4 flex items-center gap-3 text-sm font-semibold text-slate-700">
-            <input
-              type="checkbox"
-              checked={supportHotlineEnabled}
-              onChange={(event) => setSupportHotlineEnabled(event.target.checked)}
-            />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Platform fee (%)">
+              <input className={inputClassName} type="number" step="0.01" min={0} max={30} value={platformFeePercent} onChange={(event) => setPlatformFeePercent(event.target.value)} />
+            </Field>
+            <Field label="Floor fee (VND)">
+              <input className={inputClassName} type="number" min={0} max={200000} value={floorFeeVnd} onChange={(event) => setFloorFeeVnd(event.target.value)} />
+            </Field>
+            <Field label="Deposit percent (%)">
+              <input className={inputClassName} type="number" step="0.01" min={5} max={80} value={depositPercent} onChange={(event) => setDepositPercent(event.target.value)} />
+            </Field>
+            <Field label="Matching radius (km)">
+              <input className={inputClassName} type="number" step="0.1" min={1} max={30} value={matchingRadiusKm} onChange={(event) => setMatchingRadiusKm(event.target.value)} />
+            </Field>
+            <Field label="No-show strike limit">
+              <input className={inputClassName} type="number" min={1} max={10} value={noShowStrikeLimit} onChange={(event) => setNoShowStrikeLimit(event.target.value)} />
+            </Field>
+            <Field label="Auto release minutes">
+              <input className={inputClassName} type="number" min={5} max={120} value={autoReleaseMinutes} onChange={(event) => setAutoReleaseMinutes(event.target.value)} />
+            </Field>
+          </div>
+
+          <label className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-semibold text-slate-700">
+            <input type="checkbox" checked={supportHotlineEnabled} onChange={(event) => setSupportHotlineEnabled(event.target.checked)} />
             Bật hotline hỗ trợ
           </label>
 
-          <label className="mt-4 grid gap-2 text-sm font-semibold text-slate-700">
-            Lý do thay đổi (bắt buộc để audit)
+          <Field label="Lý do thay đổi">
             <textarea
-              className="min-h-24 rounded border border-slate-300 px-3 py-2 font-normal outline-none focus:border-slate-900"
+              className={`${inputClassName} min-h-28`}
               value={changeReason}
               onChange={(event) => setChangeReason(event.target.value)}
-              placeholder="Ví dụ: Điều chỉnh phí theo chính sách vận hành tuần này"
+              placeholder="Ví dụ: Điều chỉnh tỷ lệ cọc theo chính sách vận hành tuần này"
               required
             />
-          </label>
+          </Field>
 
-          <button
-            className="mt-5 rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-400"
-            disabled={isSaving}
-          >
-            {isSaving ? "Đang lưu..." : "Lưu cấu hình"}
-          </button>
+          <Button disabled={isSaving}>{isSaving ? "Đang lưu..." : "Lưu cấu hình"}</Button>
         </form>
+
+        <Card className="space-y-4">
+          <h2 className="font-heading text-xl font-semibold text-ink">Trạng thái cấu hình</h2>
+          <div className="space-y-3 text-sm text-slate-700">
+            <p>
+              Cập nhật lần cuối:{" "}
+              <span className="font-semibold text-slate-950">
+                {config ? formatFullDateTime(config.updated_at) : "chưa có"}
+              </span>
+            </p>
+            <p>Người chơi chọn tiền mặt vẫn phải thanh toán tiền cọc online trước khi check-in.</p>
+            <p>Auto release giúp trả slot nếu booking không hoàn tất cọc đúng thời hạn.</p>
+          </div>
+          <Badge tone={supportHotlineEnabled ? "success" : "warning"}>
+            Hotline {supportHotlineEnabled ? "đang bật" : "đang tắt"}
+          </Badge>
+        </Card>
       </section>
-    </main>
+    </div>
   );
 }

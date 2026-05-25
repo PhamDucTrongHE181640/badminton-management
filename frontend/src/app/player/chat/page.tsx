@@ -1,10 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, Suspense, useEffect, useMemo, useRef, useState } from "react";
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+import { Badge, Button, ButtonLink, Card, EmptyState, Field, Notice, PageHero, inputClassName } from "@/components/ui";
+import { apiFetch, API_BASE_URL } from "@/lib/http";
+import { errorMessage, formatFullDateTime } from "@/lib/format";
 
 type ChatRoom = {
   id: string;
@@ -29,7 +30,7 @@ function toWebSocketUrl(httpBaseUrl: string): string {
   return httpBaseUrl.replace("http://", "ws://");
 }
 
-export default function PlayerChatRoomPage() {
+function PlayerChatRoomContent() {
   const searchParams = useSearchParams();
   const poolPostId = searchParams.get("poolPostId") ?? "";
   const wsRef = useRef<WebSocket | null>(null);
@@ -37,33 +38,15 @@ export default function PlayerChatRoomPage() {
   const [room, setRoom] = useState<ChatRoom | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
-  const [message, setMessage] = useState("Nhập poolPostId từ discovery để mở room chat.");
+  const [message, setMessage] = useState("Đang chuẩn bị phòng chat pool...");
   const [error, setError] = useState("");
   const [isSending, setIsSending] = useState(false);
 
-  async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await fetch(`${apiBaseUrl}${path}`, {
-      ...init,
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-        ...(init?.headers ?? {}),
-      },
-      cache: "no-store",
-    });
-    const payload = response.status === 204 ? null : await response.json();
-    if (!response.ok) {
-      const detail = payload?.error?.details?.[0];
-      throw new Error(detail?.field ? `${detail.field}: ${detail.message}` : payload?.error?.message);
-    }
-    return payload as T;
-  }
-
-  const wsUrl = useMemo(() => toWebSocketUrl(apiBaseUrl), []);
+  const wsUrl = useMemo(() => toWebSocketUrl(API_BASE_URL), []);
 
   async function bootstrap() {
     if (!poolPostId) {
-      setMessage("Thiếu poolPostId trên URL. Hãy vào discovery và bấm Vào chat pool.");
+      setMessage("Hãy mở chat từ một kèo chờ ghép trong trang đặt sân.");
       setRoom(null);
       setMessages([]);
       return;
@@ -73,30 +56,37 @@ export default function PlayerChatRoomPage() {
     try {
       let activeRoom: ChatRoom | null = null;
       try {
-        activeRoom = await apiFetch<ChatRoom>(`/api/v1/player/chat/rooms/by-pool/${poolPostId}`);
+        activeRoom = await apiFetch<ChatRoom>(`/api/v1/player/chat/rooms/by-pool/${poolPostId}`, {
+          credentials: "include",
+        });
       } catch {
         activeRoom = await apiFetch<ChatRoom>("/api/v1/player/chat/rooms", {
           method: "POST",
+          credentials: "include",
           body: JSON.stringify({ pool_post_id: poolPostId }),
         });
       }
       setRoom(activeRoom);
-      await apiFetch(`/api/v1/player/chat/rooms/${activeRoom.id}/members`, { method: "POST" });
+      await apiFetch(`/api/v1/player/chat/rooms/${activeRoom.id}/members`, {
+        method: "POST",
+        credentials: "include",
+      });
       const history = await apiFetch<ChatMessage[]>(
-        `/api/v1/player/chat/rooms/${activeRoom.id}/messages?limit=100`
+        `/api/v1/player/chat/rooms/${activeRoom.id}/messages?limit=100`,
+        { credentials: "include" },
       );
       setMessages(history);
-      setMessage("Đã kết nối room chat.");
+      setMessage("Bạn đã vào phòng chat của kèo chờ ghép.");
     } catch (caught) {
       setRoom(null);
       setMessages([]);
-      setError(caught instanceof Error ? caught.message : "Không khởi tạo được room chat");
-      setMessage("Không truy cập được room chat");
+      setError(errorMessage(caught, "Không khởi tạo được room chat"));
+      setMessage("Không truy cập được room chat.");
     }
   }
 
   useEffect(() => {
-    bootstrap();
+    void bootstrap();
   }, [poolPostId]);
 
   useEffect(() => {
@@ -110,7 +100,7 @@ export default function PlayerChatRoomPage() {
       setMessages((previous) => [...previous, nextMessage]);
     };
     socket.onerror = () => {
-      setError("Kết nối realtime bị lỗi, bạn vẫn có thể gửi qua REST.");
+      setError("Kết nối realtime bị lỗi, bạn vẫn có thể gửi tin qua REST.");
     };
     return () => {
       socket.close();
@@ -130,96 +120,103 @@ export default function PlayerChatRoomPage() {
       } else {
         const posted = await apiFetch<ChatMessage>(`/api/v1/player/chat/rooms/${room.id}/messages`, {
           method: "POST",
+          credentials: "include",
           body: JSON.stringify({ content }),
         });
         setMessages((previous) => [...previous, posted]);
       }
       setDraft("");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Không gửi được tin nhắn");
+      setError(errorMessage(caught, "Không gửi được tin nhắn"));
     } finally {
       setIsSending(false);
     }
   }
 
+  if (!poolPostId) {
+    return (
+      <EmptyState
+        title="Chưa chọn kèo chờ ghép"
+        description="Vào trang đặt sân và bấm Chat nhóm trên một kèo pool để mở phòng chat."
+        action={<ButtonLink href="/player/discovery">Tìm kèo chờ ghép</ButtonLink>}
+      />
+    );
+  }
+
   return (
-    <main className="min-h-screen bg-[#f6f7f9] text-slate-950">
-      <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-5xl flex-col gap-4 px-6 py-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+    <div className="space-y-5">
+      <PageHero
+        eyebrow="Chat nhóm"
+        title="Trao đổi nhanh với người cùng kèo."
+        description={message}
+        actions={
+          <>
+            <ButtonLink href="/player/discovery" variant="outline">
+              Về đặt sân
+            </ButtonLink>
+            <ButtonLink href="/player/bookings" variant="outline">
+              Booking của tôi
+            </ButtonLink>
+          </>
+        }
+      />
+
+      {error ? <Notice tone="danger">{error}</Notice> : null}
+
+      <Card className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-emerald-700">
-              NetUp Pool Chat
-            </p>
-            <h1 className="mt-2 text-3xl font-semibold">Chat nhóm pool</h1>
-            <p className="mt-2 text-sm text-slate-600">{message}</p>
+            <h2 className="font-heading text-xl font-semibold text-ink">Phòng chat pool</h2>
+            <p className="mt-1 text-sm text-slate-600">Pool: {poolPostId}</p>
           </div>
-          <div className="flex flex-wrap gap-3">
-            <Link
-              className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              href="/player/discovery"
-            >
-              Discovery
-            </Link>
-            <Link
-              className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              href="/"
-            >
-              Trang chính
-            </Link>
-          </div>
+          <Badge tone={room?.status === "active" ? "success" : "neutral"}>
+            {room ? room.status : "đang kết nối"}
+          </Badge>
         </div>
-      </section>
 
-      {error ? (
-        <section className="mx-auto max-w-5xl px-6 pt-6 lg:px-8">
-          <p className="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </p>
-        </section>
-      ) : null}
-
-      <section className="mx-auto max-w-5xl px-6 py-6 lg:px-8">
-        <div className="rounded border border-slate-200 bg-white p-5">
-          <p className="text-sm text-slate-600">Pool Post: {poolPostId || "-"}</p>
-          <p className="mt-1 text-sm text-slate-600">
-            Room: {room?.id ?? "chưa sẵn sàng"} · Trạng thái: {room?.status ?? "-"}
-          </p>
-          <div className="mt-4 h-[420px] overflow-y-auto rounded border border-slate-200 bg-slate-50 p-3">
-            {messages.length === 0 ? (
-              <p className="text-sm text-slate-600">Chưa có tin nhắn.</p>
-            ) : (
-              <div className="grid gap-2">
-                {messages.map((item) => (
-                  <article key={item.id} className="rounded border border-slate-200 bg-white p-3">
-                    <p className="text-xs uppercase text-slate-500">{item.message_type}</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-800">
+        <div className="h-[460px] overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-4">
+          {messages.length === 0 ? (
+            <p className="text-sm text-slate-600">Chưa có tin nhắn. Hãy bắt đầu trao đổi với nhóm.</p>
+          ) : (
+            <div className="grid gap-3">
+              {messages.map((item) => (
+                <article key={item.id} className="max-w-[85%] rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-semibold text-slate-900">
                       {item.sender_full_name || item.sender_user_id}
                     </p>
-                    <p className="mt-1 text-sm text-slate-700">{item.content}</p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {new Date(item.created_at).toLocaleString("vi-VN")}
-                    </p>
-                  </article>
-                ))}
-              </div>
-            )}
-          </div>
-          <form onSubmit={sendMessage} className="mt-4 flex gap-2">
+                    <Badge>{item.message_type}</Badge>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-slate-700">{item.content}</p>
+                  <p className="mt-2 text-xs text-slate-500">{formatFullDateTime(item.created_at)}</p>
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <form onSubmit={sendMessage} className="flex flex-col gap-3 sm:flex-row">
+          <Field label="Tin nhắn" className="flex-1">
             <input
-              className="flex-1 rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900"
+              className={inputClassName}
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
-              placeholder="Nhập tin nhắn..."
+              placeholder="Nhập nội dung trao đổi..."
             />
-            <button
-              className="rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-400"
-              disabled={isSending || !room}
-            >
-              {isSending ? "Đang gửi..." : "Gửi"}
-            </button>
-          </form>
-        </div>
-      </section>
-    </main>
+          </Field>
+          <div className="flex items-end">
+            <Button disabled={isSending || !room}>{isSending ? "Đang gửi..." : "Gửi"}</Button>
+          </div>
+        </form>
+      </Card>
+    </div>
+  );
+}
+
+export default function PlayerChatRoomPage() {
+  return (
+    <Suspense fallback={<EmptyState title="Đang mở chat" description="NetUp đang kết nối phòng chat pool." />}>
+      <PlayerChatRoomContent />
+    </Suspense>
   );
 }

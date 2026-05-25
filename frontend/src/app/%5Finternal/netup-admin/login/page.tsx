@@ -3,6 +3,8 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { Button, Card, Field, Notice, inputClassName } from "@/components/ui";
+
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
 export default function AdminLoginPage() {
@@ -41,53 +43,53 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#f6f7f9] px-6 text-slate-950">
-      <form onSubmit={submit} className="w-full max-w-md rounded border border-slate-200 bg-white p-6">
-        <p className="text-sm font-semibold uppercase tracking-[0.16em] text-emerald-700">
-          NetUp Quản trị
-        </p>
-        <h1 className="mt-3 text-3xl font-semibold">Đăng nhập quản trị</h1>
-        <p className="mt-2 text-sm leading-6 text-slate-600">
-          Đường dẫn nội bộ cho quản trị viên nền tảng. Tài khoản phát triển mặc định là
-          <span className="font-mono"> admin</span>.
-        </p>
-
-        <label className="mt-6 block text-sm font-semibold text-slate-700" htmlFor="username">
-          Tên đăng nhập
-        </label>
-        <input
-          id="username"
-          className="mt-2 w-full rounded border border-slate-300 px-3 py-2 outline-none focus:border-slate-900"
-          value={username}
-          onChange={(event) => setUsername(event.target.value)}
-          autoComplete="username"
+    <main className="grid min-h-[calc(100vh-120px)] place-items-center">
+      <Card className="grid w-full max-w-5xl overflow-hidden p-0 lg:grid-cols-[1fr_440px]">
+        <div
+          className="hidden min-h-[520px] bg-cover bg-center lg:block"
+          style={{
+            backgroundImage:
+              "linear-gradient(130deg, rgba(15,23,42,0.2), rgba(127,29,29,0.38)), url('/courts/badminton1.jpg')",
+          }}
+          aria-hidden="true"
         />
+        <form onSubmit={submit} className="space-y-5 p-6 sm:p-8">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-red-800">
+              NetUp quản trị
+            </p>
+            <h1 className="mt-3 font-heading text-3xl font-semibold text-ink">Đăng nhập quản trị</h1>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Khu vực nội bộ để theo dõi vận hành, duyệt chủ sân và thay đổi cấu hình hệ thống.
+            </p>
+          </div>
 
-        <label className="mt-4 block text-sm font-semibold text-slate-700" htmlFor="password">
-          Mật khẩu
-        </label>
-        <input
-          id="password"
-          className="mt-2 w-full rounded border border-slate-300 px-3 py-2 outline-none focus:border-slate-900"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          type="password"
-          autoComplete="current-password"
-        />
+          <Field label="Tên đăng nhập">
+            <input
+              className={inputClassName}
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+              autoComplete="username"
+            />
+          </Field>
 
-        {error ? (
-          <p className="mt-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {error}
-          </p>
-        ) : null}
+          <Field label="Mật khẩu">
+            <input
+              className={inputClassName}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              type="password"
+              autoComplete="current-password"
+            />
+          </Field>
 
-        <button
-          className="mt-6 w-full rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:bg-slate-400"
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? "Đang đăng nhập..." : "Đăng nhập"}
-        </button>
-      </form>
+          {error ? <Notice tone="danger">{error}</Notice> : null}
+
+          <Button className="w-full" disabled={isSubmitting}>
+            {isSubmitting ? "Đang đăng nhập..." : "Đăng nhập"}
+          </Button>
+        </form>
+      </Card>
     </main>
   );
 }

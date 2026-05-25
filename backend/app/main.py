@@ -18,6 +18,7 @@ from app.api.player_chat import router as player_chat_router
 from app.api.player_chat import ws_router as player_chat_ws_router
 from app.api.player_matches import router as player_matches_router
 from app.api.player_payments import router as player_payments_router
+from app.api.public_discovery import router as public_discovery_router
 from app.core.config import get_settings
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
@@ -59,6 +60,7 @@ def create_app() -> FastAPI:
     app.include_router(player_matches_router, prefix="/api/v1")
     app.include_router(player_chat_router, prefix="/api/v1")
     app.include_router(player_payments_router, prefix="/api/v1")
+    app.include_router(public_discovery_router, prefix="/api/v1")
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(player_chat_ws_router)
 

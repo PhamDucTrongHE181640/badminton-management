@@ -1,8 +1,10 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+
+import { Badge, Button, ButtonLink, Card, Field, Notice, PageHero, StatCard, inputClassName } from "@/components/ui";
+import { formatFullDateTime, requestStatusLabel } from "@/lib/format";
 
 import { adminFetch, adminLogout } from "../../_lib/auth";
 
@@ -20,17 +22,17 @@ type OwnerRequest = {
   user_full_name: string | null;
 };
 
-const statusLabel: Record<string, string> = {
-  pending: "Đang chờ",
-  approved: "Đã duyệt",
-  rejected: "Đã từ chối",
-  cancelled: "Đã hủy",
-};
+function statusTone(status: string): "success" | "warning" | "danger" | "neutral" {
+  if (status === "approved") return "success";
+  if (status === "pending") return "warning";
+  if (status === "rejected") return "danger";
+  return "neutral";
+}
 
 export default function AdminOwnerRequestsPage() {
   const router = useRouter();
   const [requests, setRequests] = useState<OwnerRequest[]>([]);
-  const [message, setMessage] = useState("Đang tải hồ sơ owner...");
+  const [message, setMessage] = useState("Đang tải hồ sơ chủ sân...");
   const [error, setError] = useState("");
   const [reviewNote, setReviewNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -40,7 +42,7 @@ export default function AdminOwnerRequestsPage() {
     try {
       const payload = await adminFetch<OwnerRequest[]>("/api/v1/admin/owner-requests");
       setRequests(payload);
-      setMessage("Danh sách owner request đã được đồng bộ");
+      setMessage(payload.length ? `Có ${payload.length} hồ sơ trong hệ thống.` : "Chưa có hồ sơ chủ sân.");
     } catch (caught) {
       const nextError = caught instanceof Error ? caught.message : "Không tải được hồ sơ owner";
       if (nextError === "admin_unauthorized") {
@@ -53,7 +55,7 @@ export default function AdminOwnerRequestsPage() {
   }
 
   useEffect(() => {
-    loadRequests();
+    void loadRequests();
   }, []);
 
   async function review(requestId: string, action: "approve" | "reject") {
@@ -68,8 +70,7 @@ export default function AdminOwnerRequestsPage() {
       setReviewNote("");
       await loadRequests();
     } catch (caught) {
-      const nextError =
-        caught instanceof Error ? caught.message : "Không cập nhật được hồ sơ owner";
+      const nextError = caught instanceof Error ? caught.message : "Không cập nhật được hồ sơ owner";
       if (nextError === "admin_unauthorized") {
         router.push("/_internal/netup-admin/login");
         return;
@@ -85,103 +86,101 @@ export default function AdminOwnerRequestsPage() {
     router.push("/_internal/netup-admin/login");
   }
 
+  const stats = useMemo(
+    () => ({
+      pending: requests.filter((item) => item.status === "pending").length,
+      approved: requests.filter((item) => item.status === "approved").length,
+      rejected: requests.filter((item) => item.status === "rejected").length,
+    }),
+    [requests],
+  );
+
   return (
-    <main className="min-h-screen bg-[#f6f7f9] text-slate-950">
-      <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-emerald-700">
-              NetUp Quản trị
-            </p>
-            <h1 className="mt-2 text-3xl font-semibold">Duyệt hồ sơ chủ sân</h1>
-            <p className="mt-2 text-sm text-slate-600">{message}</p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Link
-              className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              href="/_internal/netup-admin/dashboard"
-            >
+    <div className="space-y-5">
+      <PageHero
+        eyebrow="Duyệt chủ sân"
+        title="Kiểm tra hồ sơ và cấp quyền owner."
+        description={message}
+        actions={
+          <>
+            <ButtonLink href="/_internal/netup-admin/dashboard" variant="outline">
               Dashboard
-            </Link>
-            <Link
-              className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              href="/_internal/netup-admin/config"
-            >
+            </ButtonLink>
+            <ButtonLink href="/_internal/netup-admin/config" variant="outline">
               Cấu hình
-            </Link>
-            <button
-              className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              onClick={logout}
-            >
+            </ButtonLink>
+            <Button variant="outline" onClick={logout}>
               Đăng xuất
-            </button>
-          </div>
-        </div>
+            </Button>
+          </>
+        }
+      />
+
+      {error ? <Notice tone="danger">{error}</Notice> : null}
+
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Tổng hồ sơ" value={requests.length} helper="Tất cả trạng thái" />
+        <StatCard label="Chờ duyệt" value={stats.pending} helper="Cần xử lý" tone="warning" />
+        <StatCard label="Đã duyệt" value={stats.approved} helper="Đã cấp quyền owner" tone="success" />
+        <StatCard label="Từ chối" value={stats.rejected} helper="Không đủ điều kiện" />
       </section>
 
-      <section className="mx-auto max-w-7xl px-6 py-8 lg:px-8">
-        <label className="grid max-w-2xl gap-2 text-sm font-semibold text-slate-700">
-          Ghi chú duyệt áp dụng cho thao tác tiếp theo
+      <Card className="space-y-4">
+        <Field label="Ghi chú áp dụng cho thao tác duyệt tiếp theo">
           <textarea
-            className="min-h-24 rounded border border-slate-300 px-3 py-2 font-normal outline-none focus:border-slate-900"
+            className={`${inputClassName} min-h-24`}
             value={reviewNote}
             onChange={(event) => setReviewNote(event.target.value)}
+            placeholder="Ví dụ: Đã xác minh thông tin cơ sở và số điện thoại"
           />
-        </label>
+        </Field>
 
-        {error ? (
-          <p className="mt-5 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {error}
-          </p>
-        ) : null}
-
-        <div className="mt-6 grid gap-4">
-          {requests.map((request) => (
-            <article key={request.id} className="rounded border border-slate-200 bg-white p-5">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase text-slate-500">
-                    {statusLabel[request.status] ?? request.status}
-                  </p>
-                  <h2 className="mt-2 text-xl font-semibold">{request.business_name}</h2>
-                  <p className="mt-2 text-sm text-slate-600">
-                    {request.user_full_name ?? "Người dùng"} · {request.user_email ?? "chưa có email"}
-                  </p>
-                  <p className="mt-1 text-sm text-slate-600">
-                    Điện thoại: {request.contact_phone ?? "chưa có"}
-                  </p>
-                  <p className="mt-3 text-sm leading-6 text-slate-600">
-                    {request.facility_overview ?? "Chưa có mô tả cơ sở"}
-                  </p>
-                  {request.review_note ? (
-                    <p className="mt-3 rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                      Ghi chú trước đó: {request.review_note}
+        <div className="grid gap-4">
+          {requests.length === 0 ? (
+            <p className="text-sm text-slate-600">Chưa có hồ sơ chủ sân.</p>
+          ) : (
+            requests.map((request) => (
+              <article key={request.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge tone={statusTone(request.status)}>{requestStatusLabel(request.status)}</Badge>
+                      <Badge>{formatFullDateTime(request.submitted_at)}</Badge>
+                    </div>
+                    <h2 className="mt-3 font-heading text-xl font-semibold text-ink">
+                      {request.business_name}
+                    </h2>
+                    <p className="mt-2 text-sm text-slate-600">
+                      {request.user_full_name ?? "Người dùng"} · {request.user_email ?? "chưa có email"}
                     </p>
+                    <p className="mt-1 text-sm text-slate-600">
+                      Điện thoại: {request.contact_phone ?? "chưa có"}
+                    </p>
+                    <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-700">
+                      {request.facility_overview ?? "Chưa có mô tả cơ sở"}
+                    </p>
+                    {request.review_note ? (
+                      <Notice tone="warning" className="mt-3">
+                        Ghi chú trước đó: {request.review_note}
+                      </Notice>
+                    ) : null}
+                  </div>
+                  {request.status === "pending" ? (
+                    <div className="flex shrink-0 gap-2">
+                      <Button disabled={isSubmitting} onClick={() => void review(request.id, "approve")}>
+                        Duyệt
+                      </Button>
+                      <Button variant="danger" disabled={isSubmitting} onClick={() => void review(request.id, "reject")}>
+                        Từ chối
+                      </Button>
+                    </div>
                   ) : null}
                 </div>
-                {request.status === "pending" ? (
-                  <div className="flex gap-3">
-                    <button
-                      className="rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-400"
-                      disabled={isSubmitting}
-                      onClick={() => review(request.id, "approve")}
-                    >
-                      Duyệt
-                    </button>
-                    <button
-                      className="rounded border border-red-200 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:text-red-300"
-                      disabled={isSubmitting}
-                      onClick={() => review(request.id, "reject")}
-                    >
-                      Từ chối
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            </article>
-          ))}
+              </article>
+            ))
+          )}
         </div>
-      </section>
-    </main>
+      </Card>
+    </div>
   );
 }

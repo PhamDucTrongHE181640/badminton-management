@@ -119,7 +119,7 @@ export default function PlayerMatchesPage() {
   const [feedbackRating, setFeedbackRating] = useState("5");
   const [feedbackComment, setFeedbackComment] = useState("");
 
-  const [message, setMessage] = useState("Đang tải dữ liệu Sprint 6...");
+  const [message, setMessage] = useState("Đang tải lịch đấu và phản hồi sau trận...");
   const [error, setError] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [isSendingFeedback, setIsSendingFeedback] = useState(false);
@@ -201,7 +201,7 @@ export default function PlayerMatchesPage() {
       });
       setActiveMatch(created);
       setTargetUserId("");
-      setMessage(`Đã tạo match ${created.id}. Bây giờ bạn có thể nhập feedback và finalize.`);
+      setMessage("Đã tạo lịch đấu. Bây giờ bạn có thể nhập phản hồi và hoàn tất kết quả.");
       await bootstrap();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Không tạo được match");
@@ -268,10 +268,10 @@ export default function PlayerMatchesPage() {
       });
       setLastFinalize(result);
       setActiveMatch(result.match);
-      setMessage("Đã finalize match và cập nhật Elo thành công.");
+      setMessage("Đã hoàn tất kết quả và cập nhật level người chơi.");
       await bootstrap();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Không finalize được match");
+      setError(caught instanceof Error ? caught.message : "Không hoàn tất được kết quả");
     } finally {
       setIsFinalizing(false);
     }
@@ -283,9 +283,9 @@ export default function PlayerMatchesPage() {
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-emerald-700">
-              NetUp Sprint 6
+              NetUp Người chơi
             </p>
-            <h1 className="mt-2 text-3xl font-semibold">Match Result, Feedback và Elo</h1>
+            <h1 className="mt-2 text-3xl font-semibold">Lịch đấu và phản hồi sau trận</h1>
             <p className="mt-2 text-sm text-slate-600">{message}</p>
             {user ? (
               <p className="mt-1 text-sm text-slate-700">
@@ -304,13 +304,13 @@ export default function PlayerMatchesPage() {
               className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               href="/player/discovery"
             >
-              Discovery
+              Đặt sân
             </Link>
             <Link
               className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               href="/player/assessment"
             >
-              Assessment
+              Tự đánh giá level
             </Link>
             <Link
               className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
@@ -332,9 +332,9 @@ export default function PlayerMatchesPage() {
 
       <section className="mx-auto grid max-w-7xl gap-5 px-6 py-6 lg:grid-cols-[1fr_1fr] lg:px-8">
         <form onSubmit={createMatch} className="rounded border border-slate-200 bg-white p-5">
-          <h2 className="text-lg font-semibold">Tạo match event</h2>
+          <h2 className="text-lg font-semibold">Ghi nhận kết quả trận</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Chọn session đã chơi, nhập tỷ số team A/B để mở luồng feedback và finalize.
+            Chọn khung giờ đã chơi, nhập tỷ số hai đội rồi gửi phản hồi cho người cùng trận.
           </p>
           <label className="mt-4 grid gap-2 text-sm font-semibold text-slate-700">
             Session
@@ -355,7 +355,7 @@ export default function PlayerMatchesPage() {
           </label>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <label className="grid gap-2 text-sm font-semibold text-slate-700">
-              Team A score
+              Điểm đội A
               <input
                 className="rounded border border-slate-300 px-3 py-2 font-normal outline-none focus:border-slate-900"
                 type="number"
@@ -365,7 +365,7 @@ export default function PlayerMatchesPage() {
               />
             </label>
             <label className="grid gap-2 text-sm font-semibold text-slate-700">
-              Team B score
+              Điểm đội B
               <input
                 className="rounded border border-slate-300 px-3 py-2 font-normal outline-none focus:border-slate-900"
                 type="number"
@@ -379,25 +379,25 @@ export default function PlayerMatchesPage() {
             className="mt-5 rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-400"
             disabled={isCreating}
           >
-            {isCreating ? "Đang tạo match..." : "Tạo match"}
+            {isCreating ? "Đang ghi nhận..." : "Ghi nhận trận"}
           </button>
         </form>
 
         <div className="rounded border border-slate-200 bg-white p-5">
-          <h2 className="text-lg font-semibold">Chi tiết match đang mở</h2>
+          <h2 className="text-lg font-semibold">Trận đang mở</h2>
           {!activeMatch ? (
             <p className="mt-3 text-sm text-slate-600">Chưa có match được chọn.</p>
           ) : (
             <>
               <p className="mt-3 text-sm text-slate-700">
-                Match: <span className="font-semibold">{activeMatch.id}</span>
+                Mã trận: <span className="font-semibold">{activeMatch.id}</span>
               </p>
               <p className="mt-1 text-sm text-slate-700">
-                {activeMatch.session_title} · Score: {scoreLabel(activeMatch.team_a_score, activeMatch.team_b_score)}
+                {activeMatch.session_title} · Tỷ số: {scoreLabel(activeMatch.team_a_score, activeMatch.team_b_score)}
               </p>
               <p className="mt-1 text-sm text-slate-700">Trạng thái: {activeMatch.status}</p>
 
-              <h3 className="mt-4 text-sm font-semibold text-slate-900">Participants</h3>
+              <h3 className="mt-4 text-sm font-semibold text-slate-900">Người tham gia</h3>
               <div className="mt-2 grid gap-2">
                 {activeMatch.participants.map((item) => (
                   <div key={item.id} className="rounded border border-slate-200 bg-slate-50 p-3 text-sm">
@@ -405,7 +405,7 @@ export default function PlayerMatchesPage() {
                       {item.player_full_name || item.player_user_id}
                     </p>
                     <p className="text-slate-700">
-                      Team {item.team_side} · Result: {item.result || "pending"}
+                      Đội {item.team_side} · Kết quả: {item.result || "chưa có"}
                     </p>
                   </div>
                 ))}
@@ -416,7 +416,7 @@ export default function PlayerMatchesPage() {
                 disabled={activeMatch.status === "finalized" || isFinalizing}
                 onClick={finalizeMatch}
               >
-                {isFinalizing ? "Đang finalize..." : "Finalize match + cập nhật Elo"}
+                {isFinalizing ? "Đang hoàn tất..." : "Hoàn tất kết quả"}
               </button>
             </>
           )}
@@ -425,15 +425,15 @@ export default function PlayerMatchesPage() {
 
       <section className="mx-auto grid max-w-7xl gap-5 px-6 pb-6 lg:grid-cols-[1fr_1fr] lg:px-8">
         <form onSubmit={submitFeedback} className="rounded border border-slate-200 bg-white p-5">
-          <h2 className="text-lg font-semibold">Gửi feedback participant</h2>
+          <h2 className="text-lg font-semibold">Gửi phản hồi sau trận</h2>
           <label className="mt-4 grid gap-2 text-sm font-semibold text-slate-700">
-            Người nhận feedback
+            Người nhận phản hồi
             <select
               className="rounded border border-slate-300 px-3 py-2 font-normal outline-none focus:border-slate-900"
               value={targetUserId}
               onChange={(event) => setTargetUserId(event.target.value)}
             >
-              <option value="">Chọn participant</option>
+              <option value="">Chọn người chơi</option>
               {feedbackTargets.map((item) => (
                 <option key={item.id} value={item.player_user_id}>
                   {item.player_full_name || item.player_user_id} (team {item.team_side})
@@ -444,18 +444,18 @@ export default function PlayerMatchesPage() {
 
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <label className="grid gap-2 text-sm font-semibold text-slate-700">
-              Target type
+              Vai trò trong trận
               <select
                 className="rounded border border-slate-300 px-3 py-2 font-normal outline-none focus:border-slate-900"
                 value={targetType}
                 onChange={(event) => setTargetType(event.target.value as "teammate" | "opponent")}
               >
-                <option value="opponent">opponent</option>
-                <option value="teammate">teammate</option>
+                <option value="opponent">Đối thủ</option>
+                <option value="teammate">Đồng đội</option>
               </select>
             </label>
             <label className="grid gap-2 text-sm font-semibold text-slate-700">
-              Rating (1-5)
+              Mức đánh giá (1-5)
               <input
                 className="rounded border border-slate-300 px-3 py-2 font-normal outline-none focus:border-slate-900"
                 type="number"
@@ -481,10 +481,10 @@ export default function PlayerMatchesPage() {
             className="mt-5 rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-400"
             disabled={!activeMatch || isSendingFeedback}
           >
-            {isSendingFeedback ? "Đang gửi feedback..." : "Gửi feedback"}
+            {isSendingFeedback ? "Đang gửi phản hồi..." : "Gửi phản hồi"}
           </button>
 
-          <h3 className="mt-5 text-sm font-semibold text-slate-900">Feedback đã ghi nhận</h3>
+          <h3 className="mt-5 text-sm font-semibold text-slate-900">Phản hồi đã ghi nhận</h3>
           <div className="mt-2 grid gap-2">
             {activeMatch?.feedback?.length ? (
               activeMatch.feedback.map((item) => (
@@ -499,39 +499,38 @@ export default function PlayerMatchesPage() {
                 </div>
               ))
             ) : (
-              <p className="text-sm text-slate-600">Chưa có feedback.</p>
+              <p className="text-sm text-slate-600">Chưa có phản hồi.</p>
             )}
           </div>
         </form>
 
         <div className="rounded border border-slate-200 bg-white p-5">
-          <h2 className="text-lg font-semibold">Lịch sử match + tier change</h2>
+          <h2 className="text-lg font-semibold">Lịch sử trận và thay đổi level</h2>
           <div className="mt-3 grid gap-3">
             {history.length === 0 ? (
-              <p className="text-sm text-slate-600">Chưa có match history.</p>
+              <p className="text-sm text-slate-600">Chưa có lịch sử trận.</p>
             ) : (
               history.map((item) => (
                 <article key={item.match_id} className="rounded border border-slate-200 bg-slate-50 p-3 text-sm">
                   <p className="font-semibold text-slate-900">{item.session_title}</p>
                   <p className="mt-1 text-slate-700">
-                    Match {item.match_id} · Team {item.my_team_side} · Result: {item.my_result || "pending"}
+                    Trận {item.match_id} · Đội {item.my_team_side} · Kết quả: {item.my_result || "chưa có"}
                   </p>
                   <p className="mt-1 text-slate-700">
-                    Score: {scoreLabel(item.team_a_score, item.team_b_score)} · Status: {item.status}
+                    Tỷ số: {scoreLabel(item.team_a_score, item.team_b_score)} · Trạng thái: {item.status}
                   </p>
                   <p className="mt-1 text-slate-700">
-                    Tier: {item.skill_tier_before || "-"} → {item.skill_tier_after || "-"} · Elo delta:{" "}
-                    {item.elo_delta === null ? "-" : item.elo_delta > 0 ? `+${item.elo_delta}` : item.elo_delta}
+                    Level: {item.skill_tier_before || "-"} sang {item.skill_tier_after || "-"}
                   </p>
                   <p className="mt-1 text-slate-600">
-                    Feedback gửi/nhận: {item.feedback_given_count}/{item.feedback_received_count} · Avg nhận:{" "}
+                    Phản hồi gửi/nhận: {item.feedback_given_count}/{item.feedback_received_count} · Điểm nhận TB:{" "}
                     {item.feedback_received_avg ?? "-"}
                   </p>
                   <button
                     className="mt-3 rounded border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-white"
                     onClick={() => loadMatchDetail(item.match_id)}
                   >
-                    Mở match này
+                    Mở trận này
                   </button>
                 </article>
               ))
@@ -540,11 +539,11 @@ export default function PlayerMatchesPage() {
 
           {lastFinalize ? (
             <div className="mt-5 rounded border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
-              <p className="font-semibold">Kết quả finalize gần nhất</p>
+              <p className="font-semibold">Kết quả hoàn tất gần nhất</p>
               <div className="mt-2 grid gap-2">
                 {lastFinalize.elo_updates.map((item) => (
                   <p key={item.player_user_id}>
-                    {item.player_full_name}: {item.old_elo} → {item.new_elo} ({item.delta > 0 ? `+${item.delta}` : item.delta})
+                    {item.player_full_name}: {item.skill_tier_before} sang {item.skill_tier_after}
                   </p>
                 ))}
               </div>

@@ -1,8 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+
+import { Badge, Button, ButtonLink, Card, Field, Notice, PageHero, StatCard, inputClassName } from "@/components/ui";
+import { formatFullDateTime, formatNumber, formatVnd } from "@/lib/format";
 
 import { adminFetch, adminLogout } from "../../_lib/auth";
 
@@ -48,10 +50,6 @@ type AuditLog = {
   created_at: string;
 };
 
-function formatVnd(value: number): string {
-  return new Intl.NumberFormat("vi-VN").format(value);
-}
-
 export default function AdminDashboardPage() {
   const router = useRouter();
   const [admin, setAdmin] = useState<AdminProfile | null>(null);
@@ -59,8 +57,28 @@ export default function AdminDashboardPage() {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [eventTypeFilter, setEventTypeFilter] = useState("");
   const [entityTypeFilter, setEntityTypeFilter] = useState("");
-  const [message, setMessage] = useState("Đang tải dữ liệu dashboard...");
+  const [message, setMessage] = useState("Đang tải số liệu vận hành...");
   const [error, setError] = useState("");
+
+  async function loadAuditLogs(nextEventType: string, nextEntityType: string) {
+    const query = new URLSearchParams();
+    query.set("limit", "40");
+    if (nextEventType.trim()) query.set("event_type", nextEventType.trim());
+    if (nextEntityType.trim()) query.set("entity_type", nextEntityType.trim());
+
+    try {
+      const logs = await adminFetch<AuditLog[]>(`/api/v1/admin/audit-logs?${query.toString()}`);
+      setAuditLogs(logs);
+    } catch (caught) {
+      const nextError = caught instanceof Error ? caught.message : "Không tải được audit logs";
+      if (nextError === "admin_unauthorized") {
+        router.push("/_internal/netup-admin/login");
+        return;
+      }
+      setError(nextError);
+      setAuditLogs([]);
+    }
+  }
 
   async function bootstrap() {
     setError("");
@@ -87,33 +105,9 @@ export default function AdminDashboardPage() {
     }
   }
 
-  async function loadAuditLogs(nextEventType: string, nextEntityType: string) {
-    const query = new URLSearchParams();
-    query.set("limit", "40");
-    if (nextEventType.trim()) query.set("event_type", nextEventType.trim());
-    if (nextEntityType.trim()) query.set("entity_type", nextEntityType.trim());
-
-    try {
-      const logs = await adminFetch<AuditLog[]>(`/api/v1/admin/audit-logs?${query.toString()}`);
-      setAuditLogs(logs);
-    } catch (caught) {
-      const nextError = caught instanceof Error ? caught.message : "Không tải được audit logs";
-      if (nextError === "admin_unauthorized") {
-        router.push("/_internal/netup-admin/login");
-        return;
-      }
-      setError(nextError);
-      setAuditLogs([]);
-    }
-  }
-
   useEffect(() => {
-    bootstrap();
+    void bootstrap();
   }, []);
-
-  async function applyAuditFilter() {
-    await loadAuditLogs(eventTypeFilter, entityTypeFilter);
-  }
 
   async function logout() {
     await adminLogout();
@@ -121,144 +115,129 @@ export default function AdminDashboardPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f6f7f9] text-slate-950">
-      <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-emerald-700">
-              NetUp Quản trị
-            </p>
-            <h1 className="mt-2 text-3xl font-semibold">Bảng điều khiển vận hành</h1>
-            <p className="mt-2 text-sm text-slate-600">{message}</p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Link
-              className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              href="/_internal/netup-admin/config"
-            >
-              Cấu hình hệ thống
-            </Link>
-            <Link
-              className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              href="/_internal/netup-admin/owner-requests"
-            >
+    <div className="space-y-5">
+      <PageHero
+        eyebrow="NetUp quản trị"
+        title="Theo dõi vận hành, thanh toán và thay đổi hệ thống."
+        description={message}
+        actions={
+          <>
+            <ButtonLink href="/_internal/netup-admin/config">Cấu hình</ButtonLink>
+            <ButtonLink href="/_internal/netup-admin/owner-requests" variant="outline">
               Duyệt owner
-            </Link>
-            <button
-              className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              onClick={logout}
-            >
+            </ButtonLink>
+            <Button variant="outline" onClick={logout}>
               Đăng xuất
-            </button>
+            </Button>
+          </>
+        }
+      />
+
+      {error ? <Notice tone="danger">{error}</Notice> : null}
+
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          label="Booking"
+          value={formatNumber(metrics?.bookings.total)}
+          helper={`${metrics?.bookings.last_7d ?? 0} trong 7 ngày`}
+          tone="accent"
+        />
+        <StatCard
+          label="Chờ đặt cọc"
+          value={metrics?.bookings.awaiting_deposit ?? 0}
+          helper={`${metrics?.bookings.checked_in ?? 0} đã check-in`}
+          tone="warning"
+        />
+        <StatCard
+          label="Thanh toán thành công"
+          value={metrics?.payments.paid ?? 0}
+          helper={formatVnd(metrics?.payments.paid_amount_vnd)}
+          tone="success"
+        />
+        <StatCard
+          label="Owner chờ duyệt"
+          value={metrics?.owner_requests.pending ?? 0}
+          helper={`${metrics?.owner_requests.approved ?? 0} đã duyệt`}
+        />
+      </section>
+
+      <section className="grid gap-5 lg:grid-cols-[320px_1fr]">
+        <Card className="space-y-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Phiên quản trị</p>
+            <h2 className="mt-2 font-heading text-xl font-semibold text-ink">{admin?.username ?? "Admin"}</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              {admin?.is_super_admin ? "Quản trị viên cấp cao" : "Quản trị viên vận hành"}
+            </p>
           </div>
-        </div>
-      </section>
+          <div className="grid gap-2 text-sm text-slate-700">
+            <p>Check-in toàn hệ thống: {metrics?.checkins.total ?? 0}</p>
+            <p>Check-in 7 ngày: {metrics?.checkins.last_7d ?? 0}</p>
+            <p>Payment đang xử lý: {metrics?.payments.processing ?? 0}</p>
+            <p>Booking hoàn tất: {metrics?.bookings.completed ?? 0}</p>
+          </div>
+        </Card>
 
-      {error ? (
-        <section className="mx-auto max-w-7xl px-6 py-4 lg:px-8">
-          <p className="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </p>
-        </section>
-      ) : null}
+        <Card className="space-y-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="font-heading text-xl font-semibold text-ink">Audit trail</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Theo dõi thay đổi cấu hình, duyệt owner và các thao tác nhạy cảm.
+              </p>
+            </div>
+            <Badge tone="info">{auditLogs.length} bản ghi</Badge>
+          </div>
 
-      <section className="mx-auto grid max-w-7xl gap-5 px-6 py-8 lg:grid-cols-4 lg:px-8">
-        <article className="rounded border border-slate-200 bg-white p-5 lg:col-span-1">
-          <p className="text-xs font-semibold uppercase text-slate-500">Admin</p>
-          <h2 className="mt-2 text-xl font-semibold">{admin?.username ?? "Đang tải"}</h2>
-          <p className="mt-2 text-sm text-slate-600">
-            {admin?.is_super_admin ? "Quản trị viên cấp cao" : "Quản trị viên vận hành"}
-          </p>
-        </article>
-
-        <article className="rounded border border-slate-200 bg-white p-5 lg:col-span-1">
-          <p className="text-xs font-semibold uppercase text-slate-500">Bookings</p>
-          <h2 className="mt-2 text-xl font-semibold">{metrics?.bookings.total ?? 0}</h2>
-          <p className="mt-2 text-sm text-slate-600">
-            Awaiting deposit: {metrics?.bookings.awaiting_deposit ?? 0}
-          </p>
-          <p className="mt-1 text-sm text-slate-600">Checked-in: {metrics?.bookings.checked_in ?? 0}</p>
-          <p className="mt-1 text-sm text-slate-600">Last 7d: {metrics?.bookings.last_7d ?? 0}</p>
-        </article>
-
-        <article className="rounded border border-slate-200 bg-white p-5 lg:col-span-1">
-          <p className="text-xs font-semibold uppercase text-slate-500">Payments</p>
-          <h2 className="mt-2 text-xl font-semibold">{metrics?.payments.paid ?? 0}</h2>
-          <p className="mt-2 text-sm text-slate-600">Processing: {metrics?.payments.processing ?? 0}</p>
-          <p className="mt-1 text-sm text-slate-600">
-            Paid amount: {formatVnd(metrics?.payments.paid_amount_vnd ?? 0)}đ
-          </p>
-        </article>
-
-        <article className="rounded border border-slate-200 bg-white p-5 lg:col-span-1">
-          <p className="text-xs font-semibold uppercase text-slate-500">Owner Requests</p>
-          <h2 className="mt-2 text-xl font-semibold">{metrics?.owner_requests.pending ?? 0}</h2>
-          <p className="mt-2 text-sm text-slate-600">Approved: {metrics?.owner_requests.approved ?? 0}</p>
-          <p className="mt-1 text-sm text-slate-600">Rejected: {metrics?.owner_requests.rejected ?? 0}</p>
-          <p className="mt-1 text-sm text-slate-600">Check-ins: {metrics?.checkins.total ?? 0}</p>
-        </article>
-      </section>
-
-      <section className="mx-auto max-w-7xl px-6 pb-10 lg:px-8">
-        <div className="rounded border border-slate-200 bg-white p-5">
-          <h2 className="text-xl font-semibold">Audit trail</h2>
-          <p className="mt-2 text-sm text-slate-600">
-            Theo dõi thay đổi config/role/action của admin trong hệ thống.
-          </p>
-
-          <div className="mt-4 grid gap-3 lg:grid-cols-3">
-            <label className="grid gap-2 text-sm font-semibold text-slate-700">
-              event_type
+          <div className="grid gap-3 lg:grid-cols-[1fr_1fr_auto]">
+            <Field label="Loại sự kiện">
               <input
-                className="rounded border border-slate-300 px-3 py-2 font-normal outline-none focus:border-slate-900"
+                className={inputClassName}
                 value={eventTypeFilter}
                 onChange={(event) => setEventTypeFilter(event.target.value)}
                 placeholder="admin_config_updated"
               />
-            </label>
-            <label className="grid gap-2 text-sm font-semibold text-slate-700">
-              entity_type
+            </Field>
+            <Field label="Loại dữ liệu">
               <input
-                className="rounded border border-slate-300 px-3 py-2 font-normal outline-none focus:border-slate-900"
+                className={inputClassName}
                 value={entityTypeFilter}
                 onChange={(event) => setEntityTypeFilter(event.target.value)}
                 placeholder="admin_config"
               />
-            </label>
+            </Field>
             <div className="flex items-end">
-              <button
-                className="rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-                onClick={applyAuditFilter}
-              >
-                Lọc audit logs
-              </button>
+              <Button onClick={() => void loadAuditLogs(eventTypeFilter, entityTypeFilter)}>Lọc</Button>
             </div>
           </div>
 
-          <div className="mt-5 grid gap-3">
+          <div className="grid gap-3">
             {auditLogs.length === 0 ? (
               <p className="text-sm text-slate-600">Chưa có audit log theo điều kiện lọc.</p>
             ) : (
               auditLogs.map((item) => (
-                <article key={item.id} className="rounded border border-slate-200 bg-slate-50 p-4 text-sm">
-                  <p className="font-semibold text-slate-900">
-                    {item.event_type} · {item.entity_type}#{item.entity_id}
+                <article key={item.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-slate-950">{item.event_type}</p>
+                      <p className="mt-1 text-slate-600">
+                        {item.entity_type} · {item.entity_id}
+                      </p>
+                    </div>
+                    <Badge>{formatFullDateTime(item.created_at)}</Badge>
+                  </div>
+                  <p className="mt-2 text-slate-600">
+                    Người thao tác: {item.actor_full_name || item.actor_email || item.actor_user_id || "system"}
                   </p>
-                  <p className="mt-1 text-slate-600">
-                    Actor: {item.actor_full_name || item.actor_email || item.actor_user_id || "system"}
-                  </p>
-                  <p className="mt-1 text-slate-600">
-                    {new Date(item.created_at).toLocaleString("vi-VN")}
-                  </p>
-                  <pre className="mt-2 overflow-x-auto rounded border border-slate-200 bg-white p-2 text-xs text-slate-700">
+                  <pre className="mt-3 max-h-48 overflow-auto rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700">
                     {JSON.stringify(item.payload, null, 2)}
                   </pre>
                 </article>
               ))
             )}
           </div>
-        </div>
+        </Card>
       </section>
-    </main>
+    </div>
   );
 }

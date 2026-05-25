@@ -15,12 +15,6 @@ const sora = Sora({
   display: "swap",
 });
 
-const entryLinks = [
-  { href: "/player/discovery", label: "Người chơi" },
-  { href: "/owner/dashboard", label: "Chủ sân" },
-  { href: "/_internal/netup-admin/dashboard", label: "Quản trị" },
-];
-
 export const metadata: Metadata = {
   title: "NetUp",
   description: "Nền tảng đặt sân thể thao và vận hành chủ sân NetUp",
@@ -45,17 +39,6 @@ export default function RootLayout({
                 </span>
                 <span>NetUp</span>
               </Link>
-              <nav className="hidden items-center gap-2 sm:flex">
-                {entryLinks.map((link) => (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
-                  >
-                    {link.label}
-                  </Link>
-                ))}
-              </nav>
             </div>
           </header>
 

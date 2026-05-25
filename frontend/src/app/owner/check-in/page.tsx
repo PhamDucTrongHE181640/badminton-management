@@ -1,9 +1,10 @@
 "use client";
 
-import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+import { Badge, Button, ButtonLink, Card, Field, Notice, PageHero, StatCard, inputClassName } from "@/components/ui";
+import { apiFetch } from "@/lib/http";
+import { bookingStatusLabel, errorMessage, formatDateTime, formatFullDateTime, formatVnd, paymentMethodLabel } from "@/lib/format";
 
 type Checkin = {
   id: string;
@@ -20,8 +21,11 @@ type Checkin = {
   sub_court_name: string;
 };
 
-function money(value: number) {
-  return new Intl.NumberFormat("vi-VN").format(value);
+function statusTone(status: string): "success" | "warning" | "danger" | "neutral" {
+  if (["checked_in", "completed", "confirmed", "deposit_paid"].includes(status)) return "success";
+  if (status === "awaiting_deposit") return "warning";
+  if (status === "cancelled") return "danger";
+  return "neutral";
 }
 
 export default function OwnerCheckinPage() {
@@ -36,39 +40,23 @@ export default function OwnerCheckinPage() {
   const [cashCollected, setCashCollected] = useState("");
   const [note, setNote] = useState("");
 
-  async function apiFetch(path: string, init?: RequestInit) {
-    const response = await fetch(`${apiBaseUrl}${path}`, {
-      ...init,
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-        ...(init?.headers ?? {}),
-      },
-      cache: "no-store",
-    });
-    const payload = response.status === 204 ? null : await response.json();
-    if (!response.ok) {
-      const detail = payload?.error?.details?.[0];
-      throw new Error(detail?.field ? `${detail.field}: ${detail.message}` : payload?.error?.message);
-    }
-    return payload;
-  }
-
   async function loadCheckins() {
     setError("");
     try {
-      const payload = await apiFetch("/api/v1/owner/checkins");
-      setCheckins(payload as Checkin[]);
-      setMessage(`Đang có ${payload.length} lượt check-in`);
+      const payload = await apiFetch<Checkin[]>("/api/v1/owner/checkins", {
+        credentials: "include",
+      });
+      setCheckins(payload);
+      setMessage(payload.length ? `Đã ghi nhận ${payload.length} lượt check-in.` : "Chưa có lượt check-in nào.");
     } catch (caught) {
       setCheckins([]);
-      setError(caught instanceof Error ? caught.message : "Không tải được check-in");
-      setMessage("Cần tài khoản owner đã được duyệt");
+      setError(errorMessage(caught, "Không tải được check-in"));
+      setMessage("Cần tài khoản owner đã được duyệt.");
     }
   }
 
   useEffect(() => {
-    loadCheckins();
+    void loadCheckins();
   }, []);
 
   async function submitCheckin(event: FormEvent<HTMLFormElement>) {
@@ -76,9 +64,7 @@ export default function OwnerCheckinPage() {
     setIsSubmitting(true);
     setError("");
     try {
-      const body: Record<string, unknown> = {
-        note: note || null,
-      };
+      const body: Record<string, unknown> = { note: note || null };
       if (method === "booking_code") {
         body.booking_code = bookingCode.trim();
       } else {
@@ -90,6 +76,7 @@ export default function OwnerCheckinPage() {
 
       await apiFetch("/api/v1/owner/checkins", {
         method: "POST",
+        credentials: "include",
         body: JSON.stringify(body),
       });
       setBookingCode("");
@@ -98,143 +85,117 @@ export default function OwnerCheckinPage() {
       setNote("");
       await loadCheckins();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Không thể check-in");
+      setError(errorMessage(caught, "Không thể check-in booking"));
     } finally {
       setIsSubmitting(false);
     }
   }
 
+  const todayCount = useMemo(() => {
+    const today = new Date().toDateString();
+    return checkins.filter((item) => new Date(item.checked_in_at).toDateString() === today).length;
+  }, [checkins]);
+  const cashCollectedTotal = checkins.reduce((total, item) => total + item.cash_collected_vnd, 0);
+  const remainingTotal = checkins.reduce((total, item) => total + item.remaining_due_vnd, 0);
+
   return (
-    <main className="min-h-screen bg-[#f6f7f9] text-slate-950">
-      <section className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-emerald-700">
-              NetUp Chủ sân
-            </p>
-            <h1 className="mt-2 text-3xl font-semibold">Check-in booking</h1>
-            <p className="mt-2 text-sm text-slate-600">{message}</p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Link
-              className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              href="/owner/dashboard"
-            >
-              Dashboard owner
-            </Link>
-            <Link
-              className="rounded border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              href="/owner/courts"
-            >
+    <div className="space-y-5">
+      <PageHero
+        eyebrow="Check-in tại sân"
+        title="Xác nhận người chơi bằng mã booking hoặc QR."
+        description={message}
+        actions={
+          <>
+            <ButtonLink href="/owner/courts" variant="outline">
               Quản lý sân
-            </Link>
-          </div>
-        </div>
+            </ButtonLink>
+            <ButtonLink href="/owner/dashboard" variant="outline">
+              Tổng quan owner
+            </ButtonLink>
+          </>
+        }
+      />
+
+      {error ? <Notice tone="danger">{error}</Notice> : null}
+
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Check-in hôm nay" value={todayCount} helper="Theo thời gian xác nhận" tone="accent" />
+        <StatCard label="Tổng lượt" value={checkins.length} helper="Tất cả lịch sử check-in" />
+        <StatCard label="Tiền mặt đã thu" value={formatVnd(cashCollectedTotal)} helper="Phần thu tại sân" tone="success" />
+        <StatCard label="Còn phải thu" value={formatVnd(remainingTotal)} helper="Theo booking cash" tone={remainingTotal > 0 ? "warning" : "default"} />
       </section>
 
-      <section className="mx-auto grid max-w-7xl gap-6 px-6 py-8 lg:grid-cols-[0.95fr_1.05fr] lg:px-8">
-        <form onSubmit={submitCheckin} className="rounded border border-slate-200 bg-white p-6">
-          <h2 className="text-lg font-semibold">Tạo check-in</h2>
-          <label className="mt-4 grid gap-2 text-sm font-semibold text-slate-700">
-            Phương thức xác thực
-            <select
-              className="rounded border border-slate-300 px-3 py-2 font-normal outline-none focus:border-slate-900"
-              value={method}
-              onChange={(event) => setMethod(event.target.value as "booking_code" | "qr")}
-            >
-              <option value="booking_code">booking_code</option>
-              <option value="qr">qr</option>
+      <section className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+        <form onSubmit={submitCheckin} className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+          <div>
+            <h2 className="font-heading text-xl font-semibold text-ink">Tạo check-in</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-600">
+              Nhập mã booking trên điện thoại người chơi. Nếu booking chọn trả tiền mặt, ghi nhận số tiền đã thu tại quầy.
+            </p>
+          </div>
+
+          <Field label="Phương thức xác thực">
+            <select className={inputClassName} value={method} onChange={(event) => setMethod(event.target.value as "booking_code" | "qr")}>
+              <option value="booking_code">Mã booking</option>
+              <option value="qr">QR payload</option>
             </select>
-          </label>
+          </Field>
 
           {method === "booking_code" ? (
-            <label className="mt-3 grid gap-2 text-sm font-semibold text-slate-700">
-              Booking code
-              <input
-                className="rounded border border-slate-300 px-3 py-2 font-normal outline-none focus:border-slate-900"
-                value={bookingCode}
-                onChange={(event) => setBookingCode(event.target.value)}
-                required
-              />
-            </label>
+            <Field label="Mã booking">
+              <input className={`${inputClassName} font-heading text-lg tracking-wide`} value={bookingCode} onChange={(event) => setBookingCode(event.target.value.toUpperCase())} required />
+            </Field>
           ) : (
-            <label className="mt-3 grid gap-2 text-sm font-semibold text-slate-700">
-              QR payload
-              <input
-                className="rounded border border-slate-300 px-3 py-2 font-normal outline-none focus:border-slate-900"
-                value={qrPayload}
-                onChange={(event) => setQrPayload(event.target.value)}
-                required
-              />
-            </label>
+            <Field label="QR payload">
+              <input className={inputClassName} value={qrPayload} onChange={(event) => setQrPayload(event.target.value)} required />
+            </Field>
           )}
 
-          <label className="mt-3 grid gap-2 text-sm font-semibold text-slate-700">
-            Tiền mặt thu tại sân (nếu có)
-            <input
-              className="rounded border border-slate-300 px-3 py-2 font-normal outline-none focus:border-slate-900"
-              value={cashCollected}
-              onChange={(event) => setCashCollected(event.target.value)}
-              inputMode="numeric"
-              placeholder="Để trống để backend tự tính cho booking cash"
-            />
-          </label>
+          <Field label="Tiền mặt thu tại sân" helper="Có thể để trống để backend tự tính theo booking cash.">
+            <input className={inputClassName} value={cashCollected} onChange={(event) => setCashCollected(event.target.value)} inputMode="numeric" placeholder="Ví dụ: 120000" />
+          </Field>
 
-          <label className="mt-3 grid gap-2 text-sm font-semibold text-slate-700">
-            Ghi chú
-            <textarea
-              className="min-h-24 rounded border border-slate-300 px-3 py-2 font-normal outline-none focus:border-slate-900"
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-            />
-          </label>
+          <Field label="Ghi chú">
+            <textarea className={`${inputClassName} min-h-24`} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Ví dụ: Đã thu đủ phần còn lại" />
+          </Field>
 
-          <button
-            className="mt-5 w-full rounded bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-400"
-            disabled={isSubmitting}
-          >
+          <Button className="w-full" disabled={isSubmitting}>
             {isSubmitting ? "Đang check-in..." : "Xác nhận check-in"}
-          </button>
+          </Button>
         </form>
 
-        <div className="rounded border border-slate-200 bg-white p-6">
-          <h2 className="text-lg font-semibold">Lịch sử check-in</h2>
-          <div className="mt-4 grid gap-3">
-            {checkins.map((item) => (
-              <article key={item.id} className="rounded border border-slate-200 bg-slate-50 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="font-semibold">{item.booking_code}</p>
-                  <span className="rounded border border-slate-300 px-2 py-1 text-xs font-semibold uppercase text-slate-700">
-                    {item.booking_status}
-                  </span>
-                </div>
-                <p className="mt-2 text-sm text-slate-600">
-                  {item.session_title} ·{" "}
-                  {new Date(item.session_starts_at).toLocaleString("vi-VN")}
-                </p>
-                <p className="mt-1 text-sm text-slate-600">
-                  {item.complex_name} · {item.court_name} - {item.sub_court_name}
-                </p>
-                <p className="mt-1 text-sm text-slate-600">
-                  Thu tiền mặt: {money(item.cash_collected_vnd)}đ · Còn phải thu:{" "}
-                  {money(item.remaining_due_vnd)}đ
-                </p>
-                <p className="mt-1 text-sm text-slate-600">
-                  Check-in lúc: {new Date(item.checked_in_at).toLocaleString("vi-VN")}
-                </p>
-              </article>
-            ))}
-          </div>
-        </div>
+        <Card className="space-y-4">
+          <h2 className="font-heading text-xl font-semibold text-ink">Lịch sử check-in</h2>
+          {checkins.length === 0 ? (
+            <p className="text-sm leading-6 text-slate-600">
+              Khi quầy xác nhận mã booking, lịch sử sẽ xuất hiện tại đây.
+            </p>
+          ) : (
+            <div className="grid gap-3">
+              {checkins.map((item) => (
+                <article key={item.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="font-heading text-lg font-semibold text-ink">{item.booking_code}</p>
+                      <p className="mt-1 text-sm text-slate-600">
+                        {item.session_title} · {formatDateTime(item.session_starts_at)}
+                      </p>
+                    </div>
+                    <Badge tone={statusTone(item.booking_status)}>{bookingStatusLabel(item.booking_status)}</Badge>
+                  </div>
+                  <div className="mt-3 grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
+                    <p>{item.complex_name} · {item.court_name} - {item.sub_court_name}</p>
+                    <p>{paymentMethodLabel(item.payment_method)}</p>
+                    <p>Đã thu: {formatVnd(item.cash_collected_vnd)}</p>
+                    <p>Còn phải thu: {formatVnd(item.remaining_due_vnd)}</p>
+                    <p className="sm:col-span-2">Check-in lúc: {formatFullDateTime(item.checked_in_at)}</p>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </Card>
       </section>
-
-      {error ? (
-        <section className="mx-auto max-w-7xl px-6 pb-8 lg:px-8">
-          <p className="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </p>
-        </section>
-      ) : null}
-    </main>
+    </div>
   );
 }
