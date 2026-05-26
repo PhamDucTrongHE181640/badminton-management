@@ -82,7 +82,7 @@ export default function PlayerAssessmentPage() {
   const [answers, setAnswers] = useState<Record<string, number>>(seedAnswers("Badminton"));
   const [summary, setSummary] = useState<SkillTierSummary | null>(null);
   const [history, setHistory] = useState<EloHistoryItem[]>([]);
-  const [message, setMessage] = useState("Hoàn tất tự đánh giá để NetUp đề xuất kèo vừa sức hơn.");
+  const [message, setMessage] = useState("Thiết lập trình độ ban đầu để NetUp khởi tạo Elo cho tài khoản.");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -100,7 +100,7 @@ export default function PlayerAssessmentPage() {
     } catch (caught) {
       setSummary(null);
       setHistory([]);
-      setError(errorMessage(caught, "Không tải được dữ liệu đánh giá"));
+      setError(errorMessage(caught, "Không tải được dữ liệu trình độ"));
     }
   }
 
@@ -132,29 +132,75 @@ export default function PlayerAssessmentPage() {
           answers,
         }),
       });
-      setMessage("Đã lưu tự đánh giá. Level hiển thị của bạn đã được cập nhật.");
+      setMessage("Đã lưu Elo ban đầu. Từ bây giờ level chỉ cập nhật qua feedback và lịch sử trận đấu.");
       await loadSummary();
     } catch (caught) {
-      setError(errorMessage(caught, "Không lưu được tự đánh giá"));
+      setError(errorMessage(caught, "Không lưu được Elo ban đầu"));
     } finally {
       setIsSubmitting(false);
     }
   }
 
+  if (summary?.has_assessment) {
+    return (
+      <div className="space-y-5">
+        <PageHero
+          eyebrow="Elo người chơi"
+          title="Elo ban đầu đã được lưu cho tài khoản này."
+          description="NetUp không mở lại bước đánh giá ban đầu. Từ bây giờ level chỉ được cập nhật qua feedback và lịch sử trận đấu."
+          actions={
+            <>
+              <ButtonLink href="/player/discovery?mode=matchmaking">Tìm kèo phù hợp</ButtonLink>
+              <ButtonLink href="/player/matches" variant="outline">
+                Xem lịch đấu
+              </ButtonLink>
+            </>
+          }
+        />
+
+        {error ? <Notice tone="danger">{error}</Notice> : null}
+
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard label="Level hiện tại" value={summary.visible_skill_tier} helper="Cập nhật sau trận" tone="accent" />
+          <StatCard label="Trận đã chơi" value={summary.matches_played} helper="Dữ liệu lịch đấu" />
+          <StatCard label="Thắng / Hòa / Thua" value={`${summary.wins}/${summary.draws}/${summary.losses}`} />
+          <StatCard
+            label="Thiết lập ban đầu"
+            value={summary.last_assessment ? sportLabel(summary.last_assessment.sport) : "Đã lưu"}
+            helper={summary.last_assessment ? formatFullDateTime(summary.last_assessment.updated_at) : undefined}
+          />
+        </section>
+
+        <Card className="space-y-3">
+          <h2 className="font-heading text-xl font-semibold text-ink">Lịch sử cập nhật Elo</h2>
+          {history.length === 0 ? (
+            <p className="text-sm text-slate-600">Chưa có lịch sử thay đổi level.</p>
+          ) : (
+            <div className="grid gap-3">
+              {history.map((item) => (
+                <div key={item.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-semibold text-slate-900">
+                      {item.skill_tier_before} sang {item.skill_tier_after}
+                    </p>
+                    <Badge tone={item.delta >= 0 ? "success" : "warning"}>{trendText(item.delta)}</Badge>
+                  </div>
+                  <p className="mt-1 text-slate-600">{formatFullDateTime(item.created_at)}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
       <PageHero
-        eyebrow="Level người chơi"
-        title="Tự đánh giá nhanh để ghép kèo đúng trình."
+        eyebrow="Onboarding người chơi"
+        title="Thiết lập trình độ ban đầu một lần."
         description={message}
-        actions={
-          <>
-            <ButtonLink href="/player/discovery">Tìm sân phù hợp</ButtonLink>
-            <ButtonLink href="/player/matches" variant="outline">
-              Xem lịch đấu
-            </ButtonLink>
-          </>
-        }
       />
 
       {error ? <Notice tone="danger">{error}</Notice> : null}
@@ -163,13 +209,13 @@ export default function PlayerAssessmentPage() {
         <StatCard
           label="Level hiện tại"
           value={summary?.visible_skill_tier ?? "Chưa có"}
-          helper={summary?.has_assessment ? "Dùng để xếp gợi ý" : "Hãy làm tự đánh giá"}
+          helper="Sẽ được lưu vào Elo"
           tone="accent"
         />
         <StatCard label="Trận đã chơi" value={summary?.matches_played ?? 0} helper="Dữ liệu lịch đấu" />
         <StatCard label="Thắng / Hòa / Thua" value={`${summary?.wins ?? 0}/${summary?.draws ?? 0}/${summary?.losses ?? 0}`} />
         <StatCard
-          label="Lần đánh giá gần nhất"
+          label="Thiết lập ban đầu"
           value={summary?.last_assessment ? sportLabel(summary.last_assessment.sport) : "Chưa có"}
           helper={summary?.last_assessment ? formatFullDateTime(summary.last_assessment.updated_at) : undefined}
         />
@@ -178,9 +224,9 @@ export default function PlayerAssessmentPage() {
       <section className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
         <form onSubmit={onSubmit} className="space-y-5 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
           <div>
-            <h2 className="font-heading text-xl font-semibold text-ink">Bảng tự đánh giá</h2>
+            <h2 className="font-heading text-xl font-semibold text-ink">Thiết lập Elo ban đầu</h2>
             <p className="mt-1 text-sm leading-6 text-slate-600">
-              Chọn môn và kéo thang điểm đúng với khả năng hiện tại. NetUp không hiển thị điểm nội bộ thô cho người chơi.
+              Bước này chỉ thực hiện một lần sau khi đăng nhập lần đầu. NetUp không hiển thị điểm Elo thô cho người chơi.
             </p>
           </div>
 
@@ -222,7 +268,7 @@ export default function PlayerAssessmentPage() {
             ))}
           </div>
 
-          <Button disabled={isSubmitting}>{isSubmitting ? "Đang lưu..." : "Lưu tự đánh giá"}</Button>
+          <Button disabled={isSubmitting}>{isSubmitting ? "Đang lưu..." : "Lưu Elo ban đầu"}</Button>
         </form>
 
         <div className="space-y-5">
@@ -242,7 +288,7 @@ export default function PlayerAssessmentPage() {
                   Thành tích hiện tại: {summary.wins} thắng, {summary.draws} hòa, {summary.losses} thua.
                 </p>
                 <p>
-                  Đánh giá gần nhất:{" "}
+                  Thiết lập ban đầu:{" "}
                   {summary.last_assessment
                     ? `${sportLabel(summary.last_assessment.sport)} · ${formatFullDateTime(summary.last_assessment.updated_at)}`
                     : "chưa có"}
@@ -250,7 +296,7 @@ export default function PlayerAssessmentPage() {
               </div>
             ) : (
               <p className="text-sm leading-6 text-slate-600">
-                Đăng nhập và lưu tự đánh giá để NetUp tính level hiển thị.
+                Hoàn tất bước thiết lập ban đầu để NetUp tính level hiển thị.
               </p>
             )}
           </Card>

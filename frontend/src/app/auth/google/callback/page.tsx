@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -10,7 +11,12 @@ type UserProfile = {
   roles: string[];
 };
 
+type SkillTierSummary = {
+  has_assessment: boolean;
+};
+
 export default function GoogleCallbackPage() {
+  const router = useRouter();
   const [user, setUser] = useState<UserProfile | null>(null);
   const [message, setMessage] = useState("Đang hoàn tất đăng nhập Google...");
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -25,12 +31,26 @@ export default function GoogleCallbackPage() {
         return;
       }
 
-      setUser(await response.json());
+      const profile = await response.json();
+      setUser(profile);
+
+      const tierResponse = await fetch(`${apiBaseUrl}/api/v1/player/skill-tier`, {
+        credentials: "include",
+      });
+      if (tierResponse.ok) {
+        const tier = (await tierResponse.json()) as SkillTierSummary;
+        if (!tier.has_assessment) {
+          setMessage("Đăng nhập thành công. Đang mở bước thiết lập trình độ ban đầu...");
+          router.replace("/player/assessment?firstLogin=1");
+          return;
+        }
+      }
+
       setMessage("Đăng nhập Google thành công");
     }
 
     loadMe();
-  }, []);
+  }, [router]);
 
   async function logout() {
     setIsLoggingOut(true);

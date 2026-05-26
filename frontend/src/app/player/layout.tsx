@@ -10,7 +10,6 @@ export default function PlayerLayout({ children }: { children: React.ReactNode }
         links={[
           { href: "/player/discovery", label: "Đặt sân" },
           { href: "/player/bookings", label: "Booking của tôi" },
-          { href: "/player/assessment", label: "Tự đánh giá level" },
           { href: "/player/matches", label: "Lịch đấu" },
         ]}
       />

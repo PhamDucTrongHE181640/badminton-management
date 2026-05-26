@@ -4,6 +4,7 @@ from typing import Any
 
 from psycopg.types.json import Jsonb
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from app.core.errors import AppError
 from app.db.session import get_engine
@@ -136,6 +137,28 @@ def submit_player_assessment(*, player_user_id: str, data: dict[str, Any]) -> di
     reason = f"assessment_onboarding:{sport}:{form_version}"
 
     with get_engine().begin() as connection:
+        connection.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:player_user_id))"),
+            {"player_user_id": player_user_id},
+        )
+        existing_assessment = connection.execute(
+            text(
+                """
+                SELECT id
+                FROM public.player_assessments
+                WHERE player_user_id = :player_user_id
+                LIMIT 1
+                """
+            ),
+            {"player_user_id": player_user_id},
+        ).first()
+        if existing_assessment is not None:
+            raise AppError(
+                status_code=409,
+                code="assessment_already_submitted",
+                message="Tài khoản đã có Elo ban đầu, không thể đánh giá lại",
+            )
+
         previous_elo_row = connection.execute(
             text(
                 """
@@ -149,44 +172,44 @@ def submit_player_assessment(*, player_user_id: str, data: dict[str, Any]) -> di
         ).first()
         old_elo = int(previous_elo_row.elo_value) if previous_elo_row else BASELINE_ELO
 
-        assessment_row = connection.execute(
-            text(
-                """
-                INSERT INTO public.player_assessments (
-                  player_user_id,
-                  sport,
-                  form_version,
-                  answers,
-                  computed_elo,
-                  computed_skill_tier
-                )
-                VALUES (
-                  :player_user_id,
-                  CAST(:sport AS public.sport_type),
-                  :form_version,
-                  :answers,
-                  :computed_elo,
-                  CAST(:computed_skill_tier AS public.skill_tier)
-                )
-                ON CONFLICT (player_user_id, sport)
-                DO UPDATE SET
-                  form_version = EXCLUDED.form_version,
-                  answers = EXCLUDED.answers,
-                  computed_elo = EXCLUDED.computed_elo,
-                  computed_skill_tier = EXCLUDED.computed_skill_tier,
-                  updated_at = now()
-                RETURNING id, created_at, updated_at
-                """
-            ),
-            {
-                "player_user_id": player_user_id,
-                "sport": sport,
-                "form_version": form_version,
-                "answers": Jsonb(answers),
-                "computed_elo": computed_elo,
-                "computed_skill_tier": computed_tier,
-            },
-        ).one()
+        try:
+            assessment_row = connection.execute(
+                text(
+                    """
+                    INSERT INTO public.player_assessments (
+                      player_user_id,
+                      sport,
+                      form_version,
+                      answers,
+                      computed_elo,
+                      computed_skill_tier
+                    )
+                    VALUES (
+                      :player_user_id,
+                      CAST(:sport AS public.sport_type),
+                      :form_version,
+                      :answers,
+                      :computed_elo,
+                      CAST(:computed_skill_tier AS public.skill_tier)
+                    )
+                    RETURNING id, created_at, updated_at
+                    """
+                ),
+                {
+                    "player_user_id": player_user_id,
+                    "sport": sport,
+                    "form_version": form_version,
+                    "answers": Jsonb(answers),
+                    "computed_elo": computed_elo,
+                    "computed_skill_tier": computed_tier,
+                },
+            ).one()
+        except IntegrityError as exc:
+            raise AppError(
+                status_code=409,
+                code="assessment_already_submitted",
+                message="Tài khoản đã có Elo ban đầu, không thể đánh giá lại",
+            ) from exc
 
         rating_row = connection.execute(
             text(
