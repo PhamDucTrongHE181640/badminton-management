@@ -125,6 +125,8 @@ def test_admin_endpoints_smoke(  # type: ignore[no-untyped-def]
             "matching_radius_km": 5.0,
             "no_show_strike_limit": 3,
             "auto_release_minutes": 15,
+            "video_assessment_max_size_mb": 5,
+            "video_assessment_max_duration_seconds": 60,
             "support_hotline_enabled": True,
             "updated_at": now,
         },

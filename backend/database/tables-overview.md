@@ -2,7 +2,7 @@
 
 ## Tong quan
 - Nguon schema: `backend/database/schema.sql`
-- Tong so bang: **22**
+- Tong so bang: **23**
 
 Danh sach bang:
 1. `users`
@@ -18,15 +18,16 @@ Danh sach bang:
 11. `payment_transactions`
 12. `checkins`
 13. `player_assessments`
-14. `elo_ratings`
-15. `match_events`
-16. `match_participants`
-17. `match_feedback`
-18. `elo_rating_history`
-19. `chat_rooms`
-20. `chat_room_members`
-21. `chat_messages`
-22. `audit_logs`
+14. `video_assessments`
+15. `elo_ratings`
+16. `match_events`
+17. `match_participants`
+18. `match_feedback`
+19. `elo_rating_history`
+20. `chat_rooms`
+21. `chat_room_members`
+22. `chat_messages`
+23. `audit_logs`
 
 ## 1) User, Auth, Role
 
@@ -83,6 +84,7 @@ Danh sach bang:
 - Cot chinh:
   - `platform_fee_rate`, `floor_fee_vnd`, `deposit_percent`.
   - `matching_radius_km`, `no_show_strike_limit`, `auto_release_minutes`.
+  - `video_assessment_max_size_mb`, `video_assessment_max_duration_seconds`.
   - `support_hotline_enabled`, `updated_at`.
 
 ## 2) Court Inventory va Session
@@ -206,7 +208,7 @@ Danh sach bang:
 ## 4) Assessment, Match, Elo
 
 ### `player_assessments`
-- Muc dich: Form danh gia nang luc theo mon.
+- Muc dich: Ban ghi assessment da chot de khoi tao Elo ban dau.
 - Primary key: `id`.
 - Foreign key: `player_user_id -> users.id`.
 - Cot chinh:
@@ -216,6 +218,20 @@ Danh sach bang:
 - Rang buoc:
   - Unique `(player_user_id, sport)`.
   - `computed_elo` trong [100..5000].
+
+### `video_assessments`
+- Muc dich: Job upload video va ket qua Gemini de khoi tao Elo ban dau.
+- Primary key: `id`.
+- Foreign key: `player_user_id -> users.id`.
+- Cot chinh:
+  - `sport`, `storage_key`, `original_filename`, `mime_type`.
+  - `file_size_bytes`, `duration_seconds`, `status`.
+  - `llm_provider`, `llm_model`, `llm_raw_response`, `normalized_result`.
+  - `computed_elo`, `computed_skill_tier`, `confidence`, `error_message`.
+  - `created_at`, `updated_at`.
+- Rang buoc:
+  - `status` chi gom uploaded/analyzing/completed/failed.
+  - Partial unique moi player chi co 1 job active/completed.
 
 ### `elo_ratings`
 - Muc dich: Diem Elo hien tai cua moi player.

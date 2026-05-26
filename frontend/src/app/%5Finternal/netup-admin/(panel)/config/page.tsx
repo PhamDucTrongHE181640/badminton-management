@@ -15,6 +15,8 @@ type AdminConfig = {
   matching_radius_km: number;
   no_show_strike_limit: number;
   auto_release_minutes: number;
+  video_assessment_max_size_mb: number;
+  video_assessment_max_duration_seconds: number;
   support_hotline_enabled: boolean;
   updated_at: string;
 };
@@ -34,6 +36,8 @@ export default function AdminConfigPage() {
   const [matchingRadiusKm, setMatchingRadiusKm] = useState("5");
   const [noShowStrikeLimit, setNoShowStrikeLimit] = useState("3");
   const [autoReleaseMinutes, setAutoReleaseMinutes] = useState("15");
+  const [videoAssessmentMaxSizeMb, setVideoAssessmentMaxSizeMb] = useState("5");
+  const [videoAssessmentMaxDurationSeconds, setVideoAssessmentMaxDurationSeconds] = useState("60");
   const [supportHotlineEnabled, setSupportHotlineEnabled] = useState(true);
   const [changeReason, setChangeReason] = useState("");
 
@@ -44,6 +48,8 @@ export default function AdminConfigPage() {
     setMatchingRadiusKm(String(next.matching_radius_km));
     setNoShowStrikeLimit(String(next.no_show_strike_limit));
     setAutoReleaseMinutes(String(next.auto_release_minutes));
+    setVideoAssessmentMaxSizeMb(String(next.video_assessment_max_size_mb));
+    setVideoAssessmentMaxDurationSeconds(String(next.video_assessment_max_duration_seconds));
     setSupportHotlineEnabled(next.support_hotline_enabled);
   }
 
@@ -86,6 +92,8 @@ export default function AdminConfigPage() {
           matching_radius_km: Number(matchingRadiusKm),
           no_show_strike_limit: Number(noShowStrikeLimit),
           auto_release_minutes: Number(autoReleaseMinutes),
+          video_assessment_max_size_mb: Number(videoAssessmentMaxSizeMb),
+          video_assessment_max_duration_seconds: Number(videoAssessmentMaxDurationSeconds),
           support_hotline_enabled: supportHotlineEnabled,
         }),
       });
@@ -133,11 +141,12 @@ export default function AdminConfigPage() {
 
       {error ? <Notice tone="danger">{error}</Notice> : null}
 
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard label="Platform fee" value={`${platformFeePercent}%`} helper="Tính trên booking mới" tone="accent" />
         <StatCard label="Phí sàn" value={formatVnd(Number(floorFeeVnd))} helper="Áp dụng cho booking solo" />
         <StatCard label="Tiền cọc" value={`${depositPercent}%`} helper="Bắt buộc thanh toán online" tone="warning" />
         <StatCard label="Matching radius" value={`${matchingRadiusKm} km`} helper="Bán kính gợi ý sân" />
+        <StatCard label="Video AI" value={`${videoAssessmentMaxSizeMb} MB`} helper={`${videoAssessmentMaxDurationSeconds}s tối đa`} />
       </section>
 
       <section className="grid gap-5 lg:grid-cols-[1fr_360px]">
@@ -167,6 +176,12 @@ export default function AdminConfigPage() {
             </Field>
             <Field label="Auto release minutes">
               <input className={inputClassName} type="number" min={5} max={120} value={autoReleaseMinutes} onChange={(event) => setAutoReleaseMinutes(event.target.value)} />
+            </Field>
+            <Field label="Video assessment max size (MB)">
+              <input className={inputClassName} type="number" min={1} max={100} value={videoAssessmentMaxSizeMb} onChange={(event) => setVideoAssessmentMaxSizeMb(event.target.value)} />
+            </Field>
+            <Field label="Video assessment max duration (seconds)">
+              <input className={inputClassName} type="number" min={5} max={300} value={videoAssessmentMaxDurationSeconds} onChange={(event) => setVideoAssessmentMaxDurationSeconds(event.target.value)} />
             </Field>
           </div>
 

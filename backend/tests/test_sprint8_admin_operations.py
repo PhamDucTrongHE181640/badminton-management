@@ -45,6 +45,8 @@ def test_get_admin_config_endpoint(  # type: ignore[no-untyped-def]
             "matching_radius_km": 5.0,
             "no_show_strike_limit": 3,
             "auto_release_minutes": 15,
+            "video_assessment_max_size_mb": 5,
+            "video_assessment_max_duration_seconds": 60,
             "support_hotline_enabled": True,
             "updated_at": now,
         },
@@ -71,6 +73,8 @@ def test_put_admin_config_endpoint(  # type: ignore[no-untyped-def]
             "matching_radius_km": 8.0,
             "no_show_strike_limit": 3,
             "auto_release_minutes": 20,
+            "video_assessment_max_size_mb": 10,
+            "video_assessment_max_duration_seconds": 90,
             "support_hotline_enabled": True,
             "updated_at": now,
         },
@@ -84,6 +88,8 @@ def test_put_admin_config_endpoint(  # type: ignore[no-untyped-def]
             "deposit_percent": 35,
             "matching_radius_km": 8,
             "auto_release_minutes": 20,
+            "video_assessment_max_size_mb": 10,
+            "video_assessment_max_duration_seconds": 90,
         },
     )
 
@@ -91,6 +97,7 @@ def test_put_admin_config_endpoint(  # type: ignore[no-untyped-def]
     payload = response.json()
     assert payload["platform_fee_rate"] == 0.12
     assert payload["auto_release_minutes"] == 20
+    assert payload["video_assessment_max_size_mb"] == 10
 
 
 def test_get_admin_dashboard_metrics_endpoint(  # type: ignore[no-untyped-def]

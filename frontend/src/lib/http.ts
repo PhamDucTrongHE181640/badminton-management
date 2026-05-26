@@ -28,13 +28,14 @@ export async function apiFetch<T>(
   init?: RequestInit,
   options?: { timeoutMs?: number; allowNoContent?: boolean }
 ): Promise<T> {
+  const isFormData = typeof FormData !== "undefined" && init?.body instanceof FormData;
   const response = await withTimeout(
     `${API_BASE_URL}${path}`,
     {
       ...init,
       cache: "no-store",
       headers: {
-        "Content-Type": "application/json",
+        ...(isFormData ? {} : { "Content-Type": "application/json" }),
         ...(init?.headers ?? {}),
       },
     },

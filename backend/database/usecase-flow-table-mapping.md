@@ -17,7 +17,7 @@ Quy uoc coverage:
 | UC ID | Use case | Bang chinh | Bang ho tro | Coverage | Ghi chu |
 |---|---|---|---|---|---|
 | UC-PL-01 | Player login Google + tao profile | `users`, `oauth_identities` | `audit_logs` | Covered | OAuth identity da unique theo provider/provider_user_id |
-| UC-PL-02 | Onboarding assessment -> khoi tao Elo | `player_assessments`, `elo_ratings` | `elo_rating_history` | Covered | Da co form data + current elo + history |
+| UC-PL-02 | Onboarding assessment -> khoi tao Elo | `player_assessments`, `video_assessments`, `elo_ratings` | `elo_rating_history` | Covered | Ho tro video job Gemini, ket qua normalized va current elo/history |
 | UC-PL-03 | Discovery list/map session | `sessions`, `courts`, `court_complexes` | `pool_posts`, `elo_ratings` | Covered | Du lieu filter map/list day du |
 | UC-PL-04 | Tao pool post | `pool_posts`, `sessions` | `player_assessments`, `bookings` | Partial | Rule "phai co assessment" can enforce tai service/API |
 | UC-PL-05 | Join pool (solo booking) | `bookings` | `sessions`, `payment_transactions` | Partial | Da validate seats; can them anti-race lock o service |
@@ -77,9 +77,10 @@ Quy uoc coverage:
 
 ### 3.4 Elo + match feedback flow
 1. Onboarding assessment:
+- Write: `video_assessments` (upload/analyzing/completed/failed)
 - Write: `player_assessments`
 - Upsert: `elo_ratings`
-- Insert: `elo_rating_history` (reason=onboarding)
+- Insert: `elo_rating_history` (reason=video_assessment_initial hoac onboarding legacy)
 2. Sau tran:
 - Write: `match_events`, `match_participants`
 - Write: `match_feedback`
@@ -111,6 +112,7 @@ Quy uoc coverage:
 | Chi member hop le moi vao chat | `chat_room_members` trigger `validate_chat_member_row` |
 | Feedback khong self + dung teammate/opponent | `match_feedback` constraints + trigger `validate_match_feedback_row` |
 | Luu lich su bien dong Elo | `elo_rating_history` |
+| Video AI chi tao Elo ban dau mot lan | `video_assessments` partial unique + service check `player_assessments` |
 
 ## 5) Coverage ket luan
 

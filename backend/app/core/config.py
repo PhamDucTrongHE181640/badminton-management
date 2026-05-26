@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     google_client_id: str = ""
     google_client_secret: str = ""
     google_redirect_uri: str = "http://localhost:8000/api/v1/auth/google/callback"
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash-lite"
+    gemini_timeout_seconds: int = 45
+    video_assessment_max_size_mb: int = 5
+    video_assessment_max_duration_seconds: int = 60
+    video_assessment_storage_dir: str = "/tmp/netup-video-assessments"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

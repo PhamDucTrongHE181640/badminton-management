@@ -29,6 +29,8 @@ class AdminConfigResponse(BaseModel):
     matching_radius_km: float
     no_show_strike_limit: int
     auto_release_minutes: int
+    video_assessment_max_size_mb: int
+    video_assessment_max_duration_seconds: int
     support_hotline_enabled: bool
     updated_at: datetime
 
@@ -41,6 +43,8 @@ class AdminConfigUpdateRequest(AdminModel):
     matching_radius_km: float | None = None
     no_show_strike_limit: int | None = None
     auto_release_minutes: int | None = None
+    video_assessment_max_size_mb: int | None = None
+    video_assessment_max_duration_seconds: int | None = None
     support_hotline_enabled: bool | None = None
 
 

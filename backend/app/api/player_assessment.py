@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.dependencies import require_player
@@ -11,6 +11,12 @@ from app.services.player_assessment import (
     get_player_skill_tier,
     list_player_elo_history,
     submit_player_assessment,
+)
+from app.services.player_video_assessment import (
+    analyze_video_assessment_job,
+    create_video_assessment,
+    get_video_assessment,
+    get_video_assessment_limits,
 )
 from app.services.user_auth import UserPrincipal
 
@@ -69,12 +75,64 @@ class EloHistoryItemResponse(BaseModel):
     skill_tier_after: str
 
 
+class VideoAssessmentResponse(BaseModel):
+    assessment_id: str
+    sport: str
+    status: str
+    llm_provider: str
+    llm_model: str | None
+    file_size_bytes: int
+    duration_seconds: float | None
+    computed_skill_tier: str | None
+    confidence: float | None
+    summary: str | None
+    strengths: list[str]
+    improvement_areas: list[str]
+    warning: str | None
+    error_message: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
 @router.post("/assessments", response_model=AssessmentSubmitResponse, status_code=201)
 def post_player_assessment(
     payload: AssessmentSubmitRequest,
     user: Annotated[UserPrincipal, Depends(require_player)],
 ) -> dict[str, object]:
     return submit_player_assessment(player_user_id=user.id, data=payload.model_dump())
+
+
+@router.post("/video-assessments", response_model=VideoAssessmentResponse, status_code=201)
+async def post_player_video_assessment(
+    background_tasks: BackgroundTasks,
+    sport: Annotated[SportType, Form()],
+    video: Annotated[UploadFile, File()],
+    user: Annotated[UserPrincipal, Depends(require_player)],
+) -> dict[str, object]:
+    limits = get_video_assessment_limits()
+    content = await video.read(limits["max_size_bytes"] + 1)
+    await video.close()
+
+    assessment = create_video_assessment(
+        player_user_id=user.id,
+        sport=sport,
+        filename=video.filename,
+        content_type=video.content_type,
+        content=content,
+    )
+    background_tasks.add_task(
+        analyze_video_assessment_job,
+        assessment_id=str(assessment["assessment_id"]),
+    )
+    return assessment
+
+
+@router.get("/video-assessments/{assessment_id}", response_model=VideoAssessmentResponse)
+def get_player_video_assessment(
+    assessment_id: str,
+    user: Annotated[UserPrincipal, Depends(require_player)],
+) -> dict[str, object]:
+    return get_video_assessment(player_user_id=user.id, assessment_id=assessment_id)
 
 
 @router.get("/skill-tier", response_model=PlayerSkillTierResponse)

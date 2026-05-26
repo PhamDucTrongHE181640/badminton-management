@@ -1,12 +1,23 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 
-import { Badge, Button, ButtonLink, Card, Field, Notice, PageHero, StatCard, inputClassName } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  ButtonLink,
+  Card,
+  Field,
+  Notice,
+  PageHero,
+  StatCard,
+  inputClassName,
+} from "@/components/ui";
 import { apiFetch } from "@/lib/http";
 import { errorMessage, formatFullDateTime, sportLabel } from "@/lib/format";
 
 type Sport = "Badminton" | "Football" | "Tennis";
+type UploadState = "idle" | "uploading" | "analyzing" | "completed" | "failed";
 
 type SkillTierSummary = {
   visible_skill_tier: string;
@@ -14,6 +25,7 @@ type SkillTierSummary = {
   wins: number;
   losses: number;
   draws: number;
+  updated_at: string | null;
   has_assessment: boolean;
   last_assessment: {
     sport: string;
@@ -32,43 +44,56 @@ type EloHistoryItem = {
   skill_tier_after: string;
 };
 
-type Question = {
-  key: string;
-  label: string;
-  min: number;
-  max: number;
-  helper: string;
+type VideoAssessment = {
+  assessment_id: string;
+  sport: string;
+  status: "uploaded" | "analyzing" | "completed" | "failed";
+  llm_provider: string;
+  llm_model: string | null;
+  file_size_bytes: number;
+  duration_seconds: number | null;
+  computed_skill_tier: string | null;
+  confidence: number | null;
+  summary: string | null;
+  strengths: string[];
+  improvement_areas: string[];
+  warning: string | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
-const questionBySport: Record<Sport, Question[]> = {
-  Badminton: [
-    { key: "racket_control", label: "Kiểm soát cầu", min: 1, max: 5, helper: "Khả năng điều cầu đúng ý." },
-    { key: "footwork", label: "Di chuyển chân", min: 1, max: 5, helper: "Độ linh hoạt khi đổi hướng." },
-    { key: "stamina", label: "Thể lực", min: 1, max: 5, helper: "Giữ nhịp trong cả trận." },
-    { key: "match_reading", label: "Đọc tình huống", min: 1, max: 5, helper: "Chọn vị trí và xử lý pha cầu." },
-    { key: "weekly_sessions", label: "Số buổi mỗi tuần", min: 0, max: 14, helper: "Tần suất chơi gần đây." },
-    { key: "experience_years", label: "Số năm kinh nghiệm", min: 0, max: 20, helper: "Kinh nghiệm thi đấu hoặc luyện tập." },
-  ],
-  Football: [
-    { key: "ball_control", label: "Kiểm soát bóng", min: 1, max: 5, helper: "Giữ bóng và xử lý bước một." },
-    { key: "tactical_awareness", label: "Tư duy chiến thuật", min: 1, max: 5, helper: "Đọc vị trí và khoảng trống." },
-    { key: "team_play", label: "Phối hợp đội", min: 1, max: 5, helper: "Di chuyển và chuyền theo đội." },
-    { key: "stamina", label: "Thể lực", min: 1, max: 5, helper: "Duy trì cường độ trong trận." },
-    { key: "weekly_sessions", label: "Số buổi mỗi tuần", min: 0, max: 14, helper: "Tần suất chơi gần đây." },
-    { key: "experience_years", label: "Số năm kinh nghiệm", min: 0, max: 20, helper: "Kinh nghiệm thi đấu hoặc luyện tập." },
-  ],
-  Tennis: [
-    { key: "serve_consistency", label: "Ổn định giao bóng", min: 1, max: 5, helper: "Tỷ lệ giao bóng vào sân." },
-    { key: "rally_control", label: "Duy trì rally", min: 1, max: 5, helper: "Khả năng giữ bóng qua lại." },
-    { key: "footwork", label: "Di chuyển chân", min: 1, max: 5, helper: "Tiếp cận bóng đúng nhịp." },
-    { key: "mental_focus", label: "Tập trung thi đấu", min: 1, max: 5, helper: "Giữ ổn định khi điểm căng." },
-    { key: "weekly_sessions", label: "Số buổi mỗi tuần", min: 0, max: 14, helper: "Tần suất chơi gần đây." },
-    { key: "experience_years", label: "Số năm kinh nghiệm", min: 0, max: 20, helper: "Kinh nghiệm thi đấu hoặc luyện tập." },
-  ],
+type FilePreview = {
+  name: string;
+  sizeBytes: number;
+  durationSeconds: number | null;
 };
 
-function seedAnswers(sport: Sport): Record<string, number> {
-  return Object.fromEntries(questionBySport[sport].map((question) => [question.key, question.min]));
+const sportOptions: Array<{ value: Sport; label: string }> = [
+  { value: "Badminton", label: "Cầu lông" },
+  { value: "Football", label: "Bóng đá" },
+  { value: "Tennis", label: "Tennis" },
+];
+
+const uploadGuidelines = [
+  "Quay người chơi chính toàn thân, thấy rõ động tác tay/chân.",
+  "Video nên ngắn, đủ sáng, không rung mạnh và không che mặt sân.",
+  "Ưu tiên vài pha xử lý liên tục thay vì chỉ đứng tạo dáng.",
+];
+
+function fileSizeLabel(sizeBytes: number) {
+  if (sizeBytes >= 1024 * 1024) {
+    return `${(sizeBytes / 1024 / 1024).toFixed(2)} MB`;
+  }
+  return `${Math.max(1, Math.round(sizeBytes / 1024))} KB`;
+}
+
+function durationLabel(durationSeconds: number | null) {
+  if (durationSeconds === null) return "Chưa đọc được";
+  if (durationSeconds < 60) return `${Math.round(durationSeconds)} giây`;
+  const minutes = Math.floor(durationSeconds / 60);
+  const seconds = Math.round(durationSeconds % 60);
+  return `${minutes} phút ${seconds.toString().padStart(2, "0")} giây`;
 }
 
 function trendText(delta: number) {
@@ -77,23 +102,62 @@ function trendText(delta: number) {
   return "Ổn định";
 }
 
+function uploadStateText(state: UploadState) {
+  const labels: Record<UploadState, string> = {
+    idle: "Sẵn sàng upload",
+    uploading: "Đang upload video",
+    analyzing: "Gemini đang phân tích",
+    completed: "Đã hoàn tất",
+    failed: "Cần thử lại",
+  };
+  return labels[state];
+}
+
+function readBrowserDuration(file: File): Promise<number | null> {
+  return new Promise((resolve) => {
+    const video = document.createElement("video");
+    const url = URL.createObjectURL(file);
+    video.preload = "metadata";
+    video.onloadedmetadata = () => {
+      URL.revokeObjectURL(url);
+      resolve(Number.isFinite(video.duration) ? video.duration : null);
+    };
+    video.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(null);
+    };
+    video.src = url;
+  });
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 export default function PlayerAssessmentPage() {
   const [sport, setSport] = useState<Sport>("Badminton");
-  const [answers, setAnswers] = useState<Record<string, number>>(seedAnswers("Badminton"));
   const [summary, setSummary] = useState<SkillTierSummary | null>(null);
   const [history, setHistory] = useState<EloHistoryItem[]>([]);
-  const [message, setMessage] = useState("Thiết lập trình độ ban đầu để NetUp khởi tạo Elo cho tài khoản.");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [filePreview, setFilePreview] = useState<FilePreview | null>(null);
+  const [videoJob, setVideoJob] = useState<VideoAssessment | null>(null);
+  const [uploadState, setUploadState] = useState<UploadState>("idle");
+  const [message, setMessage] = useState("Upload video để NetUp khởi tạo level ban đầu bằng AI.");
   const [error, setError] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const questions = useMemo(() => questionBySport[sport], [sport]);
+  const currentLevel = useMemo(() => {
+    if (videoJob?.computed_skill_tier) return videoJob.computed_skill_tier;
+    return summary?.visible_skill_tier ?? "Chưa có";
+  }, [summary, videoJob]);
 
   async function loadSummary() {
     setError("");
     try {
       const [skillTier, eloHistory] = await Promise.all([
         apiFetch<SkillTierSummary>("/api/v1/player/skill-tier", { credentials: "include" }),
-        apiFetch<EloHistoryItem[]>("/api/v1/player/elo-history?limit=10", { credentials: "include" }),
+        apiFetch<EloHistoryItem[]>("/api/v1/player/elo-history?limit=10", {
+          credentials: "include",
+        }),
       ]);
       setSummary(skillTier);
       setHistory(eloHistory);
@@ -108,36 +172,98 @@ export default function PlayerAssessmentPage() {
     void loadSummary();
   }, []);
 
-  function onSportChange(nextSport: Sport) {
-    setSport(nextSport);
-    setAnswers(seedAnswers(nextSport));
-  }
-
-  function onAnswerChange(key: string, value: string) {
-    const numeric = Number(value);
-    setAnswers((previous) => ({ ...previous, [key]: Number.isFinite(numeric) ? numeric : 0 }));
-  }
-
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setIsSubmitting(true);
+  async function onFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] ?? null;
+    setSelectedFile(file);
+    setVideoJob(null);
+    setUploadState("idle");
     setError("");
+
+    if (!file) {
+      setFilePreview(null);
+      return;
+    }
+
+    setFilePreview({
+      name: file.name,
+      sizeBytes: file.size,
+      durationSeconds: null,
+    });
+    const durationSeconds = await readBrowserDuration(file);
+    setFilePreview({
+      name: file.name,
+      sizeBytes: file.size,
+      durationSeconds,
+    });
+  }
+
+  async function pollVideoAssessment(assessmentId: string) {
+    for (let attempt = 0; attempt < 45; attempt += 1) {
+      await delay(2000);
+      const nextJob = await apiFetch<VideoAssessment>(
+        `/api/v1/player/video-assessments/${assessmentId}`,
+        { credentials: "include" },
+      );
+      setVideoJob(nextJob);
+      if (nextJob.status === "completed") {
+        setUploadState("completed");
+        setMessage("NetUp đã khởi tạo level từ video của bạn.");
+        await loadSummary();
+        return;
+      }
+      if (nextJob.status === "failed") {
+        setUploadState("failed");
+        setError(nextJob.error_message ?? "Gemini chưa phân tích được video. Vui lòng thử lại sau.");
+        return;
+      }
+      setUploadState("analyzing");
+    }
+    setUploadState("failed");
+    setError("Job phân tích đang lâu hơn dự kiến. Vui lòng mở lại trang sau ít phút.");
+  }
+
+  async function submitVideo(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedFile) {
+      setError("Vui lòng chọn video trước khi gửi đánh giá.");
+      return;
+    }
+
+    setError("");
+    setUploadState("uploading");
+    setMessage("Đang upload video và tạo job đánh giá.");
+
+    const formData = new FormData();
+    formData.set("sport", sport);
+    formData.set("video", selectedFile);
+
     try {
-      await apiFetch("/api/v1/player/assessments", {
-        method: "POST",
-        credentials: "include",
-        body: JSON.stringify({
-          sport,
-          form_version: "v1",
-          answers,
-        }),
-      });
-      setMessage("Đã lưu Elo ban đầu. Từ bây giờ level chỉ cập nhật qua feedback và lịch sử trận đấu.");
-      await loadSummary();
+      const createdJob = await apiFetch<VideoAssessment>(
+        "/api/v1/player/video-assessments",
+        {
+          method: "POST",
+          credentials: "include",
+          body: formData,
+        },
+        { timeoutMs: 30000 },
+      );
+      setVideoJob(createdJob);
+      setUploadState(createdJob.status === "failed" ? "failed" : "analyzing");
+      setMessage("Video đã được nhận. NetUp đang chờ Gemini trả kết quả.");
+
+      if (createdJob.status === "completed") {
+        setUploadState("completed");
+        await loadSummary();
+        return;
+      }
+      if (createdJob.status === "failed") {
+        setError(createdJob.error_message ?? "Gemini chưa phân tích được video.");
+        return;
+      }
+      await pollVideoAssessment(createdJob.assessment_id);
     } catch (caught) {
-      setError(errorMessage(caught, "Không lưu được Elo ban đầu"));
-    } finally {
-      setIsSubmitting(false);
+      setUploadState("failed");
+      setError(errorMessage(caught, "Không upload được video đánh giá"));
     }
   }
 
@@ -146,8 +272,8 @@ export default function PlayerAssessmentPage() {
       <div className="space-y-5">
         <PageHero
           eyebrow="Elo người chơi"
-          title="Elo ban đầu đã được lưu cho tài khoản này."
-          description="NetUp không mở lại bước đánh giá ban đầu. Từ bây giờ level chỉ được cập nhật qua feedback và lịch sử trận đấu."
+          title="Level ban đầu đã được lưu cho tài khoản này."
+          description="NetUp không mở lại route đánh giá ban đầu. Sau bước này level chỉ cập nhật qua kết quả trận và feedback sau trận."
           actions={
             <>
               <ButtonLink href="/player/discovery?mode=matchmaking">Tìm kèo phù hợp</ButtonLink>
@@ -172,7 +298,7 @@ export default function PlayerAssessmentPage() {
         </section>
 
         <Card className="space-y-3">
-          <h2 className="font-heading text-xl font-semibold text-ink">Lịch sử cập nhật Elo</h2>
+          <h2 className="font-heading text-xl font-semibold text-ink">Lịch sử cập nhật level</h2>
           {history.length === 0 ? (
             <p className="text-sm text-slate-600">Chưa có lịch sử thay đổi level.</p>
           ) : (
@@ -198,35 +324,40 @@ export default function PlayerAssessmentPage() {
   return (
     <div className="space-y-5">
       <PageHero
-        eyebrow="Onboarding người chơi"
-        title="Thiết lập trình độ ban đầu một lần."
+        eyebrow="Onboarding video"
+        title="Upload video để khởi tạo level ban đầu."
         description={message}
+        aside={
+          <div className="grid gap-3 rounded-lg border border-red-100 bg-red-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-red-800">Trạng thái</p>
+            <p className="font-heading text-2xl font-semibold text-red-950">{uploadStateText(uploadState)}</p>
+            <p className="text-sm text-red-900">
+              Level hiện tại: <span className="font-semibold">{currentLevel}</span>
+            </p>
+          </div>
+        }
       />
 
       {error ? <Notice tone="danger">{error}</Notice> : null}
+      {videoJob?.warning ? <Notice tone="warning">{videoJob.warning}</Notice> : null}
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          label="Level hiện tại"
-          value={summary?.visible_skill_tier ?? "Chưa có"}
-          helper="Sẽ được lưu vào Elo"
-          tone="accent"
-        />
+        <StatCard label="Level hiện tại" value={currentLevel} helper="Sẽ được lưu sau khi AI hoàn tất" tone="accent" />
         <StatCard label="Trận đã chơi" value={summary?.matches_played ?? 0} helper="Dữ liệu lịch đấu" />
         <StatCard label="Thắng / Hòa / Thua" value={`${summary?.wins ?? 0}/${summary?.draws ?? 0}/${summary?.losses ?? 0}`} />
         <StatCard
-          label="Thiết lập ban đầu"
-          value={summary?.last_assessment ? sportLabel(summary.last_assessment.sport) : "Chưa có"}
-          helper={summary?.last_assessment ? formatFullDateTime(summary.last_assessment.updated_at) : undefined}
+          label="Độ tin cậy"
+          value={videoJob?.confidence !== null && videoJob?.confidence !== undefined ? `${Math.round(videoJob.confidence * 100)}%` : "-"}
+          helper="Từ Gemini"
         />
       </section>
 
-      <section className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
-        <form onSubmit={onSubmit} className="space-y-5 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
+        <form onSubmit={submitVideo} className="space-y-5 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
           <div>
-            <h2 className="font-heading text-xl font-semibold text-ink">Thiết lập Elo ban đầu</h2>
+            <h2 className="font-heading text-xl font-semibold text-ink">Video đánh giá ban đầu</h2>
             <p className="mt-1 text-sm leading-6 text-slate-600">
-              Bước này chỉ thực hiện một lần sau khi đăng nhập lần đầu. NetUp không hiển thị điểm Elo thô cho người chơi.
+              Hỗ trợ mp4, mov, webm. Giới hạn mặc định là 5MB và 60 giây, admin có thể điều chỉnh trong cấu hình hệ thống.
             </p>
           </div>
 
@@ -234,91 +365,119 @@ export default function PlayerAssessmentPage() {
             <select
               className={inputClassName}
               value={sport}
-              onChange={(event) => onSportChange(event.target.value as Sport)}
+              onChange={(event) => setSport(event.target.value as Sport)}
+              disabled={uploadState === "uploading" || uploadState === "analyzing"}
             >
-              <option value="Badminton">Cầu lông</option>
-              <option value="Football">Bóng đá</option>
-              <option value="Tennis">Tennis</option>
+              {sportOptions.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
             </select>
           </Field>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            {questions.map((question) => (
-              <div key={question.key} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-900">{question.label}</p>
-                    <p className="mt-1 text-xs leading-5 text-slate-500">{question.helper}</p>
-                  </div>
-                  <Badge tone="info">{answers[question.key] ?? question.min}</Badge>
-                </div>
-                <input
-                  className="mt-4 w-full accent-red-800"
-                  type="range"
-                  min={question.min}
-                  max={question.max}
-                  value={answers[question.key] ?? question.min}
-                  onChange={(event) => onAnswerChange(question.key, event.target.value)}
-                />
-                <div className="mt-1 flex justify-between text-xs text-slate-500">
-                  <span>{question.min}</span>
-                  <span>{question.max}</span>
-                </div>
-              </div>
-            ))}
-          </div>
+          <Field label="Video kỹ thuật">
+            <input
+              className={inputClassName}
+              type="file"
+              accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm"
+              onChange={onFileChange}
+              disabled={uploadState === "uploading" || uploadState === "analyzing"}
+            />
+          </Field>
 
-          <Button disabled={isSubmitting}>{isSubmitting ? "Đang lưu..." : "Lưu Elo ban đầu"}</Button>
+          {filePreview ? (
+            <div className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 sm:grid-cols-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">File</p>
+                <p className="mt-1 truncate font-semibold text-slate-950">{filePreview.name}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Dung lượng</p>
+                <p className="mt-1 font-semibold text-slate-950">{fileSizeLabel(filePreview.sizeBytes)}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Thời lượng</p>
+                <p className="mt-1 font-semibold text-slate-950">{durationLabel(filePreview.durationSeconds)}</p>
+              </div>
+            </div>
+          ) : null}
+
+          <Button disabled={!selectedFile || uploadState === "uploading" || uploadState === "analyzing"}>
+            {uploadState === "uploading"
+              ? "Đang upload..."
+              : uploadState === "analyzing"
+                ? "Đang phân tích..."
+                : "Gửi video đánh giá"}
+          </Button>
         </form>
 
         <div className="space-y-5">
           <Card className="space-y-3">
-            <h2 className="font-heading text-xl font-semibold text-ink">Tóm tắt level</h2>
-            {summary ? (
-              <div className="space-y-3 text-sm text-slate-700">
-                <div className="rounded-lg border border-red-100 bg-red-50 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-red-800">
-                    Level hiển thị
-                  </p>
-                  <p className="mt-1 font-heading text-2xl font-semibold text-red-950">
-                    {summary.visible_skill_tier}
-                  </p>
+            <h2 className="font-heading text-xl font-semibold text-ink">Hướng dẫn quay video</h2>
+            <div className="grid gap-3">
+              {uploadGuidelines.map((item, index) => (
+                <div key={item} className="flex gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-red-800 text-xs font-semibold text-white">
+                    {index + 1}
+                  </span>
+                  <p className="text-sm leading-6 text-slate-700">{item}</p>
                 </div>
-                <p>
-                  Thành tích hiện tại: {summary.wins} thắng, {summary.draws} hòa, {summary.losses} thua.
-                </p>
-                <p>
-                  Thiết lập ban đầu:{" "}
-                  {summary.last_assessment
-                    ? `${sportLabel(summary.last_assessment.sport)} · ${formatFullDateTime(summary.last_assessment.updated_at)}`
-                    : "chưa có"}
-                </p>
-              </div>
-            ) : (
-              <p className="text-sm leading-6 text-slate-600">
-                Hoàn tất bước thiết lập ban đầu để NetUp tính level hiển thị.
-              </p>
-            )}
+              ))}
+            </div>
           </Card>
 
           <Card className="space-y-3">
-            <h2 className="font-heading text-xl font-semibold text-ink">Lịch sử cập nhật</h2>
-            {history.length === 0 ? (
-              <p className="text-sm text-slate-600">Chưa có lịch sử thay đổi level.</p>
-            ) : (
-              <div className="grid gap-3">
-                {history.map((item) => (
-                  <div key={item.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="font-semibold text-slate-900">
-                        {item.skill_tier_before} sang {item.skill_tier_after}
-                      </p>
-                      <Badge tone={item.delta >= 0 ? "success" : "warning"}>{trendText(item.delta)}</Badge>
+            <h2 className="font-heading text-xl font-semibold text-ink">Kết quả AI</h2>
+            {videoJob?.status === "completed" ? (
+              <div className="space-y-4 text-sm text-slate-700">
+                <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700">
+                    Level đề xuất
+                  </p>
+                  <p className="mt-1 font-heading text-2xl font-semibold text-emerald-950">
+                    {videoJob.computed_skill_tier}
+                  </p>
+                </div>
+                <p className="leading-6">{videoJob.summary}</p>
+
+                {videoJob.strengths.length > 0 ? (
+                  <div>
+                    <p className="font-semibold text-slate-950">Điểm mạnh</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {videoJob.strengths.map((item) => (
+                        <Badge key={item} tone="success">
+                          {item}
+                        </Badge>
+                      ))}
                     </div>
-                    <p className="mt-1 text-slate-600">{formatFullDateTime(item.created_at)}</p>
                   </div>
-                ))}
+                ) : null}
+
+                {videoJob.improvement_areas.length > 0 ? (
+                  <div>
+                    <p className="font-semibold text-slate-950">Gợi ý cải thiện</p>
+                    <div className="mt-2 grid gap-2">
+                      {videoJob.improvement_areas.map((item) => (
+                        <p key={item} className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-amber-900">
+                          {item}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="flex flex-wrap gap-2">
+                  <ButtonLink href="/player/discovery?mode=matchmaking">Tìm kèo phù hợp</ButtonLink>
+                  <ButtonLink href="/player/bookings" variant="outline">
+                    Xem booking
+                  </ButtonLink>
+                </div>
               </div>
+            ) : (
+              <p className="text-sm leading-6 text-slate-600">
+                Kết quả sẽ hiển thị ở đây sau khi Gemini trả về JSON hợp lệ và backend lưu level ban đầu.
+              </p>
             )}
           </Card>
         </div>

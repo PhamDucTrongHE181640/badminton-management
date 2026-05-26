@@ -22,6 +22,10 @@ NO_SHOW_LIMIT_MIN = 1
 NO_SHOW_LIMIT_MAX = 10
 AUTO_RELEASE_MIN = 5
 AUTO_RELEASE_MAX = 120
+VIDEO_ASSESSMENT_SIZE_MIN = 1
+VIDEO_ASSESSMENT_SIZE_MAX = 100
+VIDEO_ASSESSMENT_DURATION_MIN = 5
+VIDEO_ASSESSMENT_DURATION_MAX = 300
 
 
 def _audit(
@@ -76,6 +80,10 @@ def _config_from_row(row: Any) -> dict[str, Any]:
         "matching_radius_km": float(Decimal(row.matching_radius_km)),
         "no_show_strike_limit": int(row.no_show_strike_limit),
         "auto_release_minutes": int(row.auto_release_minutes),
+        "video_assessment_max_size_mb": int(row.video_assessment_max_size_mb),
+        "video_assessment_max_duration_seconds": int(
+            row.video_assessment_max_duration_seconds
+        ),
         "support_hotline_enabled": bool(row.support_hotline_enabled),
         "updated_at": row.updated_at,
     }
@@ -93,6 +101,8 @@ def get_admin_config() -> dict[str, Any]:
                   matching_radius_km,
                   no_show_strike_limit,
                   auto_release_minutes,
+                  video_assessment_max_size_mb,
+                  video_assessment_max_duration_seconds,
                   support_hotline_enabled,
                   updated_at
                 FROM public.admin_configs
@@ -183,6 +193,10 @@ def update_admin_config(*, actor_user_id: str, data: dict[str, Any]) -> dict[str
     matching_radius_km = _to_decimal(data, "matching_radius_km")
     no_show_strike_limit = _to_int(data, "no_show_strike_limit")
     auto_release_minutes = _to_int(data, "auto_release_minutes")
+    video_assessment_max_size_mb = _to_int(data, "video_assessment_max_size_mb")
+    video_assessment_max_duration_seconds = _to_int(
+        data, "video_assessment_max_duration_seconds"
+    )
 
     support_hotline_enabled: bool | None
     if "support_hotline_enabled" not in data or data["support_hotline_enabled"] is None:
@@ -251,6 +265,26 @@ def update_admin_config(*, actor_user_id: str, data: dict[str, Any]) -> dict[str
         )
         patch_fields["auto_release_minutes"] = auto_release_minutes
 
+    if video_assessment_max_size_mb is not None:
+        _validate_range_int(
+            key="video_assessment_max_size_mb",
+            value=video_assessment_max_size_mb,
+            minimum=VIDEO_ASSESSMENT_SIZE_MIN,
+            maximum=VIDEO_ASSESSMENT_SIZE_MAX,
+        )
+        patch_fields["video_assessment_max_size_mb"] = video_assessment_max_size_mb
+
+    if video_assessment_max_duration_seconds is not None:
+        _validate_range_int(
+            key="video_assessment_max_duration_seconds",
+            value=video_assessment_max_duration_seconds,
+            minimum=VIDEO_ASSESSMENT_DURATION_MIN,
+            maximum=VIDEO_ASSESSMENT_DURATION_MAX,
+        )
+        patch_fields[
+            "video_assessment_max_duration_seconds"
+        ] = video_assessment_max_duration_seconds
+
     if support_hotline_enabled is not None:
         patch_fields["support_hotline_enabled"] = support_hotline_enabled
 
@@ -272,6 +306,8 @@ def update_admin_config(*, actor_user_id: str, data: dict[str, Any]) -> dict[str
                   matching_radius_km,
                   no_show_strike_limit,
                   auto_release_minutes,
+                  video_assessment_max_size_mb,
+                  video_assessment_max_duration_seconds,
                   support_hotline_enabled,
                   updated_at
                 FROM public.admin_configs
@@ -309,6 +345,8 @@ def update_admin_config(*, actor_user_id: str, data: dict[str, Any]) -> dict[str
                   matching_radius_km,
                   no_show_strike_limit,
                   auto_release_minutes,
+                  video_assessment_max_size_mb,
+                  video_assessment_max_duration_seconds,
                   support_hotline_enabled,
                   updated_at
                 """

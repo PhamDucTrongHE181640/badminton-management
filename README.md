@@ -23,6 +23,8 @@ cp frontend/.env.example frontend/.env
 The root `.env` only controls Docker Compose host ports. Backend secrets and
 OAuth keys belong in `backend/.env`; frontend should only contain public
 browser-safe values such as `NEXT_PUBLIC_API_BASE_URL`.
+Gemini credentials for video assessment also belong in `backend/.env`
+(`GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_TIMEOUT_SECONDS`).
 
 ```bash
 docker compose up --build

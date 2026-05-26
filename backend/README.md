@@ -33,6 +33,11 @@ GOOGLE_REDIRECT_URI=http://localhost:8000/api/v1/auth/google/callback
 ADMIN_LOGIN_MAX_ATTEMPTS=5
 ADMIN_LOGIN_WINDOW_MINUTES=15
 ADMIN_LOGIN_BLOCK_MINUTES=15
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-2.5-flash-lite
+GEMINI_TIMEOUT_SECONDS=45
+VIDEO_ASSESSMENT_MAX_SIZE_MB=5
+VIDEO_ASSESSMENT_MAX_DURATION_SECONDS=60
 ```
 
 ## Migrations
@@ -120,6 +125,8 @@ transaction.
 
 ## Match and Feedback Endpoints
 
+- `POST /api/v1/player/video-assessments`
+- `GET /api/v1/player/video-assessments/{assessment_id}`
 - `POST /api/v1/player/matches`
 - `GET /api/v1/player/matches/{match_id}`
 - `POST /api/v1/player/matches/{match_id}/feedback`

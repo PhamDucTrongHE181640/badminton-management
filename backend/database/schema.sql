@@ -202,6 +202,8 @@ CREATE TABLE IF NOT EXISTS public.admin_configs (
   matching_radius_km numeric(6,2) NOT NULL CHECK (matching_radius_km > 0),
   no_show_strike_limit integer NOT NULL CHECK (no_show_strike_limit >= 1),
   auto_release_minutes integer NOT NULL CHECK (auto_release_minutes BETWEEN 1 AND 180),
+  video_assessment_max_size_mb integer NOT NULL DEFAULT 5 CHECK (video_assessment_max_size_mb BETWEEN 1 AND 100),
+  video_assessment_max_duration_seconds integer NOT NULL DEFAULT 60 CHECK (video_assessment_max_duration_seconds BETWEEN 5 AND 300),
   support_hotline_enabled boolean NOT NULL DEFAULT true,
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -214,9 +216,11 @@ INSERT INTO public.admin_configs (
   matching_radius_km,
   no_show_strike_limit,
   auto_release_minutes,
+  video_assessment_max_size_mb,
+  video_assessment_max_duration_seconds,
   support_hotline_enabled
 )
-VALUES (1, 0.10, 3000, 30.00, 5.00, 3, 15, true)
+VALUES (1, 0.10, 3000, 30.00, 5.00, 3, 15, 5, 60, true)
 ON CONFLICT (id) DO NOTHING;
 
 -- Court inventory
@@ -400,6 +404,32 @@ CREATE TABLE IF NOT EXISTS public.player_assessments (
   updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (player_user_id, sport)
 );
+
+CREATE TABLE IF NOT EXISTS public.video_assessments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  player_user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  sport public.sport_type NOT NULL,
+  storage_key text NOT NULL,
+  original_filename text NOT NULL,
+  mime_type text NOT NULL CHECK (mime_type IN ('video/mp4', 'video/quicktime', 'video/webm')),
+  file_size_bytes integer NOT NULL CHECK (file_size_bytes > 0),
+  duration_seconds numeric(8,2) CHECK (duration_seconds IS NULL OR duration_seconds >= 0),
+  status text NOT NULL DEFAULT 'uploaded' CHECK (status IN ('uploaded', 'analyzing', 'completed', 'failed')),
+  llm_provider text NOT NULL DEFAULT 'gemini' CHECK (llm_provider = 'gemini'),
+  llm_model text,
+  llm_raw_response jsonb,
+  normalized_result jsonb,
+  computed_elo integer CHECK (computed_elo BETWEEN 100 AND 5000),
+  computed_skill_tier public.skill_tier,
+  confidence numeric(4,3) CHECK (confidence IS NULL OR confidence BETWEEN 0 AND 1),
+  error_message text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_video_assessments_player_active
+ON public.video_assessments(player_user_id)
+WHERE status IN ('uploaded', 'analyzing', 'completed');
 
 CREATE TABLE IF NOT EXISTS public.elo_ratings (
   player_user_id uuid PRIMARY KEY REFERENCES public.users(id) ON DELETE CASCADE,
@@ -820,6 +850,11 @@ CREATE TRIGGER trg_player_assessments_updated_at
 BEFORE UPDATE ON public.player_assessments
 FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
+DROP TRIGGER IF EXISTS trg_video_assessments_updated_at ON public.video_assessments;
+CREATE TRIGGER trg_video_assessments_updated_at
+BEFORE UPDATE ON public.video_assessments
+FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
 DROP TRIGGER IF EXISTS trg_elo_ratings_updated_at ON public.elo_ratings;
 CREATE TRIGGER trg_elo_ratings_updated_at
 BEFORE UPDATE ON public.elo_ratings
@@ -878,6 +913,8 @@ CREATE INDEX IF NOT EXISTS idx_payment_external_ref ON public.payment_transactio
 CREATE INDEX IF NOT EXISTS idx_checkins_owner_time ON public.checkins(owner_user_id, checked_in_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_assessments_player_sport ON public.player_assessments(player_user_id, sport);
+CREATE INDEX IF NOT EXISTS idx_video_assessments_player_time ON public.video_assessments(player_user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_video_assessments_status_time ON public.video_assessments(status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_match_events_session ON public.match_events(session_id);
 CREATE INDEX IF NOT EXISTS idx_match_participants_match ON public.match_participants(match_id);
 CREATE INDEX IF NOT EXISTS idx_match_feedback_match ON public.match_feedback(match_id);
