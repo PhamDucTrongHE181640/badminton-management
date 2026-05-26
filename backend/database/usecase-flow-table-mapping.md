@@ -77,11 +77,14 @@ Quy uoc coverage:
 
 ### 3.4 Elo + match feedback flow
 1. Onboarding assessment:
-- Write: `video_assessments` (upload/analyzing/completed/failed)
-- Write: `player_assessments`
+- Write: `player_assessments` tu form onboarding ban dau
 - Upsert: `elo_ratings`
-- Insert: `elo_rating_history` (reason=video_assessment_initial hoac onboarding legacy)
-2. Sau tran:
+- Insert: `elo_rating_history` (reason=assessment_onboarding)
+2. Video reassessment:
+- Write: `video_assessments` (upload/analyzing/completed/failed)
+- Upsert: `elo_ratings`
+- Insert: `elo_rating_history` (reason=video_reassessment, hoac video_assessment_initial neu chua co assessment legacy)
+3. Sau tran:
 - Write: `match_events`, `match_participants`
 - Write: `match_feedback`
 - Service tinh Elo:
@@ -112,7 +115,8 @@ Quy uoc coverage:
 | Chi member hop le moi vao chat | `chat_room_members` trigger `validate_chat_member_row` |
 | Feedback khong self + dung teammate/opponent | `match_feedback` constraints + trigger `validate_match_feedback_row` |
 | Luu lich su bien dong Elo | `elo_rating_history` |
-| Video AI chi tao Elo ban dau mot lan | `video_assessments` partial unique + service check `player_assessments` |
+| Form onboarding chi tao Elo ban dau mot lan | `player_assessments` unique + service check |
+| Video AI co the danh gia lai sau onboarding | `video_assessments` partial unique chi chan uploaded/analyzing |
 
 ## 5) Coverage ket luan
 

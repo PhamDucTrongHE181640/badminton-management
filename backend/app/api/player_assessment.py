@@ -75,6 +75,16 @@ class EloHistoryItemResponse(BaseModel):
     skill_tier_after: str
 
 
+class AspectEvaluationResponse(BaseModel):
+    key: str
+    label: str
+    score: int
+    tier: str
+    feedback: str
+    evidence: str
+    improvement_tip: str
+
+
 class VideoAssessmentResponse(BaseModel):
     assessment_id: str
     sport: str
@@ -85,6 +95,11 @@ class VideoAssessmentResponse(BaseModel):
     duration_seconds: float | None
     computed_skill_tier: str | None
     confidence: float | None
+    technical_score: int | None
+    movement_score: int | None
+    consistency_score: int | None
+    game_reading_score: int | None
+    aspect_evaluations: list[AspectEvaluationResponse]
     summary: str | None
     strengths: list[str]
     improvement_areas: list[str]

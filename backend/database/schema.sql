@@ -429,7 +429,7 @@ CREATE TABLE IF NOT EXISTS public.video_assessments (
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_video_assessments_player_active
 ON public.video_assessments(player_user_id)
-WHERE status IN ('uploaded', 'analyzing', 'completed');
+WHERE status IN ('uploaded', 'analyzing');
 
 CREATE TABLE IF NOT EXISTS public.elo_ratings (
   player_user_id uuid PRIMARY KEY REFERENCES public.users(id) ON DELETE CASCADE,

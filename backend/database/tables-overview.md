@@ -220,7 +220,7 @@ Danh sach bang:
   - `computed_elo` trong [100..5000].
 
 ### `video_assessments`
-- Muc dich: Job upload video va ket qua Gemini de khoi tao Elo ban dau.
+- Muc dich: Job upload video va ket qua Gemini de danh gia lai player hoac khoi tao Elo neu chua onboard.
 - Primary key: `id`.
 - Foreign key: `player_user_id -> users.id`.
 - Cot chinh:
@@ -231,7 +231,7 @@ Danh sach bang:
   - `created_at`, `updated_at`.
 - Rang buoc:
   - `status` chi gom uploaded/analyzing/completed/failed.
-  - Partial unique moi player chi co 1 job active/completed.
+  - Partial unique moi player chi co 1 job active uploaded/analyzing.
 
 ### `elo_ratings`
 - Muc dich: Diem Elo hien tai cua moi player.

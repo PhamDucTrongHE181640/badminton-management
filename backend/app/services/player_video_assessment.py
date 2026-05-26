@@ -38,6 +38,25 @@ GEMINI_GENERATE_CONTENT_URL = (
     "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 )
 
+ASSESSMENT_ASPECTS: dict[str, dict[str, str]] = {
+    "technical": {
+        "label": "Kỹ thuật",
+        "description": "Kỹ thuật chính của môn, kiểm soát dụng cụ hoặc bóng/cầu.",
+    },
+    "movement": {
+        "label": "Di chuyển và thể lực",
+        "description": "Footwork, tốc độ đổi hướng, khả năng giữ nhịp vận động.",
+    },
+    "consistency": {
+        "label": "Độ ổn định",
+        "description": "Khả năng lặp lại động tác, kiểm soát lỗi và duy trì pha bóng.",
+    },
+    "game_reading": {
+        "label": "Đọc tình huống",
+        "description": "Chọn vị trí, ra quyết định và phản ứng với diễn biến chơi.",
+    },
+}
+
 VIDEO_ASSESSMENT_RESPONSE_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -55,6 +74,38 @@ VIDEO_ASSESSMENT_RESPONSE_SCHEMA: dict[str, Any] = {
         "strengths": {"type": "array", "items": {"type": "string"}, "maxItems": 5},
         "improvement_areas": {"type": "array", "items": {"type": "string"}, "maxItems": 5},
         "summary": {"type": "string"},
+        "aspect_evaluations": {
+            "type": "array",
+            "minItems": 4,
+            "maxItems": 4,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "key": {
+                        "type": "string",
+                        "enum": ["technical", "movement", "consistency", "game_reading"],
+                    },
+                    "label": {"type": "string"},
+                    "score": {"type": "integer", "minimum": 0, "maximum": 100},
+                    "tier": {
+                        "type": "string",
+                        "enum": ["Beginner", "Intermediate", "Advanced"],
+                    },
+                    "feedback": {"type": "string"},
+                    "evidence": {"type": "string"},
+                    "improvement_tip": {"type": "string"},
+                },
+                "required": [
+                    "key",
+                    "label",
+                    "score",
+                    "tier",
+                    "feedback",
+                    "evidence",
+                    "improvement_tip",
+                ],
+            },
+        },
     },
     "required": [
         "sport",
@@ -68,6 +119,7 @@ VIDEO_ASSESSMENT_RESPONSE_SCHEMA: dict[str, Any] = {
         "strengths",
         "improvement_areas",
         "summary",
+        "aspect_evaluations",
     ],
 }
 
@@ -171,6 +223,11 @@ def _video_row_to_dict(row: Any) -> dict[str, Any]:
             str(row.computed_skill_tier) if row.computed_skill_tier else None
         ),
         "confidence": float(row.confidence) if row.confidence is not None else None,
+        "technical_score": normalized_result.get("technical_score"),
+        "movement_score": normalized_result.get("movement_score"),
+        "consistency_score": normalized_result.get("consistency_score"),
+        "game_reading_score": normalized_result.get("game_reading_score"),
+        "aspect_evaluations": normalized_result.get("aspect_evaluations") or [],
         "summary": normalized_result.get("summary"),
         "strengths": normalized_result.get("strengths") or [],
         "improvement_areas": normalized_result.get("improvement_areas") or [],
@@ -385,24 +442,6 @@ def create_video_assessment(
             text("SELECT pg_advisory_xact_lock(hashtext(:player_user_id))"),
             {"player_user_id": player_user_id},
         )
-        existing_assessment = connection.execute(
-            text(
-                """
-                SELECT id
-                FROM public.player_assessments
-                WHERE player_user_id = :player_user_id
-                LIMIT 1
-                """
-            ),
-            {"player_user_id": player_user_id},
-        ).first()
-        if existing_assessment is not None:
-            raise AppError(
-                status_code=409,
-                code="assessment_already_submitted",
-                message="Tài khoản đã có Elo ban đầu, không thể đánh giá lại",
-            )
-
         job_timeout_seconds = max(60, int(settings.gemini_timeout_seconds) * 2)
         connection.execute(
             text(
@@ -428,7 +467,7 @@ def create_video_assessment(
                 SELECT id
                 FROM public.video_assessments
                 WHERE player_user_id = :player_user_id
-                  AND status IN ('uploaded', 'analyzing', 'completed')
+                  AND status IN ('uploaded', 'analyzing')
                 LIMIT 1
                 """
             ),
@@ -438,7 +477,7 @@ def create_video_assessment(
             raise AppError(
                 status_code=409,
                 code="video_assessment_active_exists",
-                message="Tài khoản đang có job đánh giá video hoặc đã hoàn tất đánh giá",
+                message="Tài khoản đang có job đánh giá video, vui lòng đợi job hiện tại hoàn tất",
             )
 
         recent_count = connection.execute(
@@ -523,7 +562,7 @@ def create_video_assessment(
             raise AppError(
                 status_code=409,
                 code="video_assessment_active_exists",
-                message="Tài khoản đang có job đánh giá video hoặc đã hoàn tất đánh giá",
+                message="Tài khoản đang có job đánh giá video, vui lòng đợi job hiện tại hoàn tất",
             ) from exc
 
         _audit(
@@ -626,12 +665,36 @@ def _mark_video_assessment_analyzing(*, assessment_id: str) -> dict[str, Any] | 
 
 
 def _prompt_for_video_assessment(*, sport: str) -> str:
+    sport_focus = {
+        "Badminton": (
+            "Kỹ thuật gồm cầm vợt, clear/drop/smash/net shot và kiểm soát cầu. "
+            "Di chuyển gồm split step, bước chéo, phục hồi vị trí. "
+            "Độ ổn định gồm giữ rally, hạn chế lỗi dễ, điểm tiếp xúc cầu. "
+            "Đọc tình huống gồm chọn vị trí, dự đoán hướng cầu và quyết định đánh."
+        ),
+        "Football": (
+            "Kỹ thuật gồm chạm bóng bước một, rê/chuyền/sút và kiểm soát bóng. "
+            "Di chuyển gồm tốc độ, đổi hướng, thể lực và di chuyển không bóng. "
+            "Độ ổn định gồm độ chính xác chuyền, xử lý dưới áp lực và nhịp động tác. "
+            "Đọc tình huống gồm quan sát khoảng trống, chọn phương án và phối hợp đội."
+        ),
+        "Tennis": (
+            "Kỹ thuật gồm forehand/backhand/serve/volley và kiểm soát mặt vợt. "
+            "Di chuyển gồm footwork, tiếp cận bóng, phục hồi vị trí. "
+            "Độ ổn định gồm duy trì rally, điểm tiếp xúc và kiểm soát lỗi. "
+            "Đọc tình huống gồm chọn hướng đánh, vị trí đứng và phản ứng với bóng."
+        ),
+    }.get(sport, "")
     return (
         "Bạn là chuyên gia huấn luyện thể thao đang đánh giá video ngắn để khởi tạo "
         "level matchmaking nội bộ cho NetUp. Chỉ đánh giá người chơi chính trong video. "
         f"Môn thể thao người dùng chọn là {sport}. "
         "Trả về JSON thuần, không markdown, không giải thích ngoài JSON. "
         "Các điểm số nằm trong 0..100. Elo đề xuất nằm trong 900..2000. "
+        "Bắt buộc đánh giá 4 khía cạnh: technical, movement, consistency, game_reading. "
+        "Mỗi khía cạnh phải có score, tier, feedback, evidence quan sát từ video, "
+        "và improvement_tip cụ thể để người chơi cải thiện. "
+        f"Định nghĩa khía cạnh theo môn: {sport_focus} "
         "Beginner tương ứng người mới hoặc kỹ thuật chưa ổn định; Intermediate tương ứng "
         "người chơi phong trào kiểm soát tốt; Advanced tương ứng người có kỹ thuật và "
         "di chuyển thi đấu rõ ràng. Nếu video mờ, thiếu người chơi chính hoặc không đủ "
@@ -774,6 +837,90 @@ def _clean_text_list(value: Any) -> list[str]:
     return cleaned
 
 
+def _aspect_tier_from_score(score: int) -> str:
+    if score < 45:
+        return "Beginner"
+    if score < 75:
+        return "Intermediate"
+    return "Advanced"
+
+
+def _aspect_score_key(aspect_key: str) -> str:
+    return f"{aspect_key}_score" if aspect_key != "technical" else "technical_score"
+
+
+def _fallback_aspect_feedback(*, aspect_key: str, score: int) -> str:
+    label = ASSESSMENT_ASPECTS[aspect_key]["label"].lower()
+    if score < 45:
+        return (
+            f"{label.capitalize()} còn ở mức nền tảng, "
+            "cần video rõ hơn hoặc thêm luyện tập cơ bản."
+        )
+    if score < 75:
+        return (
+            f"{label.capitalize()} ở mức ổn cho phong trào, "
+            "vẫn cần cải thiện độ chính xác và nhịp xử lý."
+        )
+    return f"{label.capitalize()} thể hiện tốt, có dấu hiệu kiểm soát và vận động ổn định."
+
+
+def _normalize_aspect_evaluations(llm_result: dict[str, Any]) -> list[dict[str, Any]]:
+    raw_items = llm_result.get("aspect_evaluations")
+    raw_by_key: dict[str, dict[str, Any]] = {}
+    if isinstance(raw_items, list):
+        for item in raw_items:
+            if not isinstance(item, dict):
+                continue
+            key = str(item.get("key") or "").strip()
+            if key in ASSESSMENT_ASPECTS:
+                raw_by_key[key] = item
+
+    normalized: list[dict[str, Any]] = []
+    for aspect_key, spec in ASSESSMENT_ASPECTS.items():
+        raw_item = raw_by_key.get(aspect_key, {})
+        fallback_score = _clamp_int(
+            llm_result.get(_aspect_score_key(aspect_key)),
+            minimum=0,
+            maximum=100,
+            default=0,
+        )
+        score = _clamp_int(
+            raw_item.get("score"),
+            minimum=0,
+            maximum=100,
+            default=fallback_score,
+        )
+        tier = str(raw_item.get("tier") or "").strip()
+        if tier not in {"Beginner", "Intermediate", "Advanced"}:
+            tier = _aspect_tier_from_score(score)
+
+        feedback = _clean_text(
+            raw_item.get("feedback"),
+            fallback=_fallback_aspect_feedback(aspect_key=aspect_key, score=score),
+        )
+        evidence = _clean_text(
+            raw_item.get("evidence"),
+            fallback="Chưa có bằng chứng đủ rõ từ video.",
+        )
+        improvement_tip = _clean_text(
+            raw_item.get("improvement_tip"),
+            fallback=spec["description"],
+        )
+
+        normalized.append(
+            {
+                "key": aspect_key,
+                "label": _clean_text(raw_item.get("label"), fallback=spec["label"]),
+                "score": score,
+                "tier": tier,
+                "feedback": feedback,
+                "evidence": evidence,
+                "improvement_tip": improvement_tip,
+            }
+        )
+    return normalized
+
+
 def normalize_llm_assessment_result(
     *, sport: str, llm_result: dict[str, Any]
 ) -> dict[str, Any]:
@@ -803,32 +950,19 @@ def normalize_llm_assessment_result(
     if warning and warning not in improvement_areas:
         improvement_areas = [warning, *improvement_areas[:4]]
 
+    aspect_evaluations = _normalize_aspect_evaluations(llm_result)
+    aspect_score_by_key = {
+        str(item["key"]): int(item["score"])
+        for item in aspect_evaluations
+    }
+
     return {
         "sport": sport,
-        "technical_score": _clamp_int(
-            llm_result.get("technical_score"),
-            minimum=0,
-            maximum=100,
-            default=0,
-        ),
-        "movement_score": _clamp_int(
-            llm_result.get("movement_score"),
-            minimum=0,
-            maximum=100,
-            default=0,
-        ),
-        "consistency_score": _clamp_int(
-            llm_result.get("consistency_score"),
-            minimum=0,
-            maximum=100,
-            default=0,
-        ),
-        "game_reading_score": _clamp_int(
-            llm_result.get("game_reading_score"),
-            minimum=0,
-            maximum=100,
-            default=0,
-        ),
+        "technical_score": aspect_score_by_key["technical"],
+        "movement_score": aspect_score_by_key["movement"],
+        "consistency_score": aspect_score_by_key["consistency"],
+        "game_reading_score": aspect_score_by_key["game_reading"],
+        "aspect_evaluations": aspect_evaluations,
         "suggested_skill_tier": computed_tier,
         "suggested_initial_elo": suggested_elo,
         "confidence": round(confidence, 3),
@@ -852,7 +986,6 @@ def _complete_video_assessment(
     computed_elo = int(normalized_result["suggested_initial_elo"])
     computed_tier = str(normalized_result["suggested_skill_tier"])
     confidence = float(normalized_result["confidence"])
-    reason = f"video_assessment_initial:{sport}:{assessment_id}"
 
     with get_engine().begin() as connection:
         row = connection.execute(
@@ -881,13 +1014,17 @@ def _complete_video_assessment(
                 SELECT id
                 FROM public.player_assessments
                 WHERE player_user_id = :player_user_id
+                ORDER BY created_at ASC
                 LIMIT 1
                 """
             ),
             {"player_user_id": player_user_id},
         ).first()
-        if existing_assessment is not None:
-            raise GeminiAssessmentError("Tài khoản đã có Elo ban đầu")
+        is_initial_assessment = existing_assessment is None
+        reason_prefix = (
+            "video_assessment_initial" if is_initial_assessment else "video_reassessment"
+        )
+        reason = f"{reason_prefix}:{sport}:{assessment_id}"
 
         previous_elo_row = connection.execute(
             text(
@@ -902,45 +1039,48 @@ def _complete_video_assessment(
         ).first()
         old_elo = int(previous_elo_row.elo_value) if previous_elo_row else BASELINE_ELO
 
-        try:
-            player_assessment_row = connection.execute(
-                text(
-                    """
-                    INSERT INTO public.player_assessments (
-                      player_user_id,
-                      sport,
-                      form_version,
-                      answers,
-                      computed_elo,
-                      computed_skill_tier
-                    )
-                    VALUES (
-                      :player_user_id,
-                      CAST(:sport AS public.sport_type),
-                      'video:v1',
-                      :answers,
-                      :computed_elo,
-                      CAST(:computed_skill_tier AS public.skill_tier)
-                    )
-                    RETURNING id
-                    """
-                ),
-                {
-                    "player_user_id": player_user_id,
-                    "sport": sport,
-                    "answers": Jsonb(
-                        {
-                            "source": "video_assessment",
-                            "video_assessment_id": assessment_id,
-                            "normalized_result": normalized_result,
-                        }
+        player_assessment_id = assessment_id
+        if is_initial_assessment:
+            try:
+                player_assessment_row = connection.execute(
+                    text(
+                        """
+                        INSERT INTO public.player_assessments (
+                          player_user_id,
+                          sport,
+                          form_version,
+                          answers,
+                          computed_elo,
+                          computed_skill_tier
+                        )
+                        VALUES (
+                          :player_user_id,
+                          CAST(:sport AS public.sport_type),
+                          'video:v1',
+                          :answers,
+                          :computed_elo,
+                          CAST(:computed_skill_tier AS public.skill_tier)
+                        )
+                        RETURNING id
+                        """
                     ),
-                    "computed_elo": computed_elo,
-                    "computed_skill_tier": computed_tier,
-                },
-            ).one()
-        except IntegrityError as exc:
-            raise GeminiAssessmentError("Tài khoản đã có Elo ban đầu") from exc
+                    {
+                        "player_user_id": player_user_id,
+                        "sport": sport,
+                        "answers": Jsonb(
+                            {
+                                "source": "video_assessment",
+                                "video_assessment_id": assessment_id,
+                                "normalized_result": normalized_result,
+                            }
+                        ),
+                        "computed_elo": computed_elo,
+                        "computed_skill_tier": computed_tier,
+                    },
+                ).one()
+                player_assessment_id = str(player_assessment_row.id)
+            except IntegrityError as exc:
+                raise GeminiAssessmentError("Tài khoản đã có Elo ban đầu") from exc
 
         connection.execute(
             text(
@@ -1042,14 +1182,19 @@ def _complete_video_assessment(
         _audit(
             connection,
             actor_user_id=player_user_id,
-            event_type="elo_initialized_from_video",
-            entity_type="player_assessment",
-            entity_id=str(player_assessment_row.id),
+            event_type=(
+                "elo_initialized_from_video"
+                if is_initial_assessment
+                else "elo_reassessed_from_video"
+            ),
+            entity_type="player_assessment" if is_initial_assessment else "video_assessment",
+            entity_id=player_assessment_id if is_initial_assessment else assessment_id,
             payload={
                 "video_assessment_id": assessment_id,
                 "sport": sport,
                 "computed_skill_tier": computed_tier,
                 "delta": computed_elo - old_elo,
+                "reason": reason,
             },
         )
 
