@@ -105,6 +105,34 @@ docker compose config
 docker compose up -d postgres redis adminer backend-api frontend
 ```
 
+## EC2 Static Nginx Deploy
+
+The production `nginx` service builds `frontend/out`, serves it on port `80`,
+and proxies `/api/*` plus `/ws/*` to `backend-api:8000` inside Docker Compose.
+
+Current public URL:
+
+```text
+http://ec2-18-143-66-143.ap-southeast-1.compute.amazonaws.com
+```
+
+Deploy from EC2:
+
+```bash
+git pull
+docker compose up --build -d
+```
+
+Register these external callback URLs with the providers:
+
+```text
+Google OAuth redirect:
+http://ec2-18-143-66-143.ap-southeast-1.compute.amazonaws.com/api/v1/auth/google/callback
+
+VNPay return URL:
+http://ec2-18-143-66-143.ap-southeast-1.compute.amazonaws.com/api/v1/payments/vnpay/return
+```
+
 ## Project Docs
 
 - Product requirements: `business.md`
