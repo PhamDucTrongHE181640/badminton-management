@@ -27,6 +27,13 @@ class Settings(BaseSettings):
     google_client_id: str = ""
     google_client_secret: str = ""
     google_redirect_uri: str = "http://localhost:8000/api/v1/auth/google/callback"
+    backend_base_url: str = "http://localhost:8000"
+    vnpay_payment_url: str = "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html"
+    vnpay_tmn_code: str = ""
+    vnpay_hash_secret: str = ""
+    vnpay_return_url: str = ""
+    vnpay_locale: str = "vn"
+    vnpay_order_type: str = "other"
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.5-flash-lite"
     gemini_timeout_seconds: int = 45

@@ -2,12 +2,19 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Annotated, Any, Literal
+from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.core.config import get_settings
 from app.core.dependencies import require_player
-from app.services.player_payments import create_deposit_payment_intent, handle_vnpay_webhook
+from app.services.player_payments import (
+    create_deposit_payment_intent,
+    handle_vnpay_return,
+    handle_vnpay_webhook,
+)
 from app.services.user_auth import UserPrincipal
 
 router = APIRouter(tags=["player-payments"])
@@ -55,8 +62,13 @@ class VnpayWebhookResponse(BaseModel):
 def post_deposit_payment_intent(
     booking_id: str,
     player: Annotated[UserPrincipal, Depends(require_player)],
+    request: Request,
 ) -> dict[str, object]:
-    return create_deposit_payment_intent(booking_id=booking_id, player_user_id=player.id)
+    return create_deposit_payment_intent(
+        booking_id=booking_id,
+        player_user_id=player.id,
+        client_ip=request.client.host if request.client else None,
+    )
 
 
 @router.post("/payments/vnpay/webhook", response_model=VnpayWebhookResponse)
@@ -64,3 +76,16 @@ def post_vnpay_webhook(
     payload: VnpayWebhookPayload,
 ) -> dict[str, object]:
     return handle_vnpay_webhook(payload=payload.model_dump(exclude_none=True))
+
+
+@router.get("/payments/vnpay/return")
+def get_vnpay_return(request: Request) -> RedirectResponse:
+    result = handle_vnpay_return(payload=dict(request.query_params))
+    settings = get_settings()
+    query = urlencode(
+        {
+            "paymentStatus": result.get("status", "unknown"),
+            "bookingId": result.get("booking_id") or "",
+        }
+    )
+    return RedirectResponse(f"{settings.frontend_base_url}/player/bookings?{query}")

@@ -20,6 +20,91 @@ def _round_money(value: Decimal) -> int:
     return int(value.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
+def _expire_overdue_deposit_bookings(
+    connection: Any, *, player_user_id: str, session_id: str | None = None
+) -> None:
+    params: dict[str, Any] = {"player_user_id": player_user_id}
+    session_filter = ""
+    if session_id is not None:
+        session_filter = "AND b.session_id = :session_id"
+        params["session_id"] = session_id
+
+    rows = connection.execute(
+        text(
+            f"""
+            SELECT
+              b.id,
+              b.session_id,
+              b.seats_booked,
+              s.open_slots,
+              s.max_slots,
+              s.status::text AS session_status
+            FROM public.bookings b
+            JOIN public.sessions s ON s.id = b.session_id
+            JOIN public.payment_transactions pt ON pt.booking_id = b.id
+            WHERE b.player_user_id = :player_user_id
+              AND b.status = CAST('awaiting_deposit' AS public.booking_status)
+              AND pt.kind = CAST('deposit' AS public.payment_transaction_kind)
+              AND pt.status <> CAST('paid' AS public.payment_status)
+              AND pt.expires_at IS NOT NULL
+              AND pt.expires_at <= now()
+              {session_filter}
+            FOR UPDATE OF b, s
+            """
+        ),
+        params,
+    ).all()
+
+    for row in rows:
+        connection.execute(
+            text(
+                """
+                UPDATE public.payment_transactions
+                SET status = CAST('expired' AS public.payment_status),
+                    expires_at = COALESCE(expires_at, now())
+                WHERE booking_id = :booking_id
+                  AND kind = CAST('deposit' AS public.payment_transaction_kind)
+                  AND status <> CAST('paid' AS public.payment_status)
+                """
+            ),
+            {"booking_id": str(row.id)},
+        )
+        connection.execute(
+            text(
+                """
+                UPDATE public.bookings
+                SET status = CAST('expired' AS public.booking_status),
+                    cancelled_at = now(),
+                    cancel_reason = 'Deposit payment expired'
+                WHERE id = :booking_id
+                  AND status = CAST('awaiting_deposit' AS public.booking_status)
+                """
+            ),
+            {"booking_id": str(row.id)},
+        )
+
+        next_open_slots = min(int(row.max_slots), int(row.open_slots) + int(row.seats_booked))
+        if str(row.session_status) == "locked" and next_open_slots > 0:
+            next_session_status = "scheduled"
+        else:
+            next_session_status = str(row.session_status)
+        connection.execute(
+            text(
+                """
+                UPDATE public.sessions
+                SET open_slots = :open_slots,
+                    status = CAST(:status AS public.session_status)
+                WHERE id = :session_id
+                """
+            ),
+            {
+                "open_slots": next_open_slots,
+                "status": str(next_session_status),
+                "session_id": str(row.session_id),
+            },
+        )
+
+
 def _session_from_row(row: Any) -> dict[str, Any]:
     return {
         "id": str(row.id),
@@ -458,6 +543,7 @@ def list_my_bookings(*, player_user_id: str) -> list[dict[str, Any]]:
         LIMIT 200
     """
     with get_engine().begin() as connection:
+        _expire_overdue_deposit_bookings(connection, player_user_id=player_user_id)
         rows = connection.execute(text(query), {"player_user_id": player_user_id}).all()
     return [_booking_from_row(row) for row in rows]
 
@@ -469,6 +555,9 @@ def get_my_booking(*, player_user_id: str, booking_id: str) -> dict[str, Any]:
         LIMIT 1
     """
     with get_engine().begin() as connection:
+        _expire_overdue_deposit_bookings(
+            connection, player_user_id=player_user_id, session_id=None
+        )
         row = connection.execute(
             text(query), {"booking_id": booking_id, "player_user_id": player_user_id}
         ).first()
@@ -537,6 +626,10 @@ def create_booking(*, player_user_id: str, data: dict[str, Any]) -> dict[str, An
                 code="session_already_started",
                 message="Phiên sân đã bắt đầu hoặc đã qua giờ nhận booking",
             )
+
+        _expire_overdue_deposit_bookings(
+            connection, player_user_id=player_user_id, session_id=str(session.id)
+        )
 
         active_booking = connection.execute(
             text(
@@ -713,7 +806,7 @@ def create_booking(*, player_user_id: str, data: dict[str, Any]) -> dict[str, An
             ),
             {
                 "booking_id": str(booking.id),
-                "external_ref": f"DEP-{booking_code}",
+                "external_ref": f"DEP{booking_code}",
                 "amount_vnd": deposit_required_vnd,
                 "metadata": Jsonb({"source": "booking_create"}),
                 "expires_at": expires_at,
@@ -751,7 +844,7 @@ def create_booking(*, player_user_id: str, data: dict[str, Any]) -> dict[str, An
                     "booking_id": str(booking.id),
                     "method": payment_method,
                     "provider": remaining_provider,
-                    "external_ref": f"REM-{booking_code}",
+                    "external_ref": f"REM{booking_code}",
                     "amount_vnd": remaining_due_vnd,
                     "metadata": Jsonb(
                         {

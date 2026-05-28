@@ -1,7 +1,11 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+import hashlib
+import hmac
+import re
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import urlencode
 
 from psycopg.types.json import Jsonb
 from sqlalchemy import text
@@ -17,6 +21,98 @@ WEBHOOK_STATUS_MAP = {
     "cancelled": "cancelled",
     "expired": "expired",
 }
+VNPAY_VERSION = "2.1.0"
+VNPAY_COMMAND = "pay"
+VNPAY_CURR_CODE = "VND"
+VNPAY_PAY_DATE_FORMAT = "%Y%m%d%H%M%S"
+VNPAY_TIMEZONE = timezone(timedelta(hours=7))
+
+
+def _payment_reference(prefix: str, booking_code: str) -> str:
+    value = f"{prefix}{booking_code}"
+    return re.sub(r"[^A-Za-z0-9]", "", value)
+
+
+def _vnpay_return_url(settings: Any) -> str:
+    if settings.vnpay_return_url:
+        return settings.vnpay_return_url
+    return f"{settings.backend_base_url.rstrip('/')}/api/v1/payments/vnpay/return"
+
+
+def _require_vnpay_settings(settings: Any) -> None:
+    if not settings.vnpay_tmn_code or not settings.vnpay_hash_secret:
+        raise AppError(
+            status_code=501,
+            code="vnpay_not_configured",
+            message="VNPay chưa được cấu hình TMN code hoặc hash secret",
+        )
+
+
+def _vnpay_secure_hash(params: dict[str, str], *, hash_secret: str) -> str:
+    hash_data = urlencode(sorted(params.items()))
+    return hmac.new(
+        hash_secret.encode("utf-8"), hash_data.encode("utf-8"), hashlib.sha512
+    ).hexdigest()
+
+
+def _build_vnpay_payment_url(
+    *,
+    settings: Any,
+    external_ref: str,
+    amount_vnd: int,
+    order_info: str,
+    client_ip: str | None,
+    created_at: datetime | None = None,
+    expires_at: datetime | None = None,
+) -> str:
+    _require_vnpay_settings(settings)
+    now = created_at or datetime.now(VNPAY_TIMEZONE)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=VNPAY_TIMEZONE)
+    expire_value = (
+        expires_at.astimezone(VNPAY_TIMEZONE) if expires_at else now + timedelta(minutes=15)
+    )
+
+    params = {
+        "vnp_Version": VNPAY_VERSION,
+        "vnp_Command": VNPAY_COMMAND,
+        "vnp_TmnCode": settings.vnpay_tmn_code,
+        "vnp_Amount": str(int(amount_vnd) * 100),
+        "vnp_CurrCode": VNPAY_CURR_CODE,
+        "vnp_TxnRef": external_ref,
+        "vnp_OrderInfo": order_info,
+        "vnp_OrderType": settings.vnpay_order_type,
+        "vnp_Locale": settings.vnpay_locale,
+        "vnp_ReturnUrl": _vnpay_return_url(settings),
+        "vnp_IpAddr": client_ip or "127.0.0.1",
+        "vnp_CreateDate": now.astimezone(VNPAY_TIMEZONE).strftime(VNPAY_PAY_DATE_FORMAT),
+        "vnp_ExpireDate": expire_value.strftime(VNPAY_PAY_DATE_FORMAT),
+    }
+    secure_hash = _vnpay_secure_hash(params, hash_secret=settings.vnpay_hash_secret)
+    query = urlencode(sorted({**params, "vnp_SecureHash": secure_hash}.items()))
+    return f"{settings.vnpay_payment_url}?{query}"
+
+
+def _verify_vnpay_signature(payload: dict[str, Any], *, hash_secret: str) -> bool:
+    secure_hash = str(payload.get("vnp_SecureHash") or "")
+    if not secure_hash:
+        return False
+    signed_params = {
+        str(key): str(value)
+        for key, value in payload.items()
+        if key not in {"vnp_SecureHash", "vnp_SecureHashType"} and value is not None
+    }
+    expected_hash = _vnpay_secure_hash(signed_params, hash_secret=hash_secret)
+    return hmac.compare_digest(expected_hash.lower(), secure_hash.lower())
+
+
+def _parse_vnpay_pay_date(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, VNPAY_PAY_DATE_FORMAT).replace(tzinfo=VNPAY_TIMEZONE)
+    except ValueError:
+        return None
 
 
 def _audit(
@@ -257,7 +353,9 @@ def _expire_booking_and_release_slot(
     return "expired"
 
 
-def create_deposit_payment_intent(*, booking_id: str, player_user_id: str) -> dict[str, Any]:
+def create_deposit_payment_intent(
+    *, booking_id: str, player_user_id: str, client_ip: str | None = None
+) -> dict[str, Any]:
     settings = get_settings()
     with get_engine().begin() as connection:
         booking = _require_booking_for_player(
@@ -271,6 +369,7 @@ def create_deposit_payment_intent(*, booking_id: str, player_user_id: str) -> di
             )
 
         deposit_tx = _require_deposit_tx(connection, booking_id=booking_id)
+        external_ref = _payment_reference("DEP", str(booking.booking_code))
         if deposit_tx.status != "paid":
             expires_at = datetime.now(UTC) + timedelta(minutes=15)
             connection.execute(
@@ -279,7 +378,7 @@ def create_deposit_payment_intent(*, booking_id: str, player_user_id: str) -> di
                     UPDATE public.payment_transactions
                     SET status = CAST('processing' AS public.payment_status),
                         provider = 'vnpay',
-                        external_ref = COALESCE(external_ref, :external_ref),
+                        external_ref = :external_ref,
                         requested_at = now(),
                         expires_at = :expires_at,
                         failed_at = NULL
@@ -288,21 +387,23 @@ def create_deposit_payment_intent(*, booking_id: str, player_user_id: str) -> di
                 ),
                 {
                     "payment_id": str(deposit_tx.id),
-                    "external_ref": f"DEP-{booking.booking_code}",
+                    "external_ref": external_ref,
                     "expires_at": expires_at,
                 },
             )
-            external_ref = deposit_tx.external_ref or f"DEP-{booking.booking_code}"
             status = "processing"
         else:
-            external_ref = deposit_tx.external_ref or f"DEP-{booking.booking_code}"
+            external_ref = deposit_tx.external_ref or external_ref
             expires_at = deposit_tx.expires_at
             status = "paid"
 
-        payment_url = (
-            "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html"
-            f"?vnp_TxnRef={external_ref}&vnp_Amount={int(booking.deposit_required_vnd)}"
-            f"&return_url={settings.frontend_base_url}/player/bookings"
+        payment_url = _build_vnpay_payment_url(
+            settings=settings,
+            external_ref=external_ref,
+            amount_vnd=int(booking.deposit_required_vnd),
+            order_info=f"NetUp deposit {booking.booking_code}",
+            client_ip=client_ip,
+            expires_at=expires_at,
         )
 
         _audit(
@@ -463,3 +564,38 @@ def handle_vnpay_webhook(*, payload: dict[str, Any]) -> dict[str, Any]:
         "payment_status": mapped_status,
         "booking_status": next_booking_status,
     }
+
+
+def handle_vnpay_return(*, payload: dict[str, Any]) -> dict[str, Any]:
+    settings = get_settings()
+    _require_vnpay_settings(settings)
+    if not _verify_vnpay_signature(payload, hash_secret=settings.vnpay_hash_secret):
+        return {"ok": False, "status": "invalid_signature"}
+
+    response_code = str(payload.get("vnp_ResponseCode") or "")
+    transaction_status = str(payload.get("vnp_TransactionStatus") or "")
+    if response_code == "00" and transaction_status == "00":
+        status = "paid"
+    elif response_code == "24":
+        status = "cancelled"
+    else:
+        status = "failed"
+
+    amount_text = payload.get("vnp_Amount")
+    amount_vnd = int(amount_text) // 100 if amount_text is not None else None
+    provider_transaction_id = (
+        str(payload.get("vnp_TransactionNo") or "")
+        or str(payload.get("vnp_BankTranNo") or "")
+        or f"vnpay-{payload.get('vnp_TxnRef')}-{response_code}"
+    )
+    result = handle_vnpay_webhook(
+        payload={
+            "external_ref": str(payload.get("vnp_TxnRef") or ""),
+            "provider_transaction_id": provider_transaction_id,
+            "status": status,
+            "amount_vnd": amount_vnd,
+            "paid_at": _parse_vnpay_pay_date(str(payload.get("vnp_PayDate") or "")),
+            "metadata": payload,
+        }
+    )
+    return {"ok": True, "status": status, **result}

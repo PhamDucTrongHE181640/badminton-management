@@ -30,6 +30,13 @@ ADMIN_SEED_PASSWORD=admin12345
 GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-google-client-secret
 GOOGLE_REDIRECT_URI=http://localhost:8000/api/v1/auth/google/callback
+BACKEND_BASE_URL=http://localhost:8000
+VNPAY_PAYMENT_URL=https://sandbox.vnpayment.vn/paymentv2/vpcpay.html
+VNPAY_TMN_CODE=
+VNPAY_HASH_SECRET=
+VNPAY_RETURN_URL=http://localhost:8000/api/v1/payments/vnpay/return
+VNPAY_LOCALE=vn
+VNPAY_ORDER_TYPE=other
 ADMIN_LOGIN_MAX_ATTEMPTS=5
 ADMIN_LOGIN_WINDOW_MINUTES=15
 ADMIN_LOGIN_BLOCK_MINUTES=15
@@ -113,6 +120,7 @@ Postgres.
 - `GET /api/v1/player/bookings/{id}`
 - `POST /api/v1/player/bookings/{id}/deposit-payment`
 - `POST /api/v1/payments/vnpay/webhook`
+- `GET /api/v1/payments/vnpay/return`
 
 Booking creation enforces slot limits (`solo` and `full_court`), creates payment
 plan transactions (`deposit` + `remaining`), and locks session slots in one
