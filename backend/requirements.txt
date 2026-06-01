@@ -1,0 +1,12 @@
+alembic>=1.17.2
+fastapi>=0.122.0
+httpx>=0.28.1
+psycopg[binary]>=3.3.2
+pydantic-settings>=2.12.0
+python-multipart>=0.0.20
+sqlalchemy>=2.0.44
+uvicorn[standard]>=0.38.0
+
+# dev extras (optional)
+pytest>=9.0.1
+ruff>=0.14.6

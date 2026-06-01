@@ -1,17 +1,19 @@
 import type { Metadata } from "next";
-import { Manrope, Sora } from "next/font/google";
+import { Montserrat, Inter } from "next/font/google";
 import { MainHeader } from "@/components/layout";
 import "./globals.css";
 
-const manrope = Manrope({
-  variable: "--font-manrope",
+const montserrat = Montserrat({
+  variable: "--font-montserrat",
   subsets: ["latin", "vietnamese"],
+  weight: ["400", "600", "700", "900"],
+  style: ["normal", "italic"],
   display: "swap",
 });
 
-const sora = Sora({
-  variable: "--font-sora",
-  subsets: ["latin"],
+const inter = Inter({
+  variable: "--font-inter",
+  subsets: ["latin", "vietnamese"],
   display: "swap",
 });
 
@@ -27,13 +29,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="vi">
-      <body className={`${manrope.variable} ${sora.variable} antialiased`}>
-        <div className="relative min-h-screen bg-[#f5f6f8] text-ink">
+      <body className={`${montserrat.variable} ${inter.variable} font-sans antialiased`}>
+        <div className="relative min-h-screen bg-[#F3F4F6] text-[#111111]">
           <div className="pointer-events-none absolute inset-0 bg-noise-grid bg-[size:32px_32px] opacity-70" />
-
           <MainHeader />
-
-          <main className="relative mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:py-8">{children}</main>
+          <main className="relative w-full">{children}</main>
         </div>
       </body>
     </html>

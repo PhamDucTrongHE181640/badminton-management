@@ -7,7 +7,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 COPY pyproject.toml ./
-RUN pip install --upgrade pip && pip install -e ".[dev]"
+COPY requirements.txt ./
+RUN pip install --upgrade pip \
+ && pip install -r requirements.txt \
+ && pip install -e ".[dev]"
 
 COPY alembic.ini ./alembic.ini
 COPY alembic ./alembic
