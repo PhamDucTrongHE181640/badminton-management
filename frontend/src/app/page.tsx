@@ -34,21 +34,17 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ================= SECTION 2: TÍNH NĂNG AI (ĐÃ FIX LỖI MẤT MẶT) ================= */}
+      {/* ================= SECTION 2: TÍNH NĂNG AI ================= */}
       <section id="ai-assessment" className="relative w-full min-h-[90vh] flex items-center bg-white border-t border-gray-100">
-
-        {/* Khối ảnh nền chỉ chiếm 65% màn hình bên trái để chống Zoom */}
-        <div className="absolute inset-y-0 left-0 w-full lg:w-[65%] z-0">
+        <div className="absolute inset-0 w-full h-full z-0 overflow-hidden">
           <img
             src="/courts/anhnen2.png"
             alt="Ghép đối AI Background"
             className="w-full h-full object-cover object-[center_15%]"
           />
-          {/* Hiệu ứng Gradient mờ dần từ trái sang nền trắng tinh bên phải */}
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/60 to-white w-full"></div>
         </div>
 
-        {/* Khối nội dung giữ nguyên kích thước 7xl */}
         <div className="relative z-10 mx-auto w-full max-w-7xl px-6 lg:px-12 flex justify-end">
           <div className="max-w-2xl py-20 lg:py-0 text-left lg:text-right">
             <div className="inline-flex items-center justify-end rounded-[40px] bg-white/90 backdrop-blur px-6 sm:px-8 py-4 shadow-lg mb-8 border border-gray-200">
@@ -81,51 +77,44 @@ export default function HomePage() {
       </section>
 
       {/* ================= SECTION 3: MOCKUP APP ================= */}
-      <section className="relative w-full bg-[#111111] py-20 lg:py-32 overflow-hidden border-t-4 border-red-600">
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:40px_40px]"></div>
+      <section className="relative w-full min-h-[85vh] flex items-center overflow-hidden border-t-4 border-red-600 bg-gray-950">
+        <div className="absolute inset-0 w-full h-full z-0">
+          <img
+            src="/courts/anhnen3.png"
+            alt="Đặt sân ngay Background"
+            className="w-full h-full object-cover object-center opacity-100"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-black/10 via-black/60 to-black/95 w-full"></div>
+        </div>
 
-        <div className="relative z-10 mx-auto w-full max-w-7xl px-6 lg:px-12 grid lg:grid-cols-2 gap-16 items-center">
-          <div className="order-2 lg:order-1">
-            <img src="/courts/quabong.png" alt="Quả bóng" className="w-24 md:w-32 drop-shadow-[0_10px_20px_rgba(255,255,255,0.2)] mb-8" />
+        {/* Ảnh bàn tay: Ép sát lề trái và đáy, block để xóa viền hở */}
+        <div className="absolute bottom-0 left-0 h-[90%] z-10 pointer-events-none hidden lg:block">
+          <img
+            src="/courts/taycamdienthoai.png"
+            alt="App đặt lịch trực quan"
+            className="w-auto h-full object-contain object-left-bottom drop-shadow-[20px_10px_35px_rgba(0,0,0,0.8)] block"
+          />
+        </div>
+
+        <div className="relative z-20 mx-auto w-full max-w-7xl px-6 lg:px-12 flex justify-end">
+          <div className="w-full lg:w-[55%] py-24 lg:py-32 flex flex-col items-start lg:pl-10">
+            <img src="/courts/quabong.png" alt="Quả bóng" className="w-24 md:w-32 drop-shadow-[0_10px_20px_rgba(255,255,255,0.15)] mb-8" />
             <p className="text-xl sm:text-2xl font-bold uppercase text-gray-300 leading-snug mb-4">
               Quá khó khăn khi đặt sân, ra sân lúc nào cũng "Hết sân rồi em ơi"
             </p>
             <h3 className="text-4xl sm:text-5xl font-black italic text-red-500 uppercase mb-6 drop-shadow-lg">
               Đừng lo đã có netup
             </h3>
-            <p className="text-lg text-gray-400 leading-relaxed mb-10 font-medium">
+            <p className="text-lg text-gray-300 leading-relaxed mb-12 font-medium">
               Nền tảng NetUp giúp bạn xem lịch sân trống trực quan theo thời gian thực. Đặt lịch, thanh toán tiện lợi chỉ với vài thao tác chạm trên điện thoại.
             </p>
             <Link
               href="/player/discovery?mode=booking"
-              className="inline-flex items-center justify-center rounded-full bg-red-600 px-10 py-4 text-lg font-bold uppercase tracking-wider shadow-[0_0_20px_rgba(220,38,38,0.5)] transition-all hover:scale-105 hover:bg-red-500"
-              style={{ color: "#FFFFFF" }}
+              className="inline-flex items-center justify-center rounded-full bg-red-600 px-12 py-5 text-lg font-bold uppercase tracking-wider transition-all hover:scale-105 hover:bg-red-500"
+              style={{ color: "#FFFFFF", boxShadow: "0 0 25px rgba(220,38,38,0.5)" }}
             >
               ĐẶT SÂN NGAY
             </Link>
-          </div>
-
-          <div className="order-1 lg:order-2 relative flex justify-center">
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[300px] h-[600px] bg-red-600/20 rounded-full blur-[80px]"></div>
-
-            <div className="relative z-10 w-[280px] h-[580px] rounded-[40px] border-[8px] border-gray-800 bg-[#1A1A1A] shadow-[0_0_50px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col transform lg:-rotate-2 transition-transform hover:rotate-0">
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-6 bg-gray-800 rounded-b-xl z-20"></div>
-
-              <div className="w-full h-20 bg-red-600 flex justify-center items-end pb-4 text-white font-bold text-lg">Đặt lịch trực quan</div>
-              <div className="flex-1 bg-[#1A1A1A] p-4 pt-6 space-y-4">
-                <div className="w-full h-10 bg-gray-800 rounded-lg animate-pulse"></div>
-                <div className="grid grid-cols-4 gap-2">
-                  <div className="h-12 bg-gray-800 rounded animate-pulse"></div>
-                  <div className="h-12 bg-red-500/20 rounded border border-red-500/50"></div>
-                  <div className="h-12 bg-gray-800 rounded animate-pulse"></div>
-                  <div className="h-12 bg-gray-800 rounded animate-pulse"></div>
-                </div>
-                <div className="w-full h-32 bg-gray-800 rounded-lg animate-pulse"></div>
-              </div>
-              <div className="w-full h-20 bg-[#222] border-t border-gray-800 flex justify-center items-center p-4">
-                <div className="w-full h-full bg-red-600 text-white font-bold rounded-full flex justify-center items-center cursor-pointer shadow-lg">TIẾP THEO</div>
-              </div>
-            </div>
           </div>
         </div>
       </section>
@@ -133,9 +122,9 @@ export default function HomePage() {
       {/* ================= SECTION 4: STATS ================= */}
       <section className="w-full bg-white border-y-2 border-gray-100 py-12">
         <div className="mx-auto w-full max-w-5xl px-6 grid grid-cols-1 sm:grid-cols-3 gap-8 divide-y-2 sm:divide-y-0 sm:divide-x-2 divide-gray-200 text-center">
-          <div className="pt-4 sm:pt-0"><h4 className="text-5xl sm:text-6xl font-black italic text-gray-900">1000+</h4><p className="mt-2 text-lg font-bold uppercase tracking-widest text-gray-500">Người dùng</p></div>
-          <div className="pt-4 sm:pt-0"><h4 className="text-5xl sm:text-6xl font-black italic text-gray-900">30+</h4><p className="mt-2 text-lg font-bold uppercase tracking-widest text-gray-500">Sân bóng</p></div>
-          <div className="pt-4 sm:pt-0"><h4 className="text-5xl sm:text-6xl font-black italic text-gray-900">50+</h4><p className="mt-2 text-lg font-bold uppercase tracking-widest text-gray-500">Sân cầu</p></div>
+          <div className="pt-4 sm:pt-0"><h4 className="text-5xl sm:text-6xl font-black italic text-gray-900">250+</h4><p className="mt-2 text-lg font-bold uppercase tracking-widest text-gray-500">Người dùng</p></div>
+          <div className="pt-4 sm:pt-0"><h4 className="text-5xl sm:text-6xl font-black italic text-gray-900">10+</h4><p className="mt-2 text-lg font-bold uppercase tracking-widest text-gray-500">Chủ sân</p></div>
+          <div className="pt-4 sm:pt-0"><h4 className="text-5xl sm:text-6xl font-black italic text-gray-900">30+</h4><p className="mt-2 text-lg font-bold uppercase tracking-widest text-gray-500">Sân đâu</p></div>
         </div>
       </section>
 
