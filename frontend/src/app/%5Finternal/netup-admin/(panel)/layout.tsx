@@ -41,7 +41,7 @@ export default function AdminPanelLayout({ children }: { children: React.ReactNo
   }
 
   return (
-    <section className="fade-up">
+    <section className="fade-up mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:py-8">
       <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
         Quản trị viên: {admin?.username ?? "admin"}
       </p>

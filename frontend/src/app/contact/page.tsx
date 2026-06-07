@@ -17,7 +17,7 @@ const contactCards = [
 
 export default function ContactPage() {
   return (
-    <main className="fade-up space-y-6">
+    <main className="fade-up mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:py-8 space-y-6">
       <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-red-800">Liên hệ NetUp</p>
         <h1 className="mt-3 max-w-3xl font-heading text-3xl font-semibold leading-tight text-slate-950 sm:text-5xl">
