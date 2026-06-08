@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { HeaderUserAuth } from "./HeaderUserAuth";
 
 const bookingLinks = [
@@ -28,6 +28,15 @@ export function MainHeader() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [location, setLocation] = useState("Hòa Lạc, Hà Nội");
   const [isLocationDropdownOpen, setIsLocationDropdownOpen] = useState(false);
+  const [isMatchmakingMode, setIsMatchmakingMode] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setIsMatchmakingMode(
+        pathname === "/player/discovery" && window.location.search.includes("mode=matchmaking")
+      );
+    }
+  }, [pathname]);
 
   const locations = [
     "Hòa Lạc, Hà Nội",
@@ -65,7 +74,7 @@ export function MainHeader() {
             <div className="group relative h-full flex items-center shrink-0">
               <button
                 className={`inline-flex items-center gap-1 h-full transition duration-150 cursor-pointer ${
-                  isActive(pathname, "/player/discovery")
+                  isActive(pathname, "/player/discovery") && !isMatchmakingMode
                     ? "text-red-800"
                     : "text-slate-700 hover:text-red-800"
                 }`}
@@ -96,13 +105,13 @@ export function MainHeader() {
 
             {/* Ghép đối thủ */}
             <Link
-              href="/player/matches"
+              href="/player/discovery?mode=matchmaking"
               className={`relative h-full flex items-center transition duration-150 ${
-                pathname.startsWith("/player/matches") ? "text-red-800" : "text-slate-700 hover:text-red-800"
+                isMatchmakingMode ? "text-red-800" : "text-slate-700 hover:text-red-800"
               }`}
             >
               Ghép đối thủ
-              {pathname.startsWith("/player/matches") && (
+              {isMatchmakingMode && (
                 <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-red-800 rounded-full" />
               )}
             </Link>
@@ -268,10 +277,10 @@ export function MainHeader() {
             <div className="border-t border-slate-100 my-1" />
             
             <Link
-              href="/player/matches"
+              href="/player/discovery?mode=matchmaking"
               onClick={() => setIsMobileMenuOpen(false)}
               className={`block rounded-lg px-4 py-2.5 text-sm font-semibold transition duration-150 ${
-                pathname.startsWith("/player/matches") ? "bg-red-50 text-red-800" : "text-slate-700 hover:bg-slate-50"
+                isMatchmakingMode ? "bg-red-50 text-red-800" : "text-slate-700 hover:bg-slate-50"
               }`}
             >
               Ghép đối thủ
