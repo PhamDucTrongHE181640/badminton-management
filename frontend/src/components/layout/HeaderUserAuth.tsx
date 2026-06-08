@@ -91,7 +91,7 @@ export function HeaderUserAuth() {
   return (
     <a
       href={loginUrl()}
-      className="inline-flex items-center justify-center rounded-lg bg-red-800 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-900"
+      className="inline-flex items-center justify-center rounded-xl bg-red-800 px-5 py-2 text-sm font-semibold text-white shadow-xs transition duration-200 hover:bg-red-900 shrink-0 cursor-pointer"
     >
       Đăng nhập
     </a>
