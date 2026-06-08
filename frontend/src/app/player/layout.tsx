@@ -1,14 +1,16 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, usePathname } from "next/navigation";
 import { Suspense } from "react";
 import { RoleNav } from "@/components/layout";
 
 function PlayerNavigation() {
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const isMatchmaking = searchParams.get("mode") === "matchmaking";
+  const isTournaments = pathname.startsWith("/player/tournaments");
 
-  if (isMatchmaking) {
+  if (isMatchmaking || isTournaments) {
     return null;
   }
 
@@ -31,7 +33,7 @@ function PlayerNavigation() {
 
 export default function PlayerLayout({ children }: { children: React.ReactNode }) {
   return (
-    <section className="fade-up mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:py-8">
+    <section className="fade-up mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:py-8">
       <Suspense fallback={null}>
         <PlayerNavigation />
       </Suspense>
