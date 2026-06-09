@@ -35,19 +35,34 @@ const faqs = [
     question: "NetUP hỗ trợ chủ sân như thế nào?",
     answer: "NetUP cung cấp hệ thống quản lý lịch đặt sân thời gian thực, tích hợp cổng thanh toán cọc tự động, công cụ thống kê doanh thu chi tiết và giúp tiếp cận trực tiếp hàng ngàn người chơi thể thao trong khu vực xung quanh cụm sân.",
     colorClass: "bg-purple-50 text-purple-600 border-purple-100",
-    iconColor: "currentColor"
+    icon: (
+      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 18v-6a9 9 0 0 1 18 0v6" />
+        <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
+      </svg>
+    )
   },
   {
     question: "Chi phí hợp tác với NetUP là bao nhiêu?",
     answer: "Chúng tôi áp dụng mô hình hợp tác linh hoạt và cực kỳ tối ưu cho chủ sân. Phí đăng ký khởi tạo hoàn toàn miễn phí, NetUP chỉ thu một tỷ lệ phần trăm nhỏ hoa hồng dựa trên các giao dịch đặt sân thành công được mang về từ hệ thống.",
     colorClass: "bg-emerald-50 text-emerald-600 border-emerald-100",
-    iconColor: "currentColor"
+    icon: (
+      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="12" y1="1" x2="12" y2="23" />
+        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+      </svg>
+    )
   },
   {
     question: "Thời gian triển khai hệ thống mất bao lâu?",
     answer: "Quá trình thiết lập, chuẩn hóa thông tin cụm sân và tích hợp lên ứng dụng NetUP diễn ra vô cùng nhanh chóng. Đội ngũ kỹ thuật hỗ trợ tận nơi và có thể hoàn thành việc bàn giao, hướng dẫn sử dụng trong vòng 24 đến 48 giờ làm việc.",
     colorClass: "bg-rose-50 text-rose-600 border-rose-100",
-    iconColor: "currentColor"
+    icon: (
+      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <polyline points="12 6 12 12 16 14" />
+      </svg>
+    )
   }
 ];
 
@@ -523,7 +538,7 @@ export default function ContactPage() {
       </section>
 
       {/* SECTION 3: TESTIMONIALS & FAQ IN ONE CONTAINER */}
-      <section className="rounded-3xl border border-slate-200 bg-slate-50/50 p-6 shadow-3xs">
+      <section className="rounded-3xl border border-[#b00c14]/15 bg-gradient-to-br from-red-50/60 via-white to-slate-50/80 p-6 shadow-3xs">
         <div className="grid gap-8 lg:grid-cols-2">
           
           {/* Left Column: Testimonials */}
@@ -635,8 +650,8 @@ export default function ContactPage() {
                       className="w-full flex items-center justify-between px-4 py-3 bg-slate-50/40 text-left hover:bg-slate-50/80 transition cursor-pointer"
                     >
                       <div className="flex items-center gap-3">
-                        <div className={`flex h-7.5 w-7.5 shrink-0 items-center justify-center rounded-lg border text-xs font-black shadow-3xs ${faq.colorClass}`}>
-                          ?
+                        <div className={`flex h-7.5 w-7.5 shrink-0 items-center justify-center rounded-lg border shadow-3xs ${faq.colorClass}`}>
+                          {faq.icon}
                         </div>
                         <span className="text-xs sm:text-sm font-bold text-slate-800">{faq.question}</span>
                       </div>
