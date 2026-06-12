@@ -1,12 +1,29 @@
 "use client";
 
-import React, { useState, FormEvent } from "react";
-import { Tournament } from "./TournamentDetailModal";
-import { formatVnd } from "@/lib/format";
+import React, { useState } from "react";
+import { errorMessage, formatVnd } from "@/lib/format";
+
+export type TournamentCreateInput = {
+  title: string;
+  sport: string;
+  startDate: string;
+  endDate: string;
+  location: string;
+  maxTeams: number;
+  prizeMoney: number;
+  image: string;
+  level: "movement" | "semi_pro" | "pro";
+  fee: number;
+  description: string;
+  bracket: Array<{
+    roundName: string;
+    matches: Array<{ id: string; teamA: string; teamB: string }>;
+  }>;
+};
 
 type Props = {
   onClose: () => void;
-  onCreate: (newTournament: Tournament) => void;
+  onCreate: (newTournament: TournamentCreateInput) => Promise<void> | void;
 };
 
 // 4 high-quality banners for the sports
@@ -20,6 +37,7 @@ const bannerTemplates = [
 export default function TournamentCreateModal({ onClose, onCreate }: Props) {
   const [step, setStep] = useState(1);
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Step 1 states
   const [title, setTitle] = useState("");
@@ -76,19 +94,13 @@ export default function TournamentCreateModal({ onClose, onCreate }: Props) {
     setStep(prev => Math.max(1, prev - 1));
   };
 
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    
-    // Create new tournament item
-    const newTourney: Tournament = {
-      id: `tourney-custom-${Date.now()}`,
+  const handleSubmit = async () => {
+    const newTourney: TournamentCreateInput = {
       title: title.trim(),
       sport: sport,
-      status: "upcoming",
       startDate: startDate.trim(),
       endDate: endDate.trim(),
       location: `${location.trim()}, ${region}`,
-      joinedTeams: 0,
       maxTeams: maxTeams,
       prizeMoney: prizeMoney,
       image: selectedBanner,
@@ -114,7 +126,15 @@ export default function TournamentCreateModal({ onClose, onCreate }: Props) {
       ]
     };
 
-    onCreate(newTourney);
+    setIsSubmitting(true);
+    setError("");
+    try {
+      await onCreate(newTourney);
+    } catch (caught) {
+      setError(errorMessage(caught, "Không tạo được giải đấu"));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -389,10 +409,11 @@ export default function TournamentCreateModal({ onClose, onCreate }: Props) {
           
           <button
             type="button"
+            disabled={isSubmitting}
             onClick={step === 3 ? handleSubmit : handleNext}
-            className="rounded-xl bg-[#b00c14] hover:bg-red-950 px-4.5 py-2 text-xs font-bold text-white transition shadow-xs cursor-pointer"
+            className="rounded-xl bg-[#b00c14] hover:bg-red-950 px-4.5 py-2 text-xs font-bold text-white transition shadow-xs cursor-pointer disabled:opacity-60"
           >
-            {step === 3 ? "Xác nhận tạo" : "Tiếp theo"}
+            {step === 3 ? (isSubmitting ? "Đang tạo..." : "Xác nhận tạo") : "Tiếp theo"}
           </button>
         </div>
 

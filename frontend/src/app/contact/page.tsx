@@ -1,10 +1,12 @@
 "use client";
 
 import React, { useState } from "react";
+import { apiFetch } from "@/lib/http";
+import { errorMessage } from "@/lib/format";
 
 const fanpageUrl = process.env.NEXT_PUBLIC_NETUP_FACEBOOK_URL ?? "https://www.facebook.com/netup.vn";
 
-// Testimonials mock data
+// Static marketing content.
 const testimonials = [
   {
     quote: "Từ khi hợp tác với NetUP, lượng khách đặt sân tăng hơn 40%. Hệ thống quản lý lịch rất tiện lợi và chuyên nghiệp.",
@@ -29,7 +31,6 @@ const testimonials = [
   }
 ];
 
-// FAQ mock data
 const faqs = [
   {
     question: "NetUP hỗ trợ chủ sân như thế nào?",
@@ -90,7 +91,7 @@ export default function ContactPage() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg("");
     setSubmitSuccess(false);
@@ -104,12 +105,22 @@ export default function ContactPage() {
     if (!formData.courtAddress.trim()) return setErrorMsg("Vui lòng nhập địa chỉ sân.");
 
     setIsSubmitting(true);
-
-    // Simulate API request
-    setTimeout(() => {
+    try {
+      await apiFetch("/api/v1/public/contact-leads", {
+        method: "POST",
+        body: JSON.stringify({
+          fullName: formData.fullName,
+          phone: formData.phone,
+          email: formData.email,
+          partnerType: formData.partnerType,
+          organizationName: formData.courtName,
+          address: formData.courtAddress,
+          message: formData.content || null,
+          source: "contact_page",
+        }),
+      });
       setIsSubmitting(false);
       setSubmitSuccess(true);
-      // Clear form
       setFormData({
         fullName: "",
         phone: "",
@@ -119,7 +130,10 @@ export default function ContactPage() {
         courtAddress: "",
         content: ""
       });
-    }, 1500);
+    } catch (caught) {
+      setIsSubmitting(false);
+      setErrorMsg(errorMessage(caught, "Không gửi được yêu cầu hợp tác."));
+    }
   };
 
   const handleNextTestimonial = () => {

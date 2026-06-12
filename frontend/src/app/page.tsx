@@ -1,6 +1,89 @@
+"use client";
+
 import Link from "next/link";
+import { FormEvent, useEffect, useState } from "react";
+
+import { apiFetch } from "@/lib/http";
+import { errorMessage, formatNumber } from "@/lib/format";
+
+type PlatformStats = {
+  users_total: number;
+  active_owners: number;
+  active_courts: number;
+  upcoming_sessions: number;
+  completed_bookings: number;
+};
 
 export default function HomePage() {
+  const [stats, setStats] = useState<PlatformStats | null>(null);
+  const [statsError, setStatsError] = useState("");
+  const [ownerForm, setOwnerForm] = useState({
+    organizationName: "",
+    phone: "",
+    email: "",
+    address: "",
+  });
+  const [ownerFormError, setOwnerFormError] = useState("");
+  const [ownerFormSuccess, setOwnerFormSuccess] = useState(false);
+  const [isSubmittingOwnerForm, setIsSubmittingOwnerForm] = useState(false);
+
+  useEffect(() => {
+    apiFetch<PlatformStats>("/api/v1/public/platform-stats")
+      .then((payload) => {
+        setStats(payload);
+        setStatsError("");
+      })
+      .catch((caught) => setStatsError(errorMessage(caught, "Không tải được thống kê nền tảng")));
+  }, []);
+
+  async function handleOwnerSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setOwnerFormError("");
+    setOwnerFormSuccess(false);
+
+    if (!ownerForm.organizationName.trim()) {
+      setOwnerFormError("Vui lòng nhập tên chủ sân hoặc cụm sân.");
+      return;
+    }
+    if (!ownerForm.phone.trim()) {
+      setOwnerFormError("Vui lòng nhập số điện thoại liên hệ.");
+      return;
+    }
+    if (!ownerForm.email.trim()) {
+      setOwnerFormError("Vui lòng nhập email liên hệ.");
+      return;
+    }
+    if (!ownerForm.address.trim()) {
+      setOwnerFormError("Vui lòng nhập địa chỉ cụm sân.");
+      return;
+    }
+
+    setIsSubmittingOwnerForm(true);
+    try {
+      await apiFetch("/api/v1/public/contact-leads", {
+        method: "POST",
+        body: JSON.stringify({
+          fullName: ownerForm.organizationName,
+          phone: ownerForm.phone,
+          email: ownerForm.email,
+          partnerType: "owner",
+          organizationName: ownerForm.organizationName,
+          address: ownerForm.address,
+          message: "Lead đăng ký chủ sân từ trang chủ.",
+          source: "home_owner_form",
+        }),
+      });
+      setOwnerFormSuccess(true);
+      setOwnerForm({ organizationName: "", phone: "", email: "", address: "" });
+    } catch (caught) {
+      setOwnerFormError(errorMessage(caught, "Không gửi được yêu cầu hợp tác."));
+    } finally {
+      setIsSubmittingOwnerForm(false);
+    }
+  }
+
+  const statText = (value: number | undefined) => (stats ? formatNumber(value ?? 0) : "...");
+
   return (
     <main className="w-full overflow-hidden bg-white">
       {/* ================= SECTION 1: HERO BANNER ================= */}
@@ -122,10 +205,11 @@ export default function HomePage() {
       {/* ================= SECTION 4: STATS ================= */}
       <section className="w-full bg-white border-y-2 border-gray-100 py-12">
         <div className="mx-auto w-full max-w-5xl px-6 grid grid-cols-1 sm:grid-cols-3 gap-8 divide-y-2 sm:divide-y-0 sm:divide-x-2 divide-gray-200 text-center">
-          <div className="pt-4 sm:pt-0"><h4 className="text-5xl sm:text-6xl font-black italic text-gray-900">250+</h4><p className="mt-2 text-lg font-bold uppercase tracking-widest text-gray-500">Người dùng</p></div>
-          <div className="pt-4 sm:pt-0"><h4 className="text-5xl sm:text-6xl font-black italic text-gray-900">10+</h4><p className="mt-2 text-lg font-bold uppercase tracking-widest text-gray-500">Chủ sân</p></div>
-          <div className="pt-4 sm:pt-0"><h4 className="text-5xl sm:text-6xl font-black italic text-gray-900">30+</h4><p className="mt-2 text-lg font-bold uppercase tracking-widest text-gray-500">Sân đâu</p></div>
+          <div className="pt-4 sm:pt-0"><h4 className="text-5xl sm:text-6xl font-black italic text-gray-900">{statText(stats?.users_total)}</h4><p className="mt-2 text-lg font-bold uppercase tracking-widest text-gray-500">Người dùng</p></div>
+          <div className="pt-4 sm:pt-0"><h4 className="text-5xl sm:text-6xl font-black italic text-gray-900">{statText(stats?.active_owners)}</h4><p className="mt-2 text-lg font-bold uppercase tracking-widest text-gray-500">Chủ sân</p></div>
+          <div className="pt-4 sm:pt-0"><h4 className="text-5xl sm:text-6xl font-black italic text-gray-900">{statText(stats?.active_courts)}</h4><p className="mt-2 text-lg font-bold uppercase tracking-widest text-gray-500">Sân đấu</p></div>
         </div>
+        {statsError && <p className="mt-4 text-center text-xs font-semibold text-red-700">{statsError}</p>}
       </section>
 
       {/* ================= SECTION 5: ĐĂNG KÝ CHỦ SÂN ================= */}
@@ -141,11 +225,16 @@ export default function HomePage() {
 
           <div className="relative z-20 bg-white rounded-t-[40px] lg:rounded-[40px] p-8 sm:p-12 shadow-2xl mb-0 lg:mb-20 border border-gray-100">
             <h3 className="text-3xl font-bold text-gray-900 mb-8">Đăng ký hệ thống</h3>
-            <form className="space-y-6">
-              <div><label className="block text-sm font-bold text-gray-700 mb-2">Tên chủ sân / Cụm sân thể thao</label><input type="text" placeholder="VD: Sân cầu lông Hòa Lạc" className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 text-gray-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" /></div>
-              <div><label className="block text-sm font-bold text-gray-700 mb-2">Số điện thoại liên hệ</label><input type="tel" placeholder="09xx xxx xxx" className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 text-gray-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" /></div>
-              <div><label className="block text-sm font-bold text-gray-700 mb-2">Địa chỉ cụm sân</label><input type="text" placeholder="Nhập địa chỉ chi tiết" className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 text-gray-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" /></div>
-              <button type="button" className="w-full mt-4 rounded-xl bg-red-600 px-4 py-4 text-lg font-bold transition hover:bg-red-700 shadow-lg" style={{ color: "#FFFFFF" }}>GỬI YÊU CẦU HỢP TÁC</button>
+            <form className="space-y-6" onSubmit={handleOwnerSubmit}>
+              {ownerFormError && <div className="rounded-xl bg-red-50 px-4 py-3 text-sm font-bold text-red-700">{ownerFormError}</div>}
+              {ownerFormSuccess && <div className="rounded-xl bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">NetUP đã nhận yêu cầu và sẽ liên hệ lại.</div>}
+              <div><label className="block text-sm font-bold text-gray-700 mb-2">Tên chủ sân / Cụm sân thể thao</label><input type="text" value={ownerForm.organizationName} onChange={(event) => setOwnerForm((current) => ({ ...current, organizationName: event.target.value }))} placeholder="VD: Sân cầu lông Hòa Lạc" className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 text-gray-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" /></div>
+              <div><label className="block text-sm font-bold text-gray-700 mb-2">Số điện thoại liên hệ</label><input type="tel" value={ownerForm.phone} onChange={(event) => setOwnerForm((current) => ({ ...current, phone: event.target.value }))} placeholder="09xx xxx xxx" className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 text-gray-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" /></div>
+              <div><label className="block text-sm font-bold text-gray-700 mb-2">Email liên hệ</label><input type="email" value={ownerForm.email} onChange={(event) => setOwnerForm((current) => ({ ...current, email: event.target.value }))} placeholder="owner@example.com" className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 text-gray-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" /></div>
+              <div><label className="block text-sm font-bold text-gray-700 mb-2">Địa chỉ cụm sân</label><input type="text" value={ownerForm.address} onChange={(event) => setOwnerForm((current) => ({ ...current, address: event.target.value }))} placeholder="Nhập địa chỉ chi tiết" className="w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 text-gray-900 focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500" /></div>
+              <button type="submit" disabled={isSubmittingOwnerForm} className="w-full mt-4 rounded-xl bg-red-600 px-4 py-4 text-lg font-bold transition hover:bg-red-700 shadow-lg disabled:opacity-60" style={{ color: "#FFFFFF" }}>
+                {isSubmittingOwnerForm ? "ĐANG GỬI..." : "GỬI YÊU CẦU HỢP TÁC"}
+              </button>
               <p className="text-xs text-center text-gray-400 mt-4">Đội ngũ NetUp sẽ liên hệ với bạn trong vòng 24h để xác minh.</p>
             </form>
           </div>

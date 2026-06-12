@@ -164,6 +164,11 @@ def _session_from_row(row: Any) -> dict[str, Any]:
             if hasattr(row, "slot_fit_score") and row.slot_fit_score is not None
             else None
         ),
+        "joined_players": (
+            list(row.joined_players)
+            if hasattr(row, "joined_players") and row.joined_players is not None
+            else []
+        ),
     }
 
 
@@ -263,11 +268,55 @@ def _session_select_sql(where_clause: str) -> str:
           cc.address,
           cc.latitude,
           cc.longitude,
-          p.id AS pool_post_id
+          p.id AS pool_post_id,
+          COALESCE(jp.joined_players, '[]'::jsonb) AS joined_players
         FROM public.sessions s
         JOIN public.courts c ON c.id = s.court_id
         JOIN public.court_complexes cc ON cc.id = c.complex_id
         LEFT JOIN public.pool_posts p ON p.session_id = s.id
+        LEFT JOIN LATERAL (
+          SELECT jsonb_agg(
+            jsonb_build_object(
+              'id', participant.id::text,
+              'full_name', participant.full_name,
+              'avatar_url', participant.avatar_url
+            )
+            ORDER BY participant.created_at
+          ) AS joined_players
+          FROM (
+            SELECT DISTINCT ON (raw_participant.id)
+              raw_participant.id,
+              raw_participant.full_name,
+              raw_participant.avatar_url,
+              raw_participant.created_at
+            FROM (
+              SELECT
+                u.id,
+                u.full_name,
+                u.avatar_url,
+                p.created_at
+              FROM public.pool_posts p
+              JOIN public.users u ON u.id = p.host_user_id
+              WHERE p.session_id = s.id
+
+              UNION ALL
+
+              SELECT
+                u.id,
+                u.full_name,
+                u.avatar_url,
+                b.created_at
+              FROM public.bookings b
+              JOIN public.users u ON u.id = b.player_user_id
+              WHERE b.session_id = s.id
+                AND b.status NOT IN (
+                  CAST('cancelled' AS public.booking_status),
+                  CAST('expired' AS public.booking_status)
+                )
+            ) raw_participant
+            ORDER BY raw_participant.id, raw_participant.created_at
+          ) participant
+        ) jp ON TRUE
         {where_clause}
     """
 

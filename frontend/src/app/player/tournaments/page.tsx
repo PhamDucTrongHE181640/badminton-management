@@ -1,163 +1,46 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import TournamentDetailModal, { Tournament } from "./TournamentDetailModal";
 import TournamentRegisterModal from "./TournamentRegisterModal";
-import TournamentCreateModal from "./TournamentCreateModal";
-import { formatVnd } from "@/lib/format";
+import TournamentCreateModal, { TournamentCreateInput } from "./TournamentCreateModal";
+import { apiFetch } from "@/lib/http";
+import { errorMessage, formatNumber, formatVnd } from "@/lib/format";
 
-// Initial mockup data matching the screenshot exactly
-const initialTournaments: Tournament[] = [
-  {
-    id: "tourney-1",
-    title: "NetUP Hòa Lạc Open 2024",
-    sport: "Cầu lông",
-    status: "upcoming",
-    startDate: "25/05/2024",
-    endDate: "02/06/2024",
-    location: "Nhà thi đấu ĐH FPT Hòa Lạc",
-    joinedTeams: 12,
-    maxTeams: 16,
-    prizeMoney: 20000000,
-    image: "https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?w=600&fit=crop&q=80",
-    level: "movement",
-    fee: 150000,
-    description: "Giải đấu cầu lông phong trào lớn nhất năm dành cho sinh viên và cư dân công nghệ khu vực Hòa Lạc. Cơ hội để cọ xát nâng cao trình độ ELO và giao lưu kết nối.",
-    bracket: [
-      {
-        roundName: "Bán kết",
-        matches: [
-          { id: "m-1", teamA: "Minh Tuấn & Hoàng Đức", scoreA: 21, teamB: "Quang Huy & Đức Anh", scoreB: 15, time: "16/05 - 19:00", court: "Sân 3", winner: "A" },
-          { id: "m-2", teamA: "Quốc Anh & Tiến Đạt", scoreA: 18, teamB: "Thành Long & Sơn Hải", scoreB: 21, time: "16/05 - 20:00", court: "Sân 4", winner: "B" }
-        ]
-      },
-      {
-        roundName: "Chung kết",
-        matches: [
-          { id: "m-3", teamA: "Minh Tuấn & Hoàng Đức", teamB: "Thành Long & Sơn Hải", time: "18/05 - 16:00", court: "Sân 1" }
-        ]
-      }
-    ]
-  },
-  {
-    id: "tourney-2",
-    title: "Hòa Lạc Badminton Cup",
-    sport: "Cầu lông",
-    status: "ongoing",
-    startDate: "10/05/2024",
-    endDate: "19/05/2024",
-    location: "Trung tâm TDTT Hòa Lạc",
-    joinedTeams: 16,
-    maxTeams: 16,
-    prizeMoney: 15000000,
-    image: "https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?w=600&fit=crop&q=80",
-    level: "movement",
-    fee: 200000,
-    description: "Giải đấu quy tụ những vợt thủ phong trào xuất sắc nhất Thạch Thất. Giải đấu đang diễn ra vô cùng kịch tính ở các vòng bảng loại trực tiếp.",
-    bracket: [
-      {
-        roundName: "Tứ kết",
-        matches: [
-          { id: "tk-1", teamA: "Minh Tuấn & Hoàng Đức", scoreA: 2, teamB: "Duy Khánh & Anh Tú", scoreB: 1, winner: "A" },
-          { id: "tk-2", teamA: "Bảo Lâm & Trường Giang", scoreA: 0, teamB: "Tiến Dũng & Văn Nam", scoreB: 2, winner: "B" }
-        ]
-      },
-      {
-        roundName: "Bán kết",
-        matches: [
-          { id: "bk-1", teamA: "Minh Tuấn & Hoàng Đức", teamB: "Tiến Dũng & Văn Nam", time: "16/05 - 15:00", court: "Sân 1" }
-        ]
-      }
-    ]
-  },
-  {
-    id: "tourney-3",
-    title: "Spring Challenge 2024",
-    sport: "Cầu lông",
-    status: "completed",
-    startDate: "01/04/2024",
-    endDate: "07/04/2024",
-    location: "Nhà thi đấu Hòa Lạc",
-    joinedTeams: 32,
-    maxTeams: 32,
-    prizeMoney: 10000000,
-    image: "https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?w=600&fit=crop&q=80",
-    level: "movement",
-    fee: 100000,
-    description: "Giải đấu chào xuân đầy kịch tính với hơn 32 đội tham gia tranh tài. Giải đấu đã kết thúc thành công tốt đẹp.",
-    bracket: [
-      {
-        roundName: "Chung kết",
-        matches: [
-          { id: "ck-1", teamA: "Gia Huy & Minh Nhượng", scoreA: 21, teamB: "Minh Tuấn & Hoàng Đức", scoreB: 19, winner: "A" }
-        ]
-      }
-    ]
-  },
-  {
-    id: "tourney-4",
-    title: "Hòa Lạc Double League",
-    sport: "Cầu lông",
-    status: "upcoming",
-    startDate: "05/06/2024",
-    endDate: "15/06/2024",
-    location: "Nhà thi đấu ĐH FPT Hòa Lạc",
-    joinedTeams: 8,
-    maxTeams: 16,
-    prizeMoney: 8000000,
-    image: "https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?w=600&fit=crop&q=80",
-    level: "semi_pro",
-    fee: 250000,
-    description: "Giải đấu đôi nam/đôi nam nữ nâng cao dành cho các tuyển thủ trình độ Bán chuyên. Quy tụ nhiều tay vợt ELO cao trong khu vực Hà Nội.",
-    bracket: []
-  },
-  {
-    id: "tourney-5",
-    title: "NetUP Amateur Series",
-    sport: "Cầu lông",
-    status: "upcoming",
-    startDate: "18/06/2024",
-    endDate: "23/06/2024",
-    location: "Trung tâm TDTT Hòa Lạc",
-    joinedTeams: 4,
-    maxTeams: 16,
-    prizeMoney: 12000000,
-    image: "https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?w=600&fit=crop&q=80",
-    level: "movement",
-    fee: 120000,
-    description: "Chuỗi giải đấu phong trào NetUP dành riêng cho người mới chơi hoặc trình độ trung bình yếu nhằm tạo sân chơi rèn luyện sức khỏe.",
-    bracket: []
-  },
-  {
-    id: "tourney-6",
-    title: "New Year Championship 2024",
-    sport: "Cầu lông",
-    status: "completed",
-    startDate: "05/01/2024",
-    endDate: "14/01/2024",
-    location: "Nhà thi đấu Hòa Lạc",
-    joinedTeams: 16,
-    maxTeams: 16,
-    prizeMoney: 18000000,
-    image: "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=600&fit=crop&q=80",
-    level: "pro",
-    fee: 300000,
-    description: "Giải đấu chuyên nghiệp đỉnh cao mở màn năm 2024 với sự góp mặt của các tay vợt đẳng cấp ELO từ 1600+.",
-    bracket: [
-      {
-        roundName: "Chung kết",
-        matches: [
-          { id: "ck-new-1", teamA: "Tuấn Đức & Hồng Nam", scoreA: 21, teamB: "Quang Huy & Quốc Khánh", scoreB: 17, winner: "A" }
-        ]
-      }
-    ]
-  }
-];
+type UserProfile = {
+  id: string;
+  full_name: string;
+  email: string;
+  roles: string[];
+};
+
+type RegistrationInput = {
+  teamName: string;
+  player1: string;
+  player2: string;
+  phone: string;
+  email: string;
+};
+
+function parseDisplayDate(value: string) {
+  const [day, month, year] = value.split("/").map(Number);
+  if (!day || !month || !year) return 0;
+  return new Date(year, month - 1, day).getTime();
+}
+
+function upsertTournament(items: Tournament[], next: Tournament) {
+  const exists = items.some((item) => item.id === next.id);
+  if (!exists) return [next, ...items];
+  return items.map((item) => (item.id === next.id ? next : item));
+}
 
 export default function TournamentsPage() {
-  const [tournaments, setTournaments] = useState<Tournament[]>(initialTournaments);
+  const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [favorites, setFavorites] = useState<string[]>([]);
-  const [joinedTourneyIds, setJoinedTourneyIds] = useState<string[]>(["tourney-1", "tourney-2", "tourney-3"]); // Mock default joined
+  const [joinedTourneyIds, setJoinedTourneyIds] = useState<string[]>([]);
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [pageError, setPageError] = useState("");
 
   // Modal control states
   const [selectedTournament, setSelectedTournament] = useState<Tournament | null>(null);
@@ -165,10 +48,9 @@ export default function TournamentsPage() {
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
-  // Filters state
-  const [sportFilter, setSportFilter] = useState("Cầu lông");
-  const [locationFilter, setLocationFilter] = useState("Hòa Lạc, Hà Nội");
-  const [timeFilter, setTimeFilter] = useState("all"); // all, 7days, 30days
+  const [sportFilter, setSportFilter] = useState("");
+  const [locationFilter, setLocationFilter] = useState("");
+  const [timeFilter, setTimeFilter] = useState("all");
   const [levelsFilter, setLevelsFilter] = useState({
     all: true,
     movement: false,
@@ -179,37 +61,96 @@ export default function TournamentsPage() {
   const [activeTab, setActiveTab] = useState<"all" | "upcoming" | "ongoing" | "completed" | "my">("all");
   const [sortOption, setSortOption] = useState("newest");
 
-  // Counter calculations for headers card
   const upcomingCount = useMemo(() => tournaments.filter(t => t.status === "upcoming").length, [tournaments]);
   const completedCount = useMemo(() => tournaments.filter(t => t.status === "completed").length, [tournaments]);
   const totalPrizePool = useMemo(() => tournaments.reduce((acc, t) => acc + t.prizeMoney, 0), [tournaments]);
+  const totalJoinedTeams = useMemo(() => tournaments.reduce((acc, t) => acc + t.joinedTeams, 0), [tournaments]);
+  const joinedTournaments = useMemo(
+    () => tournaments.filter((item) => joinedTourneyIds.includes(item.id)),
+    [joinedTourneyIds, tournaments],
+  );
 
-  // Handle Join Tournament Submit
-  const handleRegisterSubmit = (
-    tournamentId: string,
-    teamData: { teamName: string; player1: string; player2: string; phone: string; email: string }
-  ) => {
-    // Thêm vào danh sách ID đã tham gia
-    setJoinedTourneyIds(prev => [...prev, tournamentId]);
-    
-    // Tăng số đội tham gia của giải đấu lên 1
-    setTournaments(prev =>
-      prev.map(t => (t.id === tournamentId ? { ...t, joinedTeams: Math.min(t.maxTeams, t.joinedTeams + 1) } : t))
-    );
+  const sportOptions = useMemo(() => {
+    const sports = Array.from(new Set(tournaments.map((item) => item.sport))).sort();
+    return ["", ...sports];
+  }, [tournaments]);
 
-    setIsRegisterOpen(false);
-    
-    // Mở lại detail với trạng thái đã cập nhật
-    const updated = tournaments.find(t => t.id === tournamentId);
-    if (updated) {
-      setSelectedTournament({ ...updated, joinedTeams: Math.min(updated.maxTeams, updated.joinedTeams + 1) });
+  const locationOptions = useMemo(() => {
+    const locations = Array.from(new Set(tournaments.map((item) => item.location))).sort();
+    return ["", ...locations];
+  }, [tournaments]);
+
+  const upcomingMatches = useMemo(() => {
+    return joinedTournaments
+      .flatMap((tournament) =>
+        (tournament.bracket ?? []).flatMap((round) =>
+          round.matches
+            .filter((match) => match.time || match.court)
+            .map((match) => ({ tournament, roundName: round.roundName, match })),
+        ),
+      )
+      .slice(0, 2);
+  }, [joinedTournaments]);
+
+  const loadTournaments = useCallback(async () => {
+    setIsLoading(true);
+    setPageError("");
+    try {
+      const [nextTournaments, nextUser] = await Promise.all([
+        apiFetch<Tournament[]>("/api/v1/public/tournaments"),
+        apiFetch<UserProfile>("/api/v1/auth/me", { credentials: "include" }).catch(() => null),
+      ]);
+
+      let nextJoinedIds: string[] = [];
+      if (nextUser) {
+        nextJoinedIds = await apiFetch<string[]>("/api/v1/player/tournaments/registrations/me", {
+          credentials: "include",
+        }).catch(() => []);
+      }
+
+      setTournaments(nextTournaments);
+      setUser(nextUser);
+      setJoinedTourneyIds(nextJoinedIds);
+    } catch (caught) {
+      setPageError(errorMessage(caught, "Không tải được danh sách giải đấu"));
+      setTournaments([]);
+      setJoinedTourneyIds([]);
+      setUser(null);
+    } finally {
+      setIsLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    void loadTournaments();
+  }, [loadTournaments]);
+
+  const handleRegisterSubmit = async (tournamentId: string, teamData: RegistrationInput) => {
+    const updated = await apiFetch<Tournament>(
+      `/api/v1/player/tournaments/${tournamentId}/registrations`,
+      {
+        method: "POST",
+        credentials: "include",
+        body: JSON.stringify(teamData),
+      },
+    );
+    setJoinedTourneyIds(prev => (prev.includes(tournamentId) ? prev : [...prev, tournamentId]));
+    setTournaments(prev => upsertTournament(prev, updated));
+    setIsRegisterOpen(false);
+    setSelectedTournament(updated);
+    setIsDetailOpen(true);
   };
 
-  // Handle Create Tournament Submit
-  const handleCreateSubmit = (newTournament: Tournament) => {
-    setTournaments(prev => [newTournament, ...prev]);
+  const handleCreateSubmit = async (newTournament: TournamentCreateInput) => {
+    const created = await apiFetch<Tournament>("/api/v1/player/tournaments", {
+      method: "POST",
+      credentials: "include",
+      body: JSON.stringify(newTournament),
+    });
+    setTournaments(prev => upsertTournament(prev, created));
     setIsCreateOpen(false);
+    setSelectedTournament(created);
+    setIsDetailOpen(true);
   };
 
   const toggleFavorite = (id: string, e: React.MouseEvent) => {
@@ -219,7 +160,6 @@ export default function TournamentsPage() {
     );
   };
 
-  // Level filter checkbox change handler
   const handleLevelChange = (key: "all" | "movement" | "semi_pro" | "pro") => {
     if (key === "all") {
       setLevelsFilter({
@@ -231,7 +171,6 @@ export default function TournamentsPage() {
     } else {
       setLevelsFilter(prev => {
         const next = { ...prev, all: false, [key]: !prev[key] };
-        // If all are false, check "all" back
         if (!next.movement && !next.semi_pro && !next.pro) {
           next.all = true;
         }
@@ -240,10 +179,9 @@ export default function TournamentsPage() {
     }
   };
 
-  // Clear filters
   const handleClearFilters = () => {
-    setSportFilter("Cầu lông");
-    setLocationFilter("Hòa Lạc, Hà Nội");
+    setSportFilter("");
+    setLocationFilter("");
     setTimeFilter("all");
     setLevelsFilter({
       all: true,
@@ -254,22 +192,28 @@ export default function TournamentsPage() {
     setMaxPrize(50000000);
   };
 
-  // Filtered tournaments computed value
   const filteredTournaments = useMemo(() => {
     let items = tournaments;
 
-    // Filter by sport
     if (sportFilter) {
       items = items.filter(t => t.sport === sportFilter);
     }
 
-    // Filter by location
     if (locationFilter) {
-      const city = locationFilter.split(",")[0].trim().toLowerCase();
-      items = items.filter(t => t.location.toLowerCase().includes(city));
+      items = items.filter(t => t.location === locationFilter);
     }
 
-    // Filter by levels
+    if (timeFilter !== "all") {
+      const days = timeFilter === "7days" ? 7 : 30;
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+      const deadline = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+      items = items.filter(t => {
+        const start = parseDisplayDate(t.startDate);
+        return start >= now.getTime() && start <= deadline.getTime();
+      });
+    }
+
     if (!levelsFilter.all) {
       items = items.filter(t => {
         if (levelsFilter.movement && t.level === "movement") return true;
@@ -279,10 +223,8 @@ export default function TournamentsPage() {
       });
     }
 
-    // Filter by prize money
     items = items.filter(t => t.prizeMoney <= maxPrize);
 
-    // Filter by tabs
     if (activeTab === "upcoming") {
       items = items.filter(t => t.status === "upcoming");
     } else if (activeTab === "ongoing") {
@@ -293,10 +235,9 @@ export default function TournamentsPage() {
       items = items.filter(t => joinedTourneyIds.includes(t.id));
     }
 
-    // Sorting
     return [...items].sort((a, b) => {
       if (sortOption === "newest") {
-        return b.id.localeCompare(a.id); // custom id prefix based sort
+        return parseDisplayDate(b.startDate) - parseDisplayDate(a.startDate);
       } else if (sortOption === "prize_high") {
         return b.prizeMoney - a.prizeMoney;
       } else if (sortOption === "prize_low") {
@@ -338,15 +279,14 @@ export default function TournamentsPage() {
             Tham gia các giải đấu hấp dẫn, thử thách bản thân và khẳng định đẳng cấp.
           </p>
           
-          {/* Mock stats numbers */}
           <div className="pt-2 grid grid-cols-2 sm:grid-cols-4 gap-4 sm:min-w-[500px]">
             <div className="rounded-xl bg-slate-50 border border-slate-200/60 p-3 shadow-3xs">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Giải sắp diễn ra</p>
               <p className="mt-1 font-heading text-xl font-extrabold text-slate-900">{upcomingCount}</p>
             </div>
             <div className="rounded-xl bg-slate-50 border border-slate-200/60 p-3 shadow-3xs">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Người tham gia</p>
-              <p className="mt-1 font-heading text-xl font-extrabold text-slate-900">1.240+</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Đội đã đăng ký</p>
+              <p className="mt-1 font-heading text-xl font-extrabold text-slate-900">{formatNumber(totalJoinedTeams)}</p>
             </div>
             <div className="rounded-xl bg-slate-50 border border-slate-200/60 p-3 shadow-3xs col-span-2 sm:col-span-1">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tổng giải thưởng</p>
@@ -394,10 +334,11 @@ export default function TournamentsPage() {
                 value={sportFilter}
                 onChange={(e) => setSportFilter(e.target.value)}
               >
-                <option value="Cầu lông">Cầu lông</option>
-                <option value="Tennis">Tennis</option>
-                <option value="Pickleball">Pickleball</option>
-                <option value="Bóng đá">Bóng đá</option>
+                {sportOptions.map((item) => (
+                  <option key={item || "all"} value={item}>
+                    {item || "Tất cả môn"}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -409,10 +350,24 @@ export default function TournamentsPage() {
                 value={locationFilter}
                 onChange={(e) => setLocationFilter(e.target.value)}
               >
-                <option value="Hòa Lạc, Hà Nội">Hòa Lạc, Hà Nội</option>
-                <option value="Cầu Giấy, Hà Nội">Cầu Giấy, Hà Nội</option>
-                <option value="Mỹ Đình, Hà Nội">Mỹ Đình, Hà Nội</option>
-                <option value="Thanh Xuân, Hà Nội">Thanh Xuân, Hà Nội</option>
+                {locationOptions.map((item) => (
+                  <option key={item || "all"} value={item}>
+                    {item || "Tất cả khu vực"}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Thời gian</label>
+              <select
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none"
+                value={timeFilter}
+                onChange={(e) => setTimeFilter(e.target.value)}
+              >
+                <option value="all">Tất cả thời gian</option>
+                <option value="7days">Trong 7 ngày tới</option>
+                <option value="30days">Trong 30 ngày tới</option>
               </select>
             </div>
 
@@ -481,10 +436,10 @@ export default function TournamentsPage() {
             </div>
 
             <button
-              onClick={() => {}}
+              onClick={() => void loadTournaments()}
               className="w-full bg-[#b00c14] hover:bg-red-950 text-white font-bold text-xs py-2.5 rounded-xl transition shadow-xs cursor-pointer text-center"
             >
-              🔍 Tìm kiếm ({filteredTournaments.length})
+              {isLoading ? "Đang tải..." : `Tìm kiếm (${filteredTournaments.length})`}
             </button>
           </div>
         </aside>
@@ -531,8 +486,17 @@ export default function TournamentsPage() {
             </div>
           </div>
 
-          {/* Grid of tournament cards */}
-          {filteredTournaments.length === 0 ? (
+          {pageError && (
+            <div className="rounded-2xl border border-red-100 bg-red-50 p-4 text-sm font-semibold text-red-800">
+              {pageError}
+            </div>
+          )}
+
+          {isLoading ? (
+            <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-slate-500 shadow-3xs">
+              <p className="text-base font-semibold">Đang tải giải đấu từ backend...</p>
+            </div>
+          ) : filteredTournaments.length === 0 ? (
             <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center text-slate-500 shadow-3xs">
               <p className="text-base font-semibold">Chưa tìm thấy giải đấu phù hợp</p>
               <p className="text-xs text-slate-400 mt-1">Vui lòng điều chỉnh lại bộ lọc hoặc thay đổi tab trạng thái.</p>
@@ -638,12 +602,13 @@ export default function TournamentsPage() {
             </div>
           )}
 
-          {/* Load more */}
           {filteredTournaments.length > 0 && (
             <div className="pt-4 flex justify-center">
-              <button className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 px-4.5 py-2 text-xs font-bold text-slate-650 transition cursor-pointer">
-                Xem thêm giải đấu
-                <span>↓</span>
+              <button
+                onClick={() => void loadTournaments()}
+                className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 px-4.5 py-2 text-xs font-bold text-slate-650 transition cursor-pointer"
+              >
+                Tải lại từ backend
               </button>
             </div>
           )}
@@ -665,65 +630,39 @@ export default function TournamentsPage() {
             </div>
 
             <div className="space-y-3">
-              {/* Cup 1 - NetUP Hòa Lạc Open 2024 */}
-              <div className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50/40 p-2.5 hover:bg-slate-50 transition cursor-pointer">
-                <div className="h-8.5 w-8.5 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center shrink-0">
-                  <svg viewBox="0 0 24 24" className="h-4.5 w-4.5 text-slate-500" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
-                    <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
-                    <path d="M4 22h16" />
-                    <path d="M10 14.66V17c0 .55-.45 1-1 1H4v2h16v-2h-5c-.55 0-1-.45-1-1v-2.34" />
-                    <path d="M12 2a5 5 0 0 0-5 5v5a5 5 0 0 0 10 0V7a5 5 0 0 0-5-5z" />
-                  </svg>
+              {joinedTournaments.length === 0 ? (
+                <div className="rounded-xl border border-slate-100 bg-slate-50/40 p-3 text-xs font-semibold text-slate-500">
+                  {user ? "Bạn chưa đăng ký giải đấu nào." : "Đăng nhập để xem các giải đấu đã đăng ký."}
                 </div>
-                <div className="min-w-0">
-                  <p className="font-bold text-slate-900 text-xs truncate">NetUP Hòa Lạc Open 2024</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">Đôi nam · Đăng ký 18/05/2024</p>
-                  <span className="inline-block rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[9px] font-bold text-slate-600 mt-1.5">
-                    Sắp diễn ra
-                  </span>
-                </div>
-              </div>
-
-              {/* Cup 2 - Hòa Lạc Badminton Cup */}
-              <div className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50/40 p-2.5 hover:bg-slate-50 transition cursor-pointer">
-                <div className="h-8.5 w-8.5 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center shrink-0">
-                  <svg viewBox="0 0 24 24" className="h-4.5 w-4.5 text-slate-500" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
-                    <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
-                    <path d="M4 22h16" />
-                    <path d="M10 14.66V17c0 .55-.45 1-1 1H4v2h16v-2h-5c-.55 0-1-.45-1-1v-2.34" />
-                    <path d="M12 2a5 5 0 0 0-5 5v5a5 5 0 0 0 10 0V7a5 5 0 0 0-5-5z" />
-                  </svg>
-                </div>
-                <div className="min-w-0">
-                  <p className="font-bold text-slate-900 text-xs truncate">Hòa Lạc Badminton Cup</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">Đôi nam · Vòng bảng - 16/05/2024</p>
-                  <span className="inline-block rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[9px] font-bold text-slate-600 mt-1.5">
-                    Đang diễn ra
-                  </span>
-                </div>
-              </div>
-
-              {/* Cup 3 - Spring Challenge 2024 */}
-              <div className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50/40 p-2.5 hover:bg-slate-50 transition cursor-pointer">
-                <div className="h-8.5 w-8.5 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center shrink-0">
-                  <svg viewBox="0 0 24 24" className="h-4.5 w-4.5 text-slate-500" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
-                    <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
-                    <path d="M4 22h16" />
-                    <path d="M10 14.66V17c0 .55-.45 1-1 1H4v2h16v-2h-5c-.55 0-1-.45-1-1v-2.34" />
-                    <path d="M12 2a5 5 0 0 0-5 5v5a5 5 0 0 0 10 0V7a5 5 0 0 0-5-5z" />
-                  </svg>
-                </div>
-                <div className="min-w-0">
-                  <p className="font-bold text-slate-900 text-xs truncate">Spring Challenge 2024</p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">Đôi nam · Kết quả: Top 8</p>
-                  <span className="inline-block rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[9px] font-bold text-slate-600 mt-1.5">
-                    Đã kết thúc
-                  </span>
-                </div>
-              </div>
+              ) : (
+                joinedTournaments.slice(0, 3).map((tournament) => (
+                  <button
+                    key={tournament.id}
+                    type="button"
+                    onClick={() => { setSelectedTournament(tournament); setIsDetailOpen(true); }}
+                    className="flex w-full items-start gap-3 rounded-xl border border-slate-100 bg-slate-50/40 p-2.5 text-left transition hover:bg-slate-50"
+                  >
+                    <div className="h-8.5 w-8.5 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center shrink-0">
+                      <svg viewBox="0 0 24 24" className="h-4.5 w-4.5 text-slate-500" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+                        <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+                        <path d="M4 22h16" />
+                        <path d="M10 14.66V17c0 .55-.45 1-1 1H4v2h16v-2h-5c-.55 0-1-.45-1-1v-2.34" />
+                        <path d="M12 2a5 5 0 0 0-5 5v5a5 5 0 0 0 10 0V7a5 5 0 0 0-5-5z" />
+                      </svg>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-bold text-slate-900 text-xs truncate">{tournament.title}</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        {tournament.sport} · {tournament.startDate} - {tournament.endDate}
+                      </p>
+                      <span className="inline-block rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[9px] font-bold text-slate-600 mt-1.5">
+                        {getStatusLabel(tournament.status)}
+                      </span>
+                    </div>
+                  </button>
+                ))
+              )}
             </div>
           </div>
 
@@ -731,67 +670,36 @@ export default function TournamentsPage() {
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
               <h3 className="font-heading font-bold text-slate-900 text-sm sm:text-base">Trận đấu sắp tới</h3>
-              <a href="#" className="text-[10px] font-bold text-[#b00c14] hover:underline">Xem lịch thi đấu</a>
+              <button type="button" onClick={() => setActiveTab("my")} className="text-[10px] font-bold text-[#b00c14] hover:underline">Xem lịch thi đấu</button>
             </div>
 
             <div className="space-y-4">
-              {/* Trận 1 */}
-              <div className="rounded-xl border border-slate-100 p-3 bg-slate-50/20 text-xs space-y-2">
-                <div className="flex justify-between items-center text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                  <span>Vòng bảng - Bảng A</span>
-                  <span className="text-slate-800 font-black">16/05 - 19:00</span>
+              {upcomingMatches.length === 0 ? (
+                <div className="rounded-xl border border-slate-100 bg-slate-50/40 p-3 text-xs font-semibold text-slate-500">
+                  Chưa có lịch đấu trong các giải bạn đã đăng ký.
                 </div>
-                
-                {/* Match Team A vs Team B */}
-                <div className="flex items-center justify-around gap-2 text-center py-1">
-                  <div>
-                    <p className="font-bold text-slate-900 truncate max-w-[80px]">Minh Tuấn</p>
-                    <p className="text-[9px] text-slate-400">Hoàng Đức</p>
+              ) : (
+                upcomingMatches.map(({ tournament, roundName, match }) => (
+                  <div key={`${tournament.id}-${match.id}`} className="rounded-xl border border-slate-100 p-3 bg-slate-50/20 text-xs space-y-2">
+                    <div className="flex justify-between items-center gap-2 text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                      <span className="truncate">{roundName}</span>
+                      {match.time && <span className="text-slate-800 font-black">{match.time}</span>}
+                    </div>
+                    <div className="flex items-center justify-around gap-2 text-center py-1">
+                      <p className="font-bold text-slate-900 truncate max-w-[90px]">{match.teamA}</p>
+                      <span className="text-[10px] font-bold text-slate-400 bg-slate-100 rounded-full px-1.5 py-0.5">VS</span>
+                      <p className="font-bold text-slate-950 truncate max-w-[90px]">{match.teamB}</p>
+                    </div>
+                    <p className="text-[10px] text-slate-500 text-center font-medium flex items-center justify-center gap-1">
+                      <svg viewBox="0 0 24 24" className="h-3 w-3 text-slate-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                        <circle cx="12" cy="10" r="3" />
+                      </svg>
+                      {[match.court, tournament.location].filter(Boolean).join(" · ")}
+                    </p>
                   </div>
-                  <span className="text-[10px] font-bold text-slate-400 bg-slate-100 rounded-full px-1.5 py-0.5">VS</span>
-                  <div>
-                    <p className="font-bold text-slate-950 truncate max-w-[80px]">Quang Huy</p>
-                    <p className="text-[9px] text-slate-400">Đức Anh</p>
-                  </div>
-                </div>
-
-                <p className="text-[10px] text-slate-500 text-center font-medium flex items-center justify-center gap-1">
-                  <svg viewBox="0 0 24 24" className="h-3 w-3 text-slate-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                    <circle cx="12" cy="10" r="3" />
-                  </svg>
-                  Sân 3 · Nhà thi đấu Hòa Lạc
-                </p>
-              </div>
-
-              {/* Trận 2 */}
-              <div className="rounded-xl border border-slate-100 p-3 bg-slate-50/20 text-xs space-y-2">
-                <div className="flex justify-between items-center text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                  <span>Tứ kết</span>
-                  <span className="text-slate-800 font-black">18/05 - 15:00</span>
-                </div>
-                
-                {/* Match Team A vs Team B */}
-                <div className="flex items-center justify-around gap-2 text-center py-1">
-                  <div>
-                    <p className="font-bold text-slate-900 truncate max-w-[80px]">Minh Tuấn</p>
-                    <p className="text-[9px] text-slate-400">Hoàng Đức</p>
-                  </div>
-                  <span className="text-[10px] font-bold text-slate-400 bg-slate-100 rounded-full px-1.5 py-0.5">VS</span>
-                  <div>
-                    <p className="font-bold text-slate-500 truncate max-w-[80px]">TBD</p>
-                    <p className="text-[9px] text-slate-400">TBD</p>
-                  </div>
-                </div>
-
-                <p className="text-[10px] text-slate-500 text-center font-medium flex items-center justify-center gap-1">
-                  <svg viewBox="0 0 24 24" className="h-3 w-3 text-slate-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                    <circle cx="12" cy="10" r="3" />
-                  </svg>
-                  Sân 1 · Nhà thi đấu Hòa Lạc
-                </p>
-              </div>
+                ))
+              )}
             </div>
           </div>
 
@@ -843,6 +751,8 @@ export default function TournamentsPage() {
           tournament={selectedTournament}
           onClose={() => { setIsRegisterOpen(false); setIsDetailOpen(true); }}
           onSubmit={handleRegisterSubmit}
+          currentUserName={user?.full_name ?? ""}
+          currentUserEmail={user?.email ?? ""}
         />
       )}
 

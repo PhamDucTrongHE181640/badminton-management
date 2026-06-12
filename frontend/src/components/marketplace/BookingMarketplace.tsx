@@ -64,129 +64,30 @@ type Session = {
   recommendation_label?: string | null;
   distance_bucket?: string | null;
   slot_fit_score?: number | null;
+  joined_players?: Array<{
+    id: string;
+    full_name: string;
+    avatar_url?: string | null;
+  }>;
 };
 
-// Mock matchmaking data matching the mockup screenshot
-const matchmakingSessionsData = [
-  {
-    id: "match-1",
-    index: 1,
-    courtName: "Sân 1",
-    complexName: "CNC Sports Complex",
-    address: "Khu CNC Hòa Lạc, Thạch Thất, Hà Nội",
-    distance: "2.1 km",
-    sport: "Pickleball",
-    time: "19:00 - 21:00",
-    slotsJoined: 6,
-    slotsMax: 8,
-    price: 120000,
-    isMostSuitable: true,
-    levelStatus: "suitable",
-    levelText: "Trình độ phù hợp với bạn",
-    players: [
-      { name: "Minh Tuấn", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&fit=crop&auto=format&q=80" },
-      { name: "Khánh Duy", avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=80&fit=crop&auto=format&q=80" },
-      { name: "An Nhiên", avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=80&fit=crop&auto=format&q=80" },
-    ],
-    joinedCountText: "+3 người đã tham gia",
-    hasParking: true,
-    district: "Thạch Thất",
-  },
-  {
-    id: "match-2",
-    index: 2,
-    courtName: "Sân 2",
-    complexName: "Hòa Lạc Pickleball Club",
-    address: "Khu CNC Hòa Lạc, Thạch Thất, Hà Nội",
-    distance: "1.8 km",
-    sport: "Pickleball",
-    time: "18:00 - 20:00",
-    slotsJoined: 7,
-    slotsMax: 8,
-    price: 100000,
-    isMostSuitable: false,
-    levelStatus: "suitable",
-    levelText: "Trình độ phù hợp với bạn",
-    players: [
-      { name: "Hải Đăng", avatar: "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=80&fit=crop&auto=format&q=80" },
-      { name: "Bảo Phong", avatar: "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=80&fit=crop&auto=format&q=80" },
-      { name: "Thảo Chi", avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=80&fit=crop&auto=format&q=80" },
-      { name: "Vân Hải", avatar: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=80&fit=crop&auto=format&q=80" },
-    ],
-    joinedCountText: "+4 người đã tham gia",
-    hasParking: true,
-    district: "Thạch Thất",
-  },
-  {
-    id: "match-3",
-    index: 3,
-    courtName: "Sân 3",
-    complexName: "Green Park Pickleball",
-    address: "Khu CNC Hòa Lạc, Thạch Thất, Hà Nội",
-    distance: "2.6 km",
-    sport: "Pickleball",
-    time: "20:00 - 22:00",
-    slotsJoined: 8,
-    slotsMax: 8,
-    price: 90000,
-    isMostSuitable: false,
-    levelStatus: "warning",
-    levelText: "Bạn có thể chọn sân khác",
-    players: [
-      { name: "Quốc Khánh", avatar: "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=80&fit=crop&auto=format&q=80" },
-      { name: "Thanh Nam", avatar: "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=80&fit=crop&auto=format&q=80" },
-      { name: "Lan My", avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=80&fit=crop&auto=format&q=80" },
-    ],
-    joinedCountText: "+7 người đã tham gia",
-    hasParking: true,
-    district: "Thạch Thất",
-  },
-  {
-    id: "match-4",
-    index: 4,
-    courtName: "Sân 1",
-    complexName: "Cầu Giấy Badminton Arena",
-    address: "Đường Nguyễn Phong Sắc, Dịch Vọng, Cầu Giấy, Hà Nội",
-    distance: "1.2 km",
-    sport: "Badminton",
-    time: "17:00 - 19:00",
-    slotsJoined: 3,
-    slotsMax: 4,
-    price: 80000,
-    isMostSuitable: true,
-    levelStatus: "suitable",
-    levelText: "Trình độ phù hợp với bạn",
-    players: [
-      { name: "Hoàng Phong", avatar: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=80&fit=crop&auto=format&q=80" },
-      { name: "Quỳnh Dao", avatar: "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=80&fit=crop&auto=format&q=80" },
-    ],
-    joinedCountText: "+2 người đã tham gia",
-    hasParking: true,
-    district: "Cầu Giấy",
-  },
-  {
-    id: "match-5",
-    index: 5,
-    courtName: "Sân 3",
-    complexName: "Mỹ Đình Tennis Center",
-    address: "Đường Lê Đức Thọ, Mỹ Đình, Nam Từ Liêm, Hà Nội",
-    distance: "3.5 km",
-    sport: "Tennis",
-    time: "19:00 - 21:00",
-    slotsJoined: 2,
-    slotsMax: 4,
-    price: 250000,
-    isMostSuitable: false,
-    levelStatus: "suitable",
-    levelText: "Trình độ phù hợp với bạn",
-    players: [
-      { name: "Thanh Xuân", avatar: "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=80&fit=crop&auto=format&q=80" },
-    ],
-    joinedCountText: "+1 người đã tham gia",
-    hasParking: true,
-    district: "Nam Từ Liêm",
-  },
-];
+type MatchmakingSession = Session & {
+  index: number;
+  courtName: string;
+  complexName: string;
+  distance: string;
+  time: string;
+  dateLabel: string;
+  slotsJoined: number;
+  slotsMax: number;
+  price: number;
+  isMostSuitable: boolean;
+  levelStatus: "suitable" | "warning";
+  levelText: string;
+  players: Array<{ id: string; name: string; avatar: string | null }>;
+  joinedCountText: string;
+  hasParking: boolean;
+};
 
 const sportOptions: Array<{ value: SportFilter; label: string }> = [
   { value: "", label: "Tất cả môn" },
@@ -286,6 +187,74 @@ function mapUrl(session: Session) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
 }
 
+function shortTimeRange(startsAt: string, durationMinutes: number) {
+  const start = new Date(startsAt);
+  if (Number.isNaN(start.getTime())) return "Chưa có giờ";
+  const end = new Date(start.getTime() + durationMinutes * 60_000);
+  const format = (value: Date) => value.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+  return `${format(start)} - ${format(end)}`;
+}
+
+function shortDateLabel(startsAt: string) {
+  const date = new Date(startsAt);
+  if (Number.isNaN(date.getTime())) return "Chưa có ngày";
+  return date.toLocaleDateString("vi-VN", { weekday: "short", day: "2-digit", month: "2-digit" });
+}
+
+function timeBucketMatches(startsAt: string, bucket: string) {
+  if (bucket === "Tất cả khung giờ") return true;
+  const startHour = Number(bucket.slice(0, 2));
+  const endHour = Number(bucket.slice(8, 10));
+  const date = new Date(startsAt);
+  if (Number.isNaN(date.getTime()) || Number.isNaN(startHour) || Number.isNaN(endHour)) return true;
+  const hour = date.getHours();
+  return hour >= startHour && hour < endHour;
+}
+
+function amenityIncludes(session: Session, keywords: string[]) {
+  const text = session.amenities.join(" ").toLowerCase();
+  return keywords.some((keyword) => text.includes(keyword));
+}
+
+function playerInitial(name: string) {
+  return name.trim().charAt(0).toUpperCase() || "?";
+}
+
+function toMatchmakingSession(session: Session, index: number, activeTier: string): MatchmakingSession {
+  const slotsJoined = Math.max(0, session.max_slots - session.open_slots);
+  const players = (session.joined_players ?? []).slice(0, 4).map((player) => ({
+    id: player.id,
+    name: player.full_name,
+    avatar: player.avatar_url ?? null,
+  }));
+  const hiddenPlayers = Math.max(0, slotsJoined - players.length);
+  const fitsTier = tierFitsSession(session, activeTier);
+
+  return {
+    ...session,
+    index: index + 1,
+    courtName: session.sub_court_name || session.court_name,
+    complexName: session.complex_name,
+    distance: distanceLabel(session, index),
+    time: shortTimeRange(session.starts_at, session.duration_minutes),
+    dateLabel: shortDateLabel(session.starts_at),
+    slotsJoined,
+    slotsMax: session.max_slots,
+    price: session.slot_price_vnd,
+    isMostSuitable: session.recommendation_label === "high" || index === 0,
+    levelStatus: fitsTier ? "suitable" : "warning",
+    levelText: fitsTier ? "Trình độ phù hợp với bạn" : "Ngoài khoảng trình độ hiện tại",
+    players,
+    joinedCountText:
+      slotsJoined > 0
+        ? hiddenPlayers > 0
+          ? `+${hiddenPlayers} người đã tham gia`
+          : `${slotsJoined} slot đã được giữ`
+        : "Chưa có người tham gia",
+    hasParking: amenityIncludes(session, ["parking", "gửi xe", "giu xe", "đỗ xe", "do xe"]),
+  };
+}
+
 export function BookingMarketplace({ variant }: { variant: Variant }) {
   const searchParams = useSearchParams();
   const isMatchmaking = searchParams.get("mode") === "matchmaking";
@@ -307,17 +276,12 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
   const [favorites, setFavorites] = useState<string[]>([]);
   const [playAll, setPlayAll] = useState(false);
 
-  // Custom Matchmaking states
-  const [location, setLocation] = useState("Hòa Lạc, Hà Nội");
-  const [matchDate, setMatchDate] = useState("Hôm nay, 20/05");
-  const [matchTime, setMatchTime] = useState("18:00 - 22:00");
+  const [location, setLocation] = useState("Tất cả khu vực");
+  const [matchDate, setMatchDate] = useState("Tất cả ngày");
+  const [matchTime, setMatchTime] = useState("Tất cả khung giờ");
   const [courtType, setCourtType] = useState("Tất cả sân");
   const [activeFilterDropdown, setActiveFilterDropdown] = useState<string | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
-
-  const selectedSession = useMemo(() => {
-    return matchmakingSessionsData.find((s) => s.id === selectedSessionId) || null;
-  }, [selectedSessionId]);
 
   const effectivePostType: PostTypeFilter = isMatchmaking ? "pool" : postType;
 
@@ -407,34 +371,66 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
     );
   }
 
-  // Dynamic filter for mock matchmaking sessions based on location and playAll toggle
+  const locationOptions = useMemo(() => {
+    const districts = Array.from(new Set(sessions.map((item) => item.district).filter(Boolean))).sort();
+    return ["Tất cả khu vực", ...districts.map((item) => `${item}, Hà Nội`)];
+  }, [sessions]);
+
+  const dateOptions = useMemo(() => {
+    const labels = Array.from(new Set(sessions.map((item) => shortDateLabel(item.starts_at)))).filter(
+      (item) => item !== "Chưa có ngày",
+    );
+    return ["Tất cả ngày", ...labels];
+  }, [sessions]);
+
+  const timeOptions = ["Tất cả khung giờ", "06:00 - 10:00", "10:00 - 14:00", "14:00 - 18:00", "18:00 - 22:00"];
+
   const visibleMatchmakingSessions = useMemo(() => {
-    let items = matchmakingSessionsData;
-    
-    // Filter by selected location
+    let items = sessions.filter((item) => item.post_type === "pool").map((item, index) => toMatchmakingSession(item, index, activeTier));
+
     if (location && location !== "Tất cả khu vực") {
-      const selectedLocWord = location.split(",")[0].toLowerCase().trim(); // "hòa lạc" or "cầu giấy"
-      items = items.filter((item) => 
-        item.address.toLowerCase().includes(selectedLocWord) || 
+      const selectedLocWord = location.split(",")[0].toLowerCase().trim();
+      items = items.filter((item) =>
+        item.district.toLowerCase().includes(selectedLocWord) ||
+        item.address.toLowerCase().includes(selectedLocWord) ||
         item.complexName.toLowerCase().includes(selectedLocWord)
       );
     }
 
-    // Filter by Play All (if playAll is false, show only suitable ones)
+    if (matchDate !== "Tất cả ngày") {
+      items = items.filter((item) => item.dateLabel === matchDate);
+    }
+
+    if (matchTime !== "Tất cả khung giờ") {
+      items = items.filter((item) => timeBucketMatches(item.starts_at, matchTime));
+    }
+
+    if (courtType === "Sân trong nhà") {
+      items = items.filter((item) => amenityIncludes(item, ["indoor", "trong nhà", "trong nha"]));
+    } else if (courtType === "Sân ngoài trời") {
+      items = items.filter((item) => amenityIncludes(item, ["outdoor", "ngoài trời", "ngoai troi"]));
+    }
+
     if (!playAll) {
       items = items.filter((item) => item.levelStatus === "suitable");
     }
 
-    return items;
-  }, [playAll, location]);
+    if (favorites.length > 0 && activeTab === "favorites") {
+      items = items.filter((item) => favorites.includes(item.id));
+    }
 
-  // Tự động điều chỉnh trận đấu được chọn khi danh sách lọc thay đổi
+    return items;
+  }, [activeTab, activeTier, courtType, favorites, location, matchDate, matchTime, playAll, sessions]);
+
+  const selectedSession = useMemo(() => {
+    return visibleMatchmakingSessions.find((s) => s.id === selectedSessionId) || null;
+  }, [selectedSessionId, visibleMatchmakingSessions]);
+
   useEffect(() => {
     if (isMatchmaking) {
       if (visibleMatchmakingSessions.length > 0) {
-        // Nếu trận đấu được chọn hiện tại không nằm trong danh sách hiển thị mới, tự động chọn trận đầu tiên
         const exists = visibleMatchmakingSessions.some((s) => s.id === selectedSessionId);
-        if (!exists && selectedSessionId !== null) {
+        if (!exists) {
           setSelectedSessionId(visibleMatchmakingSessions[0].id);
         }
       } else {
@@ -443,24 +439,16 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
     }
   }, [visibleMatchmakingSessions, isMatchmaking, selectedSessionId]);
 
-  const userElo = skillTier?.visible_skill_tier === "Beginner"
-    ? 800
-    : skillTier?.visible_skill_tier === "Advanced"
-    ? 1800
-    : 1250;
-
   const userTierLabel = skillTier?.visible_skill_tier === "Beginner"
     ? "Người mới"
     : skillTier?.visible_skill_tier === "Advanced"
     ? "Nâng cao"
     : "Trung cấp";
 
-  const locations = [
-    "Hòa Lạc, Hà Nội",
-    "Cầu Giấy, Hà Nội",
-    "Mỹ Đình, Hà Nội",
-    "Thanh Xuân, Hà Nội",
-  ];
+  const bestMatch = visibleMatchmakingSessions[0] ?? null;
+  const matchmakingOpenSlots = visibleMatchmakingSessions.reduce((total, item) => total + item.open_slots, 0);
+  const visibleMatchedPlayers = visibleMatchmakingSessions.reduce((total, item) => total + item.slotsJoined, 0);
+  const busiestTime = visibleMatchmakingSessions.length > 0 ? visibleMatchmakingSessions[0].time : "Chưa có khung giờ";
 
   // RENDER MATCHMAKING LAYOUT
   if (isMatchmaking) {
@@ -502,7 +490,7 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
               <>
                 <div className="fixed inset-0 z-30" onClick={() => setActiveFilterDropdown(null)} />
                 <div className="absolute left-0 mt-2 z-40 w-[200px] rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg">
-                  {locations.map((loc) => (
+                  {locationOptions.map((loc) => (
                     <button
                       key={loc}
                       type="button"
@@ -547,7 +535,7 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
               <>
                 <div className="fixed inset-0 z-30" onClick={() => setActiveFilterDropdown(null)} />
                 <div className="absolute left-0 mt-2 z-40 w-[200px] rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg">
-                  {["Hôm nay, 20/05", "Ngày mai, 21/05", "Thứ Năm, 22/05"].map((d) => (
+                  {dateOptions.map((d) => (
                     <button
                       key={d}
                       type="button"
@@ -590,7 +578,7 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
               <>
                 <div className="fixed inset-0 z-30" onClick={() => setActiveFilterDropdown(null)} />
                 <div className="absolute left-0 mt-2 z-40 w-[200px] rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg">
-                  {["18:00 - 22:00", "06:00 - 10:00", "14:00 - 18:00"].map((t) => (
+                  {timeOptions.map((t) => (
                     <button
                       key={t}
                       type="button"
@@ -684,6 +672,12 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
           </div>
         </div>
 
+        {error ? (
+          <Notice tone="danger">{error}</Notice>
+        ) : (
+          <Notice tone="info">{message}</Notice>
+        )}
+
         {/* 2-Column Main Content Section */}
         <div className="grid gap-6 lg:grid-cols-[1fr_320px] xl:grid-cols-[1fr_340px]">
           
@@ -705,12 +699,15 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
                 <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 animate-pulse text-red-500 shrink-0" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 11-.57-8.38l5.67-5.67" />
                 </svg>
-                <span>Cập nhật lúc 11:20</span>
+                <span>{isLoading ? "Đang cập nhật" : `${sessions.length} khung giờ từ backend`}</span>
               </div>
             </div>
 
-            {/* Empty check */}
-            {visibleMatchmakingSessions.length === 0 ? (
+            {isLoading ? (
+              <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-500">
+                <p className="text-base font-semibold">Đang tải phòng ghép từ backend...</p>
+              </div>
+            ) : visibleMatchmakingSessions.length === 0 ? (
               <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-500">
                 <p className="text-base font-semibold">Không tìm thấy trận đấu nào phù hợp</p>
                 <p className="text-xs text-slate-400 mt-1">Hãy đổi bộ lọc khu vực hoặc bật toggle "Ghép mọi trình độ" để xem thêm.</p>
@@ -913,17 +910,26 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
                           )}
                         </div>
 
-                        {/* Avatars stack with Unsplash images */}
                         <div className="flex items-center gap-2">
                           <div className="flex -space-x-1.5 overflow-hidden">
-                            {session.players.map((p, pIdx) => (
-                              <img
-                                key={pIdx}
-                                src={p.avatar}
-                                alt={p.name}
-                                title={p.name}
-                                className="inline-block h-6.5 w-6.5 rounded-full ring-2 ring-white object-cover"
-                              />
+                            {session.players.map((p) => (
+                              p.avatar ? (
+                                <img
+                                  key={p.id}
+                                  src={p.avatar}
+                                  alt={p.name}
+                                  title={p.name}
+                                  className="inline-block h-6.5 w-6.5 rounded-full ring-2 ring-white object-cover"
+                                />
+                              ) : (
+                                <span
+                                  key={p.id}
+                                  title={p.name}
+                                  className="inline-flex h-6.5 w-6.5 items-center justify-center rounded-full bg-slate-200 text-[10px] font-black text-slate-600 ring-2 ring-white"
+                                >
+                                  {playerInitial(p.name)}
+                                </span>
+                              )
                             ))}
                           </div>
                           <span className="text-[10px] font-semibold text-slate-500 whitespace-nowrap">
@@ -1130,14 +1136,24 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
                   <p className="text-xs font-bold text-slate-700">Những người đã tham gia</p>
                   <div className="flex items-center gap-2">
                     <div className="flex -space-x-1.5 overflow-hidden">
-                      {selectedSession.players.map((p, pIdx) => (
-                        <img
-                          key={pIdx}
-                          src={p.avatar}
-                          alt={p.name}
-                          title={p.name}
-                          className="inline-block h-7.5 w-7.5 rounded-full ring-2 ring-white object-cover"
-                        />
+                      {selectedSession.players.map((p) => (
+                        p.avatar ? (
+                          <img
+                            key={p.id}
+                            src={p.avatar}
+                            alt={p.name}
+                            title={p.name}
+                            className="inline-block h-7.5 w-7.5 rounded-full ring-2 ring-white object-cover"
+                          />
+                        ) : (
+                          <span
+                            key={p.id}
+                            title={p.name}
+                            className="inline-flex h-7.5 w-7.5 items-center justify-center rounded-full bg-slate-200 text-[11px] font-black text-slate-600 ring-2 ring-white"
+                          >
+                            {playerInitial(p.name)}
+                          </span>
+                        )
                       ))}
                     </div>
                     <span className="text-xs font-semibold text-slate-500">
@@ -1167,9 +1183,7 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
                 </div>
               </div>
             ) : (
-              /* Lời khuyên & Thống kê gốc */
               <>
-                {/* Lời khuyên cho bạn Card */}
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
                   <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
                     <span className="text-emerald-700 text-lg">💡</span>
@@ -1181,8 +1195,14 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
                         ✓
                       </div>
                       <div>
-                        <p className="font-bold text-slate-900 text-sm">Sân 1 phù hợp nhất</p>
-                        <p className="mt-0.5 text-slate-500 leading-relaxed">Trình độ người chơi tương đồng với bạn và khu giờ bạn thường chơi.</p>
+                        <p className="font-bold text-slate-900 text-sm">
+                          {bestMatch ? `${bestMatch.courtName} phù hợp nhất` : "Chưa có đề xuất phù hợp"}
+                        </p>
+                        <p className="mt-0.5 text-slate-500 leading-relaxed">
+                          {bestMatch
+                            ? `${bestMatch.complexName} đang có ${bestMatch.open_slots} slot trống theo dữ liệu hiện tại.`
+                            : "Thử mở rộng bộ lọc hoặc bật ghép mọi trình độ để xem thêm phòng."}
+                        </p>
                       </div>
                     </div>
 
@@ -1191,8 +1211,10 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
                         🕒
                       </div>
                       <div>
-                        <p className="font-bold text-slate-900 text-sm">Khung giờ vàng</p>
-                        <p className="mt-0.5 text-slate-500 leading-relaxed">18:00 - 21:00 là khung giờ có nhiều người chơi nhất hôm nay.</p>
+                        <p className="font-bold text-slate-900 text-sm">Khung giờ đang mở</p>
+                        <p className="mt-0.5 text-slate-500 leading-relaxed">
+                          {busiestTime} là khung giờ nổi bật trong danh sách đang hiển thị.
+                        </p>
                       </div>
                     </div>
 
@@ -1201,20 +1223,20 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
                         👥
                       </div>
                       <div>
-                        <p className="font-bold text-slate-900 text-sm">Rủ thêm bạn bè</p>
-                        <p className="mt-0.5 text-slate-500 leading-relaxed">Rủ bạn cùng tham gia để tăng cơ hội ghép trận và vui hơn!</p>
+                        <p className="font-bold text-slate-900 text-sm">Slot còn trống</p>
+                        <p className="mt-0.5 text-slate-500 leading-relaxed">
+                          Có {matchmakingOpenSlots} slot đang mở trong các phòng ghép phù hợp bộ lọc.
+                        </p>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Thống kê nhanh Card */}
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
                   <h3 className="font-heading font-bold text-slate-900 text-sm sm:text-base pb-3 border-b border-slate-100">
                     Thống kê nhanh
                   </h3>
                   <div className="mt-4 space-y-4">
-                    {/* Level */}
                     <div className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2">
                         <svg viewBox="0 0 24 24" className="h-4.5 w-4.5 text-red-600 shrink-0" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1223,24 +1245,22 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
                         <span className="font-semibold text-slate-600">Trình độ của bạn</span>
                       </div>
                       <div className="text-right leading-tight">
-                        <p className="font-bold text-slate-900">ELO {userElo}</p>
+                        <p className="font-bold text-slate-900">{skillTier?.visible_skill_tier ?? "Chưa đánh giá"}</p>
                         <p className="text-[10px] text-slate-400 font-bold">{userTierLabel}</p>
                       </div>
                     </div>
 
-                    {/* Success Rate */}
                     <div className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2">
                         <svg viewBox="0 0 24 24" className="h-4.5 w-4.5 text-blue-600 shrink-0" fill="none" stroke="currentColor" strokeWidth="2">
                           <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
                           <polyline points="17 6 23 6 23 12" />
                         </svg>
-                        <span className="font-semibold text-slate-600">Tỷ lệ ghép thành công</span>
+                        <span className="font-semibold text-slate-600">Phòng phù hợp</span>
                       </div>
-                      <span className="font-bold text-slate-900 text-sm">92%</span>
+                      <span className="font-bold text-slate-900 text-sm">{visibleMatchmakingSessions.length}</span>
                     </div>
 
-                    {/* Matches count */}
                     <div className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2">
                         <svg viewBox="0 0 24 24" className="h-4.5 w-4.5 text-orange-600 shrink-0" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1249,9 +1269,9 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
                           <line x1="8" y1="2" x2="8" y2="6" />
                           <line x1="3" y1="10" x2="21" y2="10" />
                         </svg>
-                        <span className="font-semibold text-slate-600">Số trận đã chơi</span>
+                        <span className="font-semibold text-slate-600">Người đã giữ slot</span>
                       </div>
-                      <span className="font-bold text-slate-900 text-sm">24 trận</span>
+                      <span className="font-bold text-slate-900 text-sm">{visibleMatchedPlayers}</span>
                     </div>
                   </div>
                 </div>

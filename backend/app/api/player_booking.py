@@ -37,6 +37,12 @@ class PlayerModel(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
 
+class DiscoverySessionParticipant(BaseModel):
+    id: str
+    full_name: str
+    avatar_url: str | None = None
+
+
 class DiscoverySessionResponse(BaseModel):
     id: str
     court_id: str
@@ -71,6 +77,7 @@ class DiscoverySessionResponse(BaseModel):
     recommendation_label: str | None = None
     distance_bucket: str | None = None
     slot_fit_score: int | None = None
+    joined_players: list[DiscoverySessionParticipant] = Field(default_factory=list)
 
 
 class BookingCreate(PlayerModel):

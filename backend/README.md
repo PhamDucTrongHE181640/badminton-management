@@ -113,6 +113,7 @@ Postgres.
 
 ## Player Discovery and Booking Endpoints
 
+- `GET /api/v1/public/discovery/sessions`
 - `GET /api/v1/player/discovery/sessions`
 - `GET /api/v1/player/sessions/{id}`
 - `POST /api/v1/player/bookings`
@@ -125,6 +126,18 @@ Postgres.
 Booking creation enforces slot limits (`solo` and `full_court`), creates payment
 plan transactions (`deposit` + `remaining`), and locks session slots in one
 transaction.
+
+Discovery responses include `joined_players` from pool hosts and active
+bookings so the frontend can render matchmaking participants without mock data.
+
+## Public Platform Endpoints
+
+- `GET /api/v1/public/platform-stats`
+- `POST /api/v1/public/contact-leads`
+- `GET /api/v1/public/tournaments`
+
+`platform-stats` powers the homepage counters from live database counts.
+`contact-leads` stores partner/owner leads submitted from public frontend forms.
 
 ## Owner Check-in Endpoints
 

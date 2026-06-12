@@ -26,6 +26,20 @@ browser-safe values such as `NEXT_PUBLIC_API_BASE_URL`.
 Gemini credentials for video assessment also belong in `backend/.env`
 (`GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_TIMEOUT_SECONDS`).
 
+To switch between local development and a public EC2 DNS, edit only
+`NETUP_ENV_TARGET` in the root `.env`, then sync derived env values:
+
+```bash
+NETUP_ENV_TARGET=localhost
+# or
+NETUP_ENV_TARGET=ec2-18-143-66-143.ap-southeast-1.compute.amazonaws.com
+
+python3 scripts/sync_env.py
+```
+
+The sync updates CORS, frontend/backend base URLs, Google callback,
+VNPay return URL, and browser-facing API URL while preserving secrets.
+
 ```bash
 docker compose up --build
 ```

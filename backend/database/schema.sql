@@ -194,6 +194,23 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_owner_request_pending_per_user
 ON public.owner_service_requests(user_id)
 WHERE status = 'pending';
 
+CREATE TABLE IF NOT EXISTS public.contact_leads (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  full_name text NOT NULL,
+  phone text NOT NULL,
+  email citext NOT NULL,
+  partner_type text NOT NULL,
+  organization_name text NOT NULL,
+  address text NOT NULL,
+  message text,
+  source text NOT NULL DEFAULT 'web',
+  status text NOT NULL DEFAULT 'new'
+    CHECK (status IN ('new', 'contacted', 'qualified', 'closed')),
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS public.admin_configs (
   id smallint PRIMARY KEY DEFAULT 1 CHECK (id = 1),
   platform_fee_rate numeric(6,4) NOT NULL CHECK (platform_fee_rate BETWEEN 0 AND 1),
@@ -795,6 +812,11 @@ CREATE TRIGGER trg_admin_configs_updated_at
 BEFORE UPDATE ON public.admin_configs
 FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
+DROP TRIGGER IF EXISTS trg_contact_leads_updated_at ON public.contact_leads;
+CREATE TRIGGER trg_contact_leads_updated_at
+BEFORE UPDATE ON public.contact_leads
+FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
 DROP TRIGGER IF EXISTS trg_court_complexes_updated_at ON public.court_complexes;
 CREATE TRIGGER trg_court_complexes_updated_at
 BEFORE UPDATE ON public.court_complexes
@@ -893,6 +915,8 @@ FOR EACH ROW EXECUTE FUNCTION public.validate_chat_message_row();
 -- Useful indexes
 CREATE INDEX IF NOT EXISTS idx_oauth_user_id ON public.oauth_identities(user_id);
 CREATE INDEX IF NOT EXISTS idx_owner_requests_status ON public.owner_service_requests(status, submitted_at DESC);
+CREATE INDEX IF NOT EXISTS idx_contact_leads_status_created ON public.contact_leads(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_contact_leads_email_created ON public.contact_leads(email, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_court_complexes_owner ON public.court_complexes(owner_user_id);
 CREATE INDEX IF NOT EXISTS idx_courts_owner ON public.courts(owner_user_id);
 CREATE INDEX IF NOT EXISTS idx_courts_sport_status ON public.courts(sport, status);

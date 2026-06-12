@@ -1,26 +1,37 @@
 "use client";
 
-import React, { useState, FormEvent } from "react";
+import React, { useEffect, useState, FormEvent } from "react";
 import { Tournament } from "./TournamentDetailModal";
-import { formatVnd } from "@/lib/format";
+import { errorMessage, formatVnd } from "@/lib/format";
 
 type Props = {
   tournament: Tournament | null;
   onClose: () => void;
-  onSubmit: (tournamentId: string, teamData: { teamName: string; player1: string; player2: string; phone: string; email: string }) => void;
+  onSubmit: (tournamentId: string, teamData: { teamName: string; player1: string; player2: string; phone: string; email: string }) => Promise<void> | void;
+  currentUserName: string;
+  currentUserEmail: string;
 };
 
-export default function TournamentRegisterModal({ tournament, onClose, onSubmit }: Props) {
+export default function TournamentRegisterModal({ tournament, onClose, onSubmit, currentUserName, currentUserEmail }: Props) {
   const [teamName, setTeamName] = useState("");
-  const [player1, setPlayer1] = useState("Minh Tuấn"); // Mặc định là user đang đăng nhập
+  const [player1, setPlayer1] = useState(currentUserName);
   const [player2, setPlayer2] = useState("");
   const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(currentUserEmail);
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    setPlayer1(currentUserName);
+  }, [currentUserName]);
+
+  useEffect(() => {
+    setEmail(currentUserEmail);
+  }, [currentUserEmail]);
 
   if (!tournament) return null;
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!teamName.trim()) {
       setError("Vui lòng nhập tên đội");
@@ -39,13 +50,21 @@ export default function TournamentRegisterModal({ tournament, onClose, onSubmit 
       return;
     }
 
-    onSubmit(tournament.id, {
-      teamName: teamName.trim(),
-      player1: player1.trim(),
-      player2: player2.trim(),
-      phone: phone.trim(),
-      email: email.trim(),
-    });
+    setIsSubmitting(true);
+    setError("");
+    try {
+      await onSubmit(tournament.id, {
+        teamName: teamName.trim(),
+        player1: player1.trim(),
+        player2: player2.trim(),
+        phone: phone.trim(),
+        email: email.trim(),
+      });
+    } catch (caught) {
+      setError(errorMessage(caught, "Không đăng ký được giải đấu"));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -109,7 +128,8 @@ export default function TournamentRegisterModal({ tournament, onClose, onSubmit 
               type="text"
               className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm font-bold text-slate-500 cursor-not-allowed focus:outline-none"
               value={player1}
-              disabled
+              onChange={(e) => setPlayer1(e.target.value)}
+              disabled={Boolean(currentUserName)}
             />
           </div>
 
@@ -181,9 +201,10 @@ export default function TournamentRegisterModal({ tournament, onClose, onSubmit 
           </button>
           <button
             type="submit"
-            className="rounded-xl bg-[#b00c14] hover:bg-red-950 px-4.5 py-2 text-xs font-bold text-white transition shadow-xs cursor-pointer"
+            disabled={isSubmitting}
+            className="rounded-xl bg-[#b00c14] hover:bg-red-950 px-4.5 py-2 text-xs font-bold text-white transition shadow-xs cursor-pointer disabled:opacity-60"
           >
-            Xác nhận đăng ký
+            {isSubmitting ? "Đang đăng ký..." : "Xác nhận đăng ký"}
           </button>
         </div>
       </form>
