@@ -19,6 +19,30 @@ type BracketRound = {
   matches: Match[];
 };
 
+type TournamentPlayerProfile = {
+  id: string;
+  full_name: string;
+  avatar_url?: string | null;
+  city?: string | null;
+  district?: string | null;
+  visible_skill_tier: string;
+  elo_value: number;
+  matches_played: number;
+  wins: number;
+  losses: number;
+  draws: number;
+};
+
+export type TournamentRegistration = {
+  id: string;
+  status: "pending" | "registered" | "cancelled";
+  teamName: string;
+  player1: string;
+  player2?: string | null;
+  createdAt: string;
+  profile: TournamentPlayerProfile;
+};
+
 export type Tournament = {
   id: string;
   title: string;
@@ -35,6 +59,7 @@ export type Tournament = {
   fee: number;
   description: string;
   bracket?: BracketRound[];
+  registrations?: TournamentRegistration[];
 };
 
 type Props = {
@@ -42,10 +67,11 @@ type Props = {
   onClose: () => void;
   onRegister: (tournament: Tournament) => void;
   isJoined: boolean;
+  registrationStatus?: "pending" | "registered" | "cancelled" | null;
 };
 
-export default function TournamentDetailModal({ tournament, onClose, onRegister, isJoined }: Props) {
-  const [activeTab, setActiveTab] = useState<"info" | "bracket">("info");
+export default function TournamentDetailModal({ tournament, onClose, onRegister, isJoined, registrationStatus }: Props) {
+  const [activeTab, setActiveTab] = useState<"info" | "bracket" | "players">("info");
 
   if (!tournament) return null;
 
@@ -74,6 +100,32 @@ export default function TournamentDetailModal({ tournament, onClose, onRegister,
         return "";
     }
   };
+
+  const getRegistrationStatusLabel = (status: string | null | undefined) => {
+    switch (status) {
+      case "pending":
+        return "Chờ admin duyệt thanh toán";
+      case "registered":
+        return "Đã xác nhận";
+      case "cancelled":
+        return "Đã hủy";
+      default:
+        return "";
+    }
+  };
+
+  const getSkillLabel = (tier: string) => {
+    switch (tier) {
+      case "Advanced":
+        return "Nâng cao";
+      case "Intermediate":
+        return "Trung bình";
+      default:
+        return "Người mới";
+    }
+  };
+
+  const playerInitial = (name: string) => name.trim().charAt(0).toUpperCase() || "?";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -135,6 +187,16 @@ export default function TournamentDetailModal({ tournament, onClose, onRegister,
             }`}
           >
             Sơ đồ nhánh đấu (Bracket)
+          </button>
+          <button
+            onClick={() => setActiveTab("players")}
+            className={`py-3.5 px-4 text-sm font-bold border-b-2 transition cursor-pointer ${
+              activeTab === "players"
+                ? "border-red-800 text-red-800"
+                : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            Đội đăng ký
           </button>
         </div>
 
@@ -310,12 +372,88 @@ export default function TournamentDetailModal({ tournament, onClose, onRegister,
             </div>
           )}
 
+          {activeTab === "players" && (
+            <div className="space-y-4">
+              {(tournament.registrations ?? []).length === 0 ? (
+                <div className="text-center py-12 text-slate-500">
+                  <p className="text-sm font-semibold">Chưa có đội nào gửi đơn đăng ký</p>
+                  <p className="text-xs text-slate-400 mt-1">Danh sách đội sẽ hiển thị sau khi có đơn đăng ký.</p>
+                </div>
+              ) : (
+                <div className="grid gap-3 md:grid-cols-2">
+                  {(tournament.registrations ?? []).map((registration) => (
+                    <article key={registration.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-3xs">
+                      <div className="flex items-start gap-3">
+                        {registration.profile.avatar_url ? (
+                          <img
+                            src={registration.profile.avatar_url}
+                            alt={registration.profile.full_name}
+                            className="h-11 w-11 rounded-full object-cover ring-2 ring-slate-100"
+                          />
+                        ) : (
+                          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-sm font-black text-slate-600">
+                            {playerInitial(registration.profile.full_name)}
+                          </span>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="font-heading text-sm font-bold text-slate-950 truncate">
+                                {registration.teamName}
+                              </p>
+                              <p className="mt-0.5 text-xs font-semibold text-slate-600 truncate">
+                                {registration.player1}
+                                {registration.player2 ? ` & ${registration.player2}` : ""}
+                              </p>
+                            </div>
+                            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                              registration.status === "registered"
+                                ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                                : "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+                            }`}>
+                              {registration.status === "registered" ? "Đã xác nhận" : "Chờ duyệt"}
+                            </span>
+                          </div>
+
+                          <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[10px]">
+                            <div className="rounded-lg bg-slate-50 p-2">
+                              <p className="font-bold text-slate-400 uppercase">ELO</p>
+                              <p className="mt-0.5 font-black text-slate-900">{registration.profile.elo_value}</p>
+                            </div>
+                            <div className="rounded-lg bg-slate-50 p-2">
+                              <p className="font-bold text-slate-400 uppercase">Level</p>
+                              <p className="mt-0.5 font-black text-slate-900">
+                                {getSkillLabel(registration.profile.visible_skill_tier)}
+                              </p>
+                            </div>
+                            <div className="rounded-lg bg-slate-50 p-2">
+                              <p className="font-bold text-slate-400 uppercase">Trận</p>
+                              <p className="mt-0.5 font-black text-slate-900">{registration.profile.matches_played}</p>
+                            </div>
+                          </div>
+
+                          <p className="mt-3 text-[11px] font-semibold text-slate-500">
+                            {[registration.profile.district, registration.profile.city].filter(Boolean).join(", ") || "Chưa cập nhật khu vực"}
+                          </p>
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
         </div>
 
         {/* Footer Actions */}
         <div className="border-t border-slate-200 bg-slate-50 p-4 shrink-0 flex justify-between items-center">
           <div className="text-xs text-slate-500">
-            {tournament.status === "upcoming" ? "* Hạn chót đăng ký trước giải 5 ngày" : "* Giải đấu đã đóng đăng ký"}
+            {registrationStatus
+              ? getRegistrationStatusLabel(registrationStatus)
+              : tournament.status === "upcoming"
+              ? "* Hạn chót đăng ký trước giải 5 ngày"
+              : "* Giải đấu đã đóng đăng ký"}
           </div>
           <div className="flex gap-3">
             <button
@@ -329,12 +467,18 @@ export default function TournamentDetailModal({ tournament, onClose, onRegister,
                 disabled={isJoined}
                 onClick={() => onRegister(tournament)}
                 className={`rounded-xl px-5 py-2 text-xs font-bold text-white transition shadow-xs cursor-pointer ${
-                  isJoined
+                  registrationStatus === "pending"
+                    ? "bg-amber-600 cursor-not-allowed"
+                    : isJoined
                     ? "bg-emerald-600 cursor-not-allowed"
                     : "bg-[#b00c14] hover:bg-red-950"
                 }`}
               >
-                {isJoined ? "✓ Đã đăng ký" : "Đăng ký tham gia giải"}
+                {registrationStatus === "pending"
+                  ? "Chờ duyệt thanh toán"
+                  : isJoined
+                  ? "✓ Đã đăng ký"
+                  : "Đăng ký tham gia giải"}
               </button>
             )}
           </div>

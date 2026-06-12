@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from app.core.dependencies import require_player
+from app.core.dependencies import require_admin, require_player
 from app.main import app
+from app.services.admin_auth import AdminPrincipal
 from app.services.user_auth import UserPrincipal
 
 
@@ -52,6 +53,15 @@ def _tournament_payload() -> dict[str, object]:
     }
 
 
+def _admin() -> AdminPrincipal:
+    return AdminPrincipal(
+        id="admin-id",
+        user_id="admin-user-id",
+        username="admin",
+        is_super_admin=True,
+    )
+
+
 def test_public_tournaments_endpoint(client: TestClient, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     monkeypatch.setattr(
         "app.api.player_tournaments.list_tournaments",
@@ -89,7 +99,9 @@ def test_my_tournament_registrations_endpoint(
     assert response.json() == ["tournament-id"]
 
 
-def test_create_tournament_endpoint(client: TestClient, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_my_tournament_registration_details_endpoint(
+    client: TestClient, monkeypatch
+) -> None:  # type: ignore[no-untyped-def]
     player = UserPrincipal(
         id="player-id",
         email="player@example.com",
@@ -99,12 +111,33 @@ def test_create_tournament_endpoint(client: TestClient, monkeypatch) -> None:  #
     )
     app.dependency_overrides[require_player] = lambda: player
     monkeypatch.setattr(
+        "app.api.player_tournaments.list_my_tournament_registrations",
+        lambda **_: [
+            {
+                "id": "registration-id",
+                "tournamentId": "tournament-id",
+                "status": "pending",
+                "teamName": "Hoa Lac Warriors",
+                "createdAt": "2026-06-12T08:00:00Z",
+            }
+        ],
+    )
+
+    response = client.get("/api/v1/player/tournaments/registrations/me/details")
+
+    assert response.status_code == 200
+    assert response.json()[0]["status"] == "pending"
+
+
+def test_admin_create_tournament_endpoint(client: TestClient, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    app.dependency_overrides[require_admin] = _admin
+    monkeypatch.setattr(
         "app.api.player_tournaments.create_tournament",
         lambda **_: _tournament_payload(),
     )
 
     response = client.post(
-        "/api/v1/player/tournaments",
+        "/api/v1/admin/tournaments",
         json={
             "title": "NetUP Hoa Lac Open",
             "sport": "Cầu lông",
@@ -122,6 +155,12 @@ def test_create_tournament_endpoint(client: TestClient, monkeypatch) -> None:  #
 
     assert response.status_code == 201
     assert response.json()["title"] == "NetUP Hoa Lac Open"
+
+
+def test_player_create_tournament_endpoint_removed(client: TestClient) -> None:
+    response = client.post("/api/v1/player/tournaments", json={})
+
+    assert response.status_code == 405
 
 
 def test_register_tournament_endpoint(client: TestClient, monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -151,3 +190,67 @@ def test_register_tournament_endpoint(client: TestClient, monkeypatch) -> None: 
 
     assert response.status_code == 201
     assert response.json()["joinedTeams"] == 5
+
+
+def _admin_registration_payload() -> dict[str, object]:
+    return {
+        "id": "registration-id",
+        "status": "pending",
+        "teamName": "Hoa Lac Warriors",
+        "player1": "Minh Tuấn",
+        "player2": "Hoàng Đức",
+        "createdAt": "2026-06-12T08:00:00Z",
+        "tournamentId": "tournament-id",
+        "tournamentTitle": "NetUP Hoa Lac Open",
+        "contactPhone": "0912345678",
+        "contactEmail": "player@example.com",
+        "reviewedAt": None,
+        "reviewNote": None,
+        "profile": {
+            "id": "player-id",
+            "full_name": "Nguoi choi",
+            "avatar_url": None,
+            "city": "Ha Noi",
+            "district": "Thach That",
+            "visible_skill_tier": "Intermediate",
+            "elo_value": 1350,
+            "matches_played": 10,
+            "wins": 6,
+            "losses": 3,
+            "draws": 1,
+        },
+    }
+
+
+def test_admin_list_tournament_registrations_endpoint(
+    client: TestClient, monkeypatch
+) -> None:  # type: ignore[no-untyped-def]
+    app.dependency_overrides[require_admin] = _admin
+    monkeypatch.setattr(
+        "app.api.player_tournaments.list_tournament_registrations_for_admin",
+        lambda **_: [_admin_registration_payload()],
+    )
+
+    response = client.get("/api/v1/admin/tournaments/registrations?status=pending")
+
+    assert response.status_code == 200
+    assert response.json()[0]["contactPhone"] == "0912345678"
+    assert response.json()[0]["profile"]["elo_value"] == 1350
+
+
+def test_admin_review_tournament_registration_endpoint(
+    client: TestClient, monkeypatch
+) -> None:  # type: ignore[no-untyped-def]
+    app.dependency_overrides[require_admin] = _admin
+    monkeypatch.setattr(
+        "app.api.player_tournaments.review_tournament_registration",
+        lambda **_: {**_admin_registration_payload(), "status": "registered"},
+    )
+
+    response = client.patch(
+        "/api/v1/admin/tournaments/registrations/registration-id",
+        json={"status": "registered", "reviewNote": "Đã nhận chuyển khoản"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "registered"

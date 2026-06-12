@@ -182,11 +182,16 @@ export default function TournamentRegisterModal({ tournament, onClose, onSubmit,
           </div>
 
           {/* Fee Notice */}
-          <div className="rounded-xl bg-slate-50 border border-slate-200 p-3.5 flex justify-between items-center text-xs">
-            <span className="font-semibold text-slate-650">Lệ phí giải đấu:</span>
-            <span className="font-extrabold text-slate-900 text-sm">
-              {tournament.fee === 0 ? "Miễn phí" : formatVnd(tournament.fee)}
-            </span>
+          <div className="rounded-xl bg-slate-50 border border-slate-200 p-3.5 text-xs space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="font-semibold text-slate-650">Lệ phí giải đấu:</span>
+              <span className="font-extrabold text-slate-900 text-sm">
+                {tournament.fee === 0 ? "Miễn phí" : formatVnd(tournament.fee)}
+              </span>
+            </div>
+            <p className="font-semibold leading-relaxed text-slate-500">
+              Sau khi gửi đơn, trạng thái sẽ là chờ admin kiểm tra thanh toán thủ công.
+            </p>
           </div>
         </div>
 
@@ -204,7 +209,7 @@ export default function TournamentRegisterModal({ tournament, onClose, onSubmit,
             disabled={isSubmitting}
             className="rounded-xl bg-[#b00c14] hover:bg-red-950 px-4.5 py-2 text-xs font-bold text-white transition shadow-xs cursor-pointer disabled:opacity-60"
           >
-            {isSubmitting ? "Đang đăng ký..." : "Xác nhận đăng ký"}
+            {isSubmitting ? "Đang gửi đơn..." : "Gửi đơn đăng ký"}
           </button>
         </div>
       </form>

@@ -277,23 +277,27 @@ def _session_select_sql(where_clause: str) -> str:
         LEFT JOIN LATERAL (
           SELECT jsonb_agg(
             jsonb_build_object(
-              'id', participant.id::text,
-              'full_name', participant.full_name,
-              'avatar_url', participant.avatar_url
+              'id', u.id::text,
+              'full_name', u.full_name,
+              'avatar_url', u.avatar_url,
+              'city', u.city,
+              'district', u.district,
+              'visible_skill_tier', COALESCE(er.visible_skill_tier::text, 'Beginner'),
+              'elo_value', COALESCE(er.elo_value, 1000),
+              'matches_played', COALESCE(er.matches_played, 0),
+              'wins', COALESCE(er.wins, 0),
+              'losses', COALESCE(er.losses, 0),
+              'draws', COALESCE(er.draws, 0)
             )
             ORDER BY participant.created_at
           ) AS joined_players
           FROM (
-            SELECT DISTINCT ON (raw_participant.id)
-              raw_participant.id,
-              raw_participant.full_name,
-              raw_participant.avatar_url,
+            SELECT DISTINCT ON (raw_participant.user_id)
+              raw_participant.user_id,
               raw_participant.created_at
             FROM (
               SELECT
-                u.id,
-                u.full_name,
-                u.avatar_url,
+                u.id AS user_id,
                 p.created_at
               FROM public.pool_posts p
               JOIN public.users u ON u.id = p.host_user_id
@@ -302,9 +306,7 @@ def _session_select_sql(where_clause: str) -> str:
               UNION ALL
 
               SELECT
-                u.id,
-                u.full_name,
-                u.avatar_url,
+                u.id AS user_id,
                 b.created_at
               FROM public.bookings b
               JOIN public.users u ON u.id = b.player_user_id
@@ -314,8 +316,10 @@ def _session_select_sql(where_clause: str) -> str:
                   CAST('expired' AS public.booking_status)
                 )
             ) raw_participant
-            ORDER BY raw_participant.id, raw_participant.created_at
+            ORDER BY raw_participant.user_id, raw_participant.created_at
           ) participant
+          JOIN public.users u ON u.id = participant.user_id
+          LEFT JOIN public.elo_ratings er ON er.player_user_id = u.id
         ) jp ON TRUE
         {where_clause}
     """

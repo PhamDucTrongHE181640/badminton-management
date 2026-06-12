@@ -41,6 +41,14 @@ class DiscoverySessionParticipant(BaseModel):
     id: str
     full_name: str
     avatar_url: str | None = None
+    city: str | None = None
+    district: str | None = None
+    visible_skill_tier: str = "Beginner"
+    elo_value: int = 1000
+    matches_played: int = 0
+    wins: int = 0
+    losses: int = 0
+    draws: int = 0
 
 
 class DiscoverySessionResponse(BaseModel):

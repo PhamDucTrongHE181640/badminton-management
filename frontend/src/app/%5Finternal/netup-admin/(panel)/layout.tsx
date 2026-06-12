@@ -49,6 +49,7 @@ export default function AdminPanelLayout({ children }: { children: React.ReactNo
         links={[
           { href: "/_internal/netup-admin/dashboard", label: "Dashboard" },
           { href: "/_internal/netup-admin/config", label: "Cấu hình" },
+          { href: "/_internal/netup-admin/tournaments", label: "Giải đấu" },
           { href: "/_internal/netup-admin/owner-requests", label: "Duyệt owner" },
         ]}
       />

@@ -18,6 +18,8 @@ from app.api.player_chat import router as player_chat_router
 from app.api.player_chat import ws_router as player_chat_ws_router
 from app.api.player_matches import router as player_matches_router
 from app.api.player_payments import router as player_payments_router
+from app.api.player_profiles import router as player_profiles_router
+from app.api.player_tournaments import admin_router as admin_tournaments_router
 from app.api.player_tournaments import player_router as player_tournaments_router
 from app.api.player_tournaments import public_router as public_tournaments_router
 from app.api.public_discovery import router as public_discovery_router
@@ -63,8 +65,10 @@ def create_app() -> FastAPI:
     app.include_router(player_matches_router, prefix="/api/v1")
     app.include_router(player_chat_router, prefix="/api/v1")
     app.include_router(player_payments_router, prefix="/api/v1")
+    app.include_router(player_profiles_router, prefix="/api/v1")
     app.include_router(public_tournaments_router, prefix="/api/v1")
     app.include_router(player_tournaments_router, prefix="/api/v1")
+    app.include_router(admin_tournaments_router, prefix="/api/v1")
     app.include_router(public_discovery_router, prefix="/api/v1")
     app.include_router(public_platform_router, prefix="/api/v1")
     app.include_router(health_router, prefix="/api/v1")

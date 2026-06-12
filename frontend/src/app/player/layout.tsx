@@ -25,6 +25,7 @@ function PlayerNavigation() {
           { href: "/player/assessment", label: "Level" },
           { href: "/player/bookings", label: "Booking của tôi" },
           { href: "/player/matches", label: "Lịch đấu" },
+          { href: "/player/profile", label: "Hồ sơ" },
         ]}
       />
     </>

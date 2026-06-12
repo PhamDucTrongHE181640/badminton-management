@@ -3,7 +3,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import TournamentDetailModal, { Tournament } from "./TournamentDetailModal";
 import TournamentRegisterModal from "./TournamentRegisterModal";
-import TournamentCreateModal, { TournamentCreateInput } from "./TournamentCreateModal";
 import { apiFetch } from "@/lib/http";
 import { errorMessage, formatNumber, formatVnd } from "@/lib/format";
 
@@ -22,6 +21,14 @@ type RegistrationInput = {
   email: string;
 };
 
+type MyTournamentRegistration = {
+  id: string;
+  tournamentId: string;
+  status: "pending" | "registered" | "cancelled";
+  teamName: string;
+  createdAt: string;
+};
+
 function parseDisplayDate(value: string) {
   const [day, month, year] = value.split("/").map(Number);
   if (!day || !month || !year) return 0;
@@ -37,7 +44,7 @@ function upsertTournament(items: Tournament[], next: Tournament) {
 export default function TournamentsPage() {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [favorites, setFavorites] = useState<string[]>([]);
-  const [joinedTourneyIds, setJoinedTourneyIds] = useState<string[]>([]);
+  const [myRegistrations, setMyRegistrations] = useState<MyTournamentRegistration[]>([]);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [pageError, setPageError] = useState("");
@@ -46,7 +53,6 @@ export default function TournamentsPage() {
   const [selectedTournament, setSelectedTournament] = useState<Tournament | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   const [sportFilter, setSportFilter] = useState("");
   const [locationFilter, setLocationFilter] = useState("");
@@ -65,6 +71,17 @@ export default function TournamentsPage() {
   const completedCount = useMemo(() => tournaments.filter(t => t.status === "completed").length, [tournaments]);
   const totalPrizePool = useMemo(() => tournaments.reduce((acc, t) => acc + t.prizeMoney, 0), [tournaments]);
   const totalJoinedTeams = useMemo(() => tournaments.reduce((acc, t) => acc + t.joinedTeams, 0), [tournaments]);
+  const joinedTourneyIds = useMemo(
+    () => myRegistrations.map((item) => item.tournamentId),
+    [myRegistrations],
+  );
+  const registrationStatusByTournament = useMemo(() => {
+    const result: Record<string, MyTournamentRegistration["status"]> = {};
+    myRegistrations.forEach((item) => {
+      result[item.tournamentId] = item.status;
+    });
+    return result;
+  }, [myRegistrations]);
   const joinedTournaments = useMemo(
     () => tournaments.filter((item) => joinedTourneyIds.includes(item.id)),
     [joinedTourneyIds, tournaments],
@@ -101,20 +118,20 @@ export default function TournamentsPage() {
         apiFetch<UserProfile>("/api/v1/auth/me", { credentials: "include" }).catch(() => null),
       ]);
 
-      let nextJoinedIds: string[] = [];
+      let nextRegistrations: MyTournamentRegistration[] = [];
       if (nextUser) {
-        nextJoinedIds = await apiFetch<string[]>("/api/v1/player/tournaments/registrations/me", {
+        nextRegistrations = await apiFetch<MyTournamentRegistration[]>("/api/v1/player/tournaments/registrations/me/details", {
           credentials: "include",
         }).catch(() => []);
       }
 
       setTournaments(nextTournaments);
       setUser(nextUser);
-      setJoinedTourneyIds(nextJoinedIds);
+      setMyRegistrations(nextRegistrations);
     } catch (caught) {
       setPageError(errorMessage(caught, "Không tải được danh sách giải đấu"));
       setTournaments([]);
-      setJoinedTourneyIds([]);
+      setMyRegistrations([]);
       setUser(null);
     } finally {
       setIsLoading(false);
@@ -134,22 +151,27 @@ export default function TournamentsPage() {
         body: JSON.stringify(teamData),
       },
     );
-    setJoinedTourneyIds(prev => (prev.includes(tournamentId) ? prev : [...prev, tournamentId]));
+    setMyRegistrations(prev => {
+      const exists = prev.some((item) => item.tournamentId === tournamentId);
+      if (exists) {
+        return prev.map((item) =>
+          item.tournamentId === tournamentId ? { ...item, status: "pending" } : item,
+        );
+      }
+      return [
+        {
+          id: `local-${tournamentId}`,
+          tournamentId,
+          status: "pending",
+          teamName: teamData.teamName,
+          createdAt: new Date().toISOString(),
+        },
+        ...prev,
+      ];
+    });
     setTournaments(prev => upsertTournament(prev, updated));
     setIsRegisterOpen(false);
     setSelectedTournament(updated);
-    setIsDetailOpen(true);
-  };
-
-  const handleCreateSubmit = async (newTournament: TournamentCreateInput) => {
-    const created = await apiFetch<Tournament>("/api/v1/player/tournaments", {
-      method: "POST",
-      credentials: "include",
-      body: JSON.stringify(newTournament),
-    });
-    setTournaments(prev => upsertTournament(prev, created));
-    setIsCreateOpen(false);
-    setSelectedTournament(created);
     setIsDetailOpen(true);
   };
 
@@ -505,6 +527,7 @@ export default function TournamentsPage() {
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {filteredTournaments.map((tourney) => {
                 const isJoined = joinedTourneyIds.includes(tourney.id);
+                const registrationStatus = registrationStatusByTournament[tourney.id];
                 return (
                   <article
                     key={tourney.id}
@@ -587,8 +610,12 @@ export default function TournamentsPage() {
                       
                       <div className="flex gap-2">
                         {isJoined && tourney.status === "upcoming" && (
-                          <span className="rounded-lg bg-emerald-50 px-2.5 py-1.5 text-[10px] font-bold text-emerald-700 border border-emerald-100">
-                            ✓ Đã đăng ký
+                          <span className={`rounded-lg px-2.5 py-1.5 text-[10px] font-bold border ${
+                            registrationStatus === "pending"
+                              ? "bg-amber-50 text-amber-700 border-amber-100"
+                              : "bg-emerald-50 text-emerald-700 border-emerald-100"
+                          }`}>
+                            {registrationStatus === "pending" ? "Chờ duyệt" : "✓ Đã đăng ký"}
                           </span>
                         )}
                         <span className="rounded-lg border border-red-800/80 bg-white px-2.5 py-1.5 text-[10px] font-bold text-[#b00c14] hover:bg-red-50 transition">
@@ -635,33 +662,40 @@ export default function TournamentsPage() {
                   {user ? "Bạn chưa đăng ký giải đấu nào." : "Đăng nhập để xem các giải đấu đã đăng ký."}
                 </div>
               ) : (
-                joinedTournaments.slice(0, 3).map((tournament) => (
-                  <button
-                    key={tournament.id}
-                    type="button"
-                    onClick={() => { setSelectedTournament(tournament); setIsDetailOpen(true); }}
-                    className="flex w-full items-start gap-3 rounded-xl border border-slate-100 bg-slate-50/40 p-2.5 text-left transition hover:bg-slate-50"
-                  >
-                    <div className="h-8.5 w-8.5 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center shrink-0">
-                      <svg viewBox="0 0 24 24" className="h-4.5 w-4.5 text-slate-500" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
-                        <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
-                        <path d="M4 22h16" />
-                        <path d="M10 14.66V17c0 .55-.45 1-1 1H4v2h16v-2h-5c-.55 0-1-.45-1-1v-2.34" />
-                        <path d="M12 2a5 5 0 0 0-5 5v5a5 5 0 0 0 10 0V7a5 5 0 0 0-5-5z" />
-                      </svg>
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-bold text-slate-900 text-xs truncate">{tournament.title}</p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">
-                        {tournament.sport} · {tournament.startDate} - {tournament.endDate}
-                      </p>
-                      <span className="inline-block rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5 text-[9px] font-bold text-slate-600 mt-1.5">
-                        {getStatusLabel(tournament.status)}
-                      </span>
-                    </div>
-                  </button>
-                ))
+                joinedTournaments.slice(0, 3).map((tournament) => {
+                  const registrationStatus = registrationStatusByTournament[tournament.id];
+                  return (
+                    <button
+                      key={tournament.id}
+                      type="button"
+                      onClick={() => { setSelectedTournament(tournament); setIsDetailOpen(true); }}
+                      className="flex w-full items-start gap-3 rounded-xl border border-slate-100 bg-slate-50/40 p-2.5 text-left transition hover:bg-slate-50"
+                    >
+                      <div className="h-8.5 w-8.5 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center shrink-0">
+                        <svg viewBox="0 0 24 24" className="h-4.5 w-4.5 text-slate-500" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+                          <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+                          <path d="M4 22h16" />
+                          <path d="M10 14.66V17c0 .55-.45 1-1 1H4v2h16v-2h-5c-.55 0-1-.45-1-1v-2.34" />
+                          <path d="M12 2a5 5 0 0 0-5 5v5a5 5 0 0 0 10 0V7a5 5 0 0 0-5-5z" />
+                        </svg>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-bold text-slate-900 text-xs truncate">{tournament.title}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">
+                          {tournament.sport} · {tournament.startDate} - {tournament.endDate}
+                        </p>
+                        <span className={`inline-block rounded-full border px-2 py-0.5 text-[9px] font-bold mt-1.5 ${
+                          registrationStatus === "pending"
+                            ? "bg-amber-50 border-amber-100 text-amber-700"
+                            : "bg-slate-100 border-slate-200 text-slate-600"
+                        }`}>
+                          {registrationStatus === "pending" ? "Chờ duyệt thanh toán" : getStatusLabel(tournament.status)}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })
               )}
             </div>
           </div>
@@ -703,14 +737,14 @@ export default function TournamentsPage() {
             </div>
           </div>
 
-          {/* Section: Banner Tạo giải đấu riêng */}
-          <div className="rounded-2xl border border-[#b00c14]/10 bg-gradient-to-br from-[#b00c14]/5 to-[#b00c14]/20 p-5 shadow-2xs relative overflow-hidden flex flex-col justify-center gap-4 h-48">
-            <div className="z-10 space-y-1.5 max-w-[160px]">
+          {/* Section: Admin tournament notice */}
+          <div className="rounded-2xl border border-[#b00c14]/10 bg-gradient-to-br from-[#b00c14]/5 to-[#b00c14]/20 p-5 shadow-2xs relative overflow-hidden flex flex-col justify-center gap-4 min-h-48">
+            <div className="z-10 space-y-1.5 max-w-[190px]">
               <h3 className="font-heading font-black text-slate-900 text-sm sm:text-base leading-tight">
-                Tạo giải đấu của riêng bạn
+                Đăng giải đấu qua admin
               </h3>
               <p className="text-[10px] text-slate-500 font-medium leading-relaxed">
-                Dễ dàng tạo và quản lý giải đấu theo ý muốn của bạn.
+                Người chơi gửi đơn tham gia tại đây. Admin sẽ tạo giải và duyệt thanh toán thủ công.
               </p>
             </div>
 
@@ -723,12 +757,9 @@ export default function TournamentsPage() {
               />
             </div>
 
-            <button
-              onClick={() => setIsCreateOpen(true)}
-              className="z-10 w-fit bg-[#b00c14] hover:bg-red-950 text-white font-bold text-xs px-4.5 py-2.5 rounded-xl transition shadow-xs cursor-pointer text-center"
-            >
-              Tạo giải đấu ngay
-            </button>
+            <span className="z-10 w-fit rounded-xl border border-[#b00c14]/20 bg-white px-4.5 py-2.5 text-center text-xs font-bold text-[#b00c14] shadow-xs">
+              Chờ duyệt sau đăng ký
+            </span>
           </div>
 
         </aside>
@@ -740,6 +771,7 @@ export default function TournamentsPage() {
         <TournamentDetailModal
           tournament={selectedTournament}
           isJoined={joinedTourneyIds.includes(selectedTournament.id)}
+          registrationStatus={registrationStatusByTournament[selectedTournament.id] ?? null}
           onClose={() => { setIsDetailOpen(false); setSelectedTournament(null); }}
           onRegister={(t) => { setIsDetailOpen(false); setIsRegisterOpen(true); }}
         />
@@ -753,14 +785,6 @@ export default function TournamentsPage() {
           onSubmit={handleRegisterSubmit}
           currentUserName={user?.full_name ?? ""}
           currentUserEmail={user?.email ?? ""}
-        />
-      )}
-
-      {/* RENDER TOURNAMENT CREATE WIZARD MODAL */}
-      {isCreateOpen && (
-        <TournamentCreateModal
-          onClose={() => setIsCreateOpen(false)}
-          onCreate={handleCreateSubmit}
         />
       )}
 

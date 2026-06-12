@@ -33,6 +33,20 @@ type SkillTierSummary = {
   has_assessment: boolean;
 };
 
+type JoinedPlayerProfile = {
+  id: string;
+  full_name: string;
+  avatar_url?: string | null;
+  city?: string | null;
+  district?: string | null;
+  visible_skill_tier?: string;
+  elo_value?: number;
+  matches_played?: number;
+  wins?: number;
+  losses?: number;
+  draws?: number;
+};
+
 type Session = {
   id: string;
   title: string;
@@ -64,11 +78,7 @@ type Session = {
   recommendation_label?: string | null;
   distance_bucket?: string | null;
   slot_fit_score?: number | null;
-  joined_players?: Array<{
-    id: string;
-    full_name: string;
-    avatar_url?: string | null;
-  }>;
+  joined_players?: JoinedPlayerProfile[];
 };
 
 type MatchmakingSession = Session & {
@@ -84,7 +94,7 @@ type MatchmakingSession = Session & {
   isMostSuitable: boolean;
   levelStatus: "suitable" | "warning";
   levelText: string;
-  players: Array<{ id: string; name: string; avatar: string | null }>;
+  players: Array<JoinedPlayerProfile & { name: string; avatar: string | null }>;
   joinedCountText: string;
   hasParking: boolean;
 };
@@ -220,9 +230,14 @@ function playerInitial(name: string) {
   return name.trim().charAt(0).toUpperCase() || "?";
 }
 
+function playerSkillLabel(tier: string | null | undefined) {
+  return tierLabels[tier ?? ""] ?? "Người mới";
+}
+
 function toMatchmakingSession(session: Session, index: number, activeTier: string): MatchmakingSession {
   const slotsJoined = Math.max(0, session.max_slots - session.open_slots);
   const players = (session.joined_players ?? []).slice(0, 4).map((player) => ({
+    ...player,
     id: player.id,
     name: player.full_name,
     avatar: player.avatar_url ?? null,
@@ -282,6 +297,7 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
   const [courtType, setCourtType] = useState("Tất cả sân");
   const [activeFilterDropdown, setActiveFilterDropdown] = useState<string | null>(null);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [selectedPlayerProfile, setSelectedPlayerProfile] = useState<JoinedPlayerProfile | null>(null);
 
   const effectivePostType: PostTypeFilter = isMatchmaking ? "pool" : postType;
 
@@ -913,23 +929,28 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
                         <div className="flex items-center gap-2">
                           <div className="flex -space-x-1.5 overflow-hidden">
                             {session.players.map((p) => (
-                              p.avatar ? (
-                                <img
-                                  key={p.id}
-                                  src={p.avatar}
-                                  alt={p.name}
-                                  title={p.name}
-                                  className="inline-block h-6.5 w-6.5 rounded-full ring-2 ring-white object-cover"
-                                />
-                              ) : (
-                                <span
-                                  key={p.id}
-                                  title={p.name}
-                                  className="inline-flex h-6.5 w-6.5 items-center justify-center rounded-full bg-slate-200 text-[10px] font-black text-slate-600 ring-2 ring-white"
-                                >
-                                  {playerInitial(p.name)}
-                                </span>
-                              )
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setSelectedPlayerProfile(p);
+                                }}
+                                className="rounded-full focus:outline-none focus:ring-2 focus:ring-red-800/30"
+                                title={`Xem profile ${p.name}`}
+                              >
+                                {p.avatar ? (
+                                  <img
+                                    src={p.avatar}
+                                    alt={p.name}
+                                    className="inline-block h-6.5 w-6.5 rounded-full ring-2 ring-white object-cover"
+                                  />
+                                ) : (
+                                  <span className="inline-flex h-6.5 w-6.5 items-center justify-center rounded-full bg-slate-200 text-[10px] font-black text-slate-600 ring-2 ring-white">
+                                    {playerInitial(p.name)}
+                                  </span>
+                                )}
+                              </button>
                             ))}
                           </div>
                           <span className="text-[10px] font-semibold text-slate-500 whitespace-nowrap">
@@ -1134,32 +1155,39 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
                 {/* Joined Players */}
                 <div className="space-y-2.5">
                   <p className="text-xs font-bold text-slate-700">Những người đã tham gia</p>
-                  <div className="flex items-center gap-2">
-                    <div className="flex -space-x-1.5 overflow-hidden">
+                  {selectedSession.players.length === 0 ? (
+                    <p className="text-xs font-semibold text-slate-500">{selectedSession.joinedCountText}</p>
+                  ) : (
+                    <div className="space-y-2">
                       {selectedSession.players.map((p) => (
-                        p.avatar ? (
-                          <img
-                            key={p.id}
-                            src={p.avatar}
-                            alt={p.name}
-                            title={p.name}
-                            className="inline-block h-7.5 w-7.5 rounded-full ring-2 ring-white object-cover"
-                          />
-                        ) : (
-                          <span
-                            key={p.id}
-                            title={p.name}
-                            className="inline-flex h-7.5 w-7.5 items-center justify-center rounded-full bg-slate-200 text-[11px] font-black text-slate-600 ring-2 ring-white"
-                          >
-                            {playerInitial(p.name)}
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => setSelectedPlayerProfile(p)}
+                          className="flex w-full items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/50 p-2 text-left transition hover:bg-slate-50"
+                        >
+                          {p.avatar ? (
+                            <img
+                              src={p.avatar}
+                              alt={p.name}
+                              className="h-8 w-8 rounded-full object-cover"
+                            />
+                          ) : (
+                            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-200 text-[11px] font-black text-slate-600">
+                              {playerInitial(p.name)}
+                            </span>
+                          )}
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-xs font-bold text-slate-900">{p.name}</span>
+                            <span className="block truncate text-[10px] font-semibold text-slate-500">
+                              {playerSkillLabel(p.visible_skill_tier)} · ELO {p.elo_value ?? 1000}
+                            </span>
                           </span>
-                        )
+                          <span className="text-[10px] font-bold text-red-800">Profile</span>
+                        </button>
                       ))}
                     </div>
-                    <span className="text-xs font-semibold text-slate-500">
-                      {selectedSession.joinedCountText}
-                    </span>
-                  </div>
+                  )}
                 </div>
 
                 {/* Action Buttons */}
@@ -1303,6 +1331,85 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
             </span>
           </div>
         </div>
+
+        {selectedPlayerProfile && (
+          <div className="fixed inset-0 z-60 flex items-center justify-center p-4">
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs" onClick={() => setSelectedPlayerProfile(null)} />
+            <div className="relative z-10 w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+              <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
+                <div className="flex min-w-0 items-center gap-3">
+                  {selectedPlayerProfile.avatar_url ? (
+                    <img
+                      src={selectedPlayerProfile.avatar_url}
+                      alt={selectedPlayerProfile.full_name}
+                      className="h-14 w-14 rounded-full object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-14 w-14 items-center justify-center rounded-full bg-red-100 text-lg font-black text-red-800">
+                      {playerInitial(selectedPlayerProfile.full_name)}
+                    </span>
+                  )}
+                  <div className="min-w-0">
+                    <h3 className="truncate font-heading text-lg font-bold text-slate-950">
+                      {selectedPlayerProfile.full_name}
+                    </h3>
+                    <p className="mt-1 truncate text-xs font-semibold text-slate-500">
+                      {[selectedPlayerProfile.district, selectedPlayerProfile.city].filter(Boolean).join(", ") || "Chưa cập nhật khu vực"}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedPlayerProfile(null)}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                  aria-label="Đóng profile"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="mt-4 grid grid-cols-3 gap-3 text-center">
+                <div className="rounded-xl bg-slate-50 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">ELO</p>
+                  <p className="mt-1 font-heading text-xl font-black text-slate-950">
+                    {selectedPlayerProfile.elo_value ?? 1000}
+                  </p>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Level</p>
+                  <p className="mt-1 text-sm font-black text-slate-950">
+                    {playerSkillLabel(selectedPlayerProfile.visible_skill_tier)}
+                  </p>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Trận</p>
+                  <p className="mt-1 font-heading text-xl font-black text-slate-950">
+                    {selectedPlayerProfile.matches_played ?? 0}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3 text-sm">
+                <div className="flex items-center justify-between py-1.5">
+                  <span className="font-semibold text-slate-500">Thắng</span>
+                  <span className="font-bold text-emerald-700">{selectedPlayerProfile.wins ?? 0}</span>
+                </div>
+                <div className="flex items-center justify-between py-1.5">
+                  <span className="font-semibold text-slate-500">Thua</span>
+                  <span className="font-bold text-red-700">{selectedPlayerProfile.losses ?? 0}</span>
+                </div>
+                <div className="flex items-center justify-between py-1.5">
+                  <span className="font-semibold text-slate-500">Hòa</span>
+                  <span className="font-bold text-slate-700">{selectedPlayerProfile.draws ?? 0}</span>
+                </div>
+              </div>
+
+              <p className="mt-3 text-xs leading-5 text-slate-500">
+                Profile này chỉ hiển thị thông tin công khai trong phòng ghép slot.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     );
   }

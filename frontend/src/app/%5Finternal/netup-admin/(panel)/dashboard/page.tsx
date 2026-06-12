@@ -123,6 +123,9 @@ export default function AdminDashboardPage() {
         actions={
           <>
             <ButtonLink href="/_internal/netup-admin/config">Cấu hình</ButtonLink>
+            <ButtonLink href="/_internal/netup-admin/tournaments" variant="outline">
+              Giải đấu
+            </ButtonLink>
             <ButtonLink href="/_internal/netup-admin/owner-requests" variant="outline">
               Duyệt owner
             </ButtonLink>
