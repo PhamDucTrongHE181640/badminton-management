@@ -14,8 +14,13 @@ type PlatformStats = {
   completed_bookings: number;
 };
 
+type UserProfile = {
+  roles: string[];
+};
+
 export default function HomePage() {
   const [stats, setStats] = useState<PlatformStats | null>(null);
+  const [isOwner, setIsOwner] = useState(false);
   const [statsError, setStatsError] = useState("");
   const [ownerForm, setOwnerForm] = useState({
     organizationName: "",
@@ -34,6 +39,10 @@ export default function HomePage() {
         setStatsError("");
       })
       .catch((caught) => setStatsError(errorMessage(caught, "Không tải được thống kê nền tảng")));
+
+    apiFetch<UserProfile>("/api/v1/auth/me", { credentials: "include" })
+      .then((profile) => setIsOwner(profile.roles.includes("owner")))
+      .catch(() => setIsOwner(false));
   }, []);
 
   async function handleOwnerSubmit(event: FormEvent<HTMLFormElement>) {
@@ -112,6 +121,14 @@ export default function HomePage() {
               >
                 TÌM HIỂU THÊM
               </Link>
+              {isOwner ? (
+                <Link
+                  href="/owner/dashboard"
+                  className="ml-3 mt-3 inline-flex items-center justify-center rounded-full border-2 border-red-600 bg-white px-8 py-4 text-sm font-black uppercase tracking-wider text-red-700 shadow-xl transition-transform hover:scale-105 hover:bg-red-50 sm:mt-0"
+                >
+                  Quay lại quản lý owner
+                </Link>
+              ) : null}
             </div>
           </div>
         </div>

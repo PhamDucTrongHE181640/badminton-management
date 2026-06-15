@@ -58,6 +58,8 @@ export type Tournament = {
   level: "movement" | "semi_pro" | "pro";
   fee: number;
   description: string;
+  bankQrImageUrl?: string | null;
+  bankTransferCaption?: string | null;
   bracket?: BracketRound[];
   registrations?: TournamentRegistration[];
 };

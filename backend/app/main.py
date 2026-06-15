@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api.admin_auth import router as admin_auth_router
 from app.api.admin_operations import router as admin_operations_router
+from app.api.admin_owner_quotas import router as admin_owner_quotas_router
 from app.api.admin_owner_requests import router as admin_owner_requests_router
 from app.api.auth_google import router as auth_google_router
 from app.api.auth_user import router as auth_user_router
@@ -52,10 +56,15 @@ def create_app() -> FastAPI:
     )
 
     register_error_handlers(app)
+    uploads_dir = Path(settings.local_upload_storage_dir)
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+    app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
+
     app.include_router(auth_google_router, prefix="/api/v1")
     app.include_router(auth_user_router, prefix="/api/v1")
     app.include_router(admin_auth_router, prefix="/api/v1")
     app.include_router(admin_operations_router, prefix="/api/v1")
+    app.include_router(admin_owner_quotas_router, prefix="/api/v1")
     app.include_router(owner_requests_router, prefix="/api/v1")
     app.include_router(admin_owner_requests_router, prefix="/api/v1")
     app.include_router(owner_inventory_router, prefix="/api/v1")

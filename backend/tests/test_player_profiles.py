@@ -52,7 +52,10 @@ def _profile_payload() -> dict[str, object]:
 
 def test_get_my_player_profile(client: TestClient, monkeypatch) -> None:  # type: ignore[no-untyped-def]
     app.dependency_overrides[require_player] = _player
-    monkeypatch.setattr("app.api.player_profiles.get_player_profile", lambda **_: _profile_payload())
+    monkeypatch.setattr(
+        "app.api.player_profiles.get_player_profile",
+        lambda **_: _profile_payload(),
+    )
 
     response = client.get("/api/v1/player/profiles/me")
 

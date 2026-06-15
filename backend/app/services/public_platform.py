@@ -31,11 +31,23 @@ def create_contact_lead(*, data: dict[str, Any]) -> dict[str, Any]:
     metadata = data.get("metadata")
 
     if not full_name:
-        raise AppError(status_code=422, code="contact_full_name_required", message="Vui lòng nhập họ và tên")
+        raise AppError(
+            status_code=422,
+            code="contact_full_name_required",
+            message="Vui lòng nhập họ và tên",
+        )
     if not phone:
-        raise AppError(status_code=422, code="contact_phone_required", message="Vui lòng nhập số điện thoại")
+        raise AppError(
+            status_code=422,
+            code="contact_phone_required",
+            message="Vui lòng nhập số điện thoại",
+        )
     if not email or "@" not in email:
-        raise AppError(status_code=422, code="contact_email_invalid", message="Email liên hệ không hợp lệ")
+        raise AppError(
+            status_code=422,
+            code="contact_email_invalid",
+            message="Email liên hệ không hợp lệ",
+        )
     if not partner_type:
         raise AppError(
             status_code=422,
@@ -49,7 +61,11 @@ def create_contact_lead(*, data: dict[str, Any]) -> dict[str, Any]:
             message="Vui lòng nhập tên sân hoặc doanh nghiệp",
         )
     if not address:
-        raise AppError(status_code=422, code="contact_address_required", message="Vui lòng nhập địa chỉ")
+        raise AppError(
+            status_code=422,
+            code="contact_address_required",
+            message="Vui lòng nhập địa chỉ",
+        )
 
     with get_engine().begin() as connection:
         row = connection.execute(

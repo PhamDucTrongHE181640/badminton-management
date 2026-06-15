@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { Badge, Button, ButtonLink, Card, EmptyState, Field, Notice, PageHero, StatCard, inputClassName } from "@/components/ui";
 import { apiFetch } from "@/lib/http";
-import { errorMessage, formatTimeRange, formatVnd, sportLabel } from "@/lib/format";
+import { courtImageForSport, errorMessage, formatTimeRange, formatVnd, postTypeLabel, sportLabel } from "@/lib/format";
 
 type CourtComplex = {
   id: string;
@@ -20,6 +20,7 @@ type Court = {
   sub_court_name: string;
   sport: string;
   status: string;
+  image_url: string | null;
   amenities: string[];
   base_price_vnd: number;
   max_rental_duration_minutes: number;
@@ -31,19 +32,36 @@ type Session = {
   id: string;
   court_id: string;
   title: string;
+  description: string | null;
+  post_type: "pool" | "rental";
   status: string;
+  image_url: string | null;
   starts_at: string;
   duration_minutes: number;
   open_slots: number;
   max_slots: number;
+  required_skill_min: string;
+  required_skill_max: string;
   slot_price_vnd: number;
   full_court_price_vnd: number;
   court_name: string | null;
   complex_name: string | null;
 };
 
+type OwnerPostQuota = {
+  rental_post_limit: number;
+  slot_post_limit: number;
+  rental_posts_used: number;
+  slot_posts_used: number;
+  rental_posts_remaining: number;
+  slot_posts_remaining: number;
+};
+
+type PostKind = "rental" | "pool";
+
 const sportOptions = ["Badminton", "Football", "Tennis"];
 const durationOptions = [30, 60, 90, 120, 150, 180, 210, 240, 270, 300];
+const skillOptions = ["Beginner", "Intermediate", "Advanced"];
 
 function localDateTimeValue(minutesFromNow: number) {
   const date = new Date(Date.now() + minutesFromNow * 60 * 1000);
@@ -51,10 +69,28 @@ function localDateTimeValue(minutesFromNow: number) {
   return date.toISOString().slice(0, 16);
 }
 
+function imageForPost(session: Session, courts: Court[]) {
+  const court = courts.find((item) => item.id === session.court_id);
+  return session.image_url || court?.image_url || courtImageForSport(court?.sport ?? "Badminton");
+}
+
+function previewTimeLabel(startsAt: string, durationMinutes: string) {
+  const start = new Date(startsAt);
+  if (!startsAt || Number.isNaN(start.getTime())) return "Chưa chọn thời gian";
+  return formatTimeRange(start.toISOString(), Number(durationMinutes) || 60);
+}
+
+function skillLabel(value: string) {
+  if (value === "Advanced") return "Nâng cao";
+  if (value === "Intermediate") return "Trung bình";
+  return "Người mới";
+}
+
 export default function OwnerCourtsPage() {
   const [complexes, setComplexes] = useState<CourtComplex[]>([]);
   const [courts, setCourts] = useState<Court[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [quota, setQuota] = useState<OwnerPostQuota | null>(null);
   const [message, setMessage] = useState("Đang tải dữ liệu sân...");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -67,39 +103,50 @@ export default function OwnerCourtsPage() {
   const [courtName, setCourtName] = useState("");
   const [subCourtName, setSubCourtName] = useState("");
   const [sport, setSport] = useState("Badminton");
+  const [courtImageUrl, setCourtImageUrl] = useState("");
+  const [amenities, setAmenities] = useState("Có chỗ gửi xe, Đèn LED");
   const [basePrice, setBasePrice] = useState("120000");
   const [maxRentalDuration, setMaxRentalDuration] = useState("120");
 
+  const [postKind, setPostKind] = useState<PostKind>("rental");
   const [sessionCourtId, setSessionCourtId] = useState("");
   const [sessionTitle, setSessionTitle] = useState("");
+  const [sessionDescription, setSessionDescription] = useState("");
+  const [sessionImageUrl, setSessionImageUrl] = useState("");
   const [startsAt, setStartsAt] = useState(localDateTimeValue(1440));
   const [sessionDuration, setSessionDuration] = useState("60");
   const [maxSlots, setMaxSlots] = useState("4");
   const [openSlots, setOpenSlots] = useState("4");
   const [slotPrice, setSlotPrice] = useState("80000");
   const [fullCourtPrice, setFullCourtPrice] = useState("300000");
+  const [skillMin, setSkillMin] = useState("Beginner");
+  const [skillMax, setSkillMax] = useState("Advanced");
 
   const activeCourts = useMemo(() => courts.filter((court) => court.status === "active"), [courts]);
   const upcomingSessions = useMemo(
-    () => sessions.filter((session) => new Date(session.starts_at) > new Date()),
+    () => sessions.filter((session) => new Date(session.starts_at) > new Date() && session.status !== "cancelled"),
     [sessions],
   );
-  const totalOpenSlots = sessions.reduce((total, session) => total + session.open_slots, 0);
+  const selectedCourt = activeCourts.find((item) => item.id === sessionCourtId);
+  const rentalPosts = upcomingSessions.filter((item) => item.post_type === "rental").length;
+  const slotPosts = upcomingSessions.filter((item) => item.post_type === "pool").length;
 
   async function loadInventory() {
     setError("");
     try {
-      const [nextComplexes, nextCourts, nextSessions] = await Promise.all([
+      const [nextComplexes, nextCourts, nextSessions, nextQuota] = await Promise.all([
         apiFetch<CourtComplex[]>("/api/v1/owner/court-complexes", { credentials: "include" }),
         apiFetch<Court[]>("/api/v1/owner/courts", { credentials: "include" }),
         apiFetch<Session[]>("/api/v1/owner/sessions", { credentials: "include" }),
+        apiFetch<OwnerPostQuota>("/api/v1/owner/post-quota", { credentials: "include" }),
       ]);
       setComplexes(nextComplexes);
       setCourts(nextCourts);
       setSessions(nextSessions);
+      setQuota(nextQuota);
       setCourtComplexId((previous) => previous || nextComplexes[0]?.id || "");
       setSessionCourtId((previous) => previous || nextCourts[0]?.id || "");
-      setMessage("Dữ liệu sân đã được đồng bộ.");
+      setMessage("Dữ liệu sân và quota bài đăng đã được đồng bộ.");
     } catch (caught) {
       setError(errorMessage(caught, "Không tải được dữ liệu sân"));
       setMessage("Cần tài khoản owner đã được duyệt để quản lý sân.");
@@ -145,13 +192,15 @@ export default function OwnerCourtsPage() {
           sub_court_name: subCourtName.trim(),
           sport,
           status: "active",
-          amenities: [],
+          image_url: courtImageUrl || null,
+          amenities: amenities.split(",").map((item) => item.trim()).filter(Boolean),
           base_price_vnd: Number(basePrice),
           max_rental_duration_minutes: Number(maxRentalDuration),
         }),
       });
       setCourtName("");
       setSubCourtName("");
+      setCourtImageUrl("");
       await loadInventory();
     } catch (caught) {
       setError(errorMessage(caught, "Không tạo được sân"));
@@ -164,6 +213,7 @@ export default function OwnerCourtsPage() {
     event.preventDefault();
     setIsSubmitting(true);
     setError("");
+    const totalSlots = Number(maxSlots);
     try {
       await apiFetch("/api/v1/owner/sessions", {
         method: "POST",
@@ -171,25 +221,29 @@ export default function OwnerCourtsPage() {
         body: JSON.stringify({
           court_id: sessionCourtId,
           title: sessionTitle,
-          post_type: "pool",
+          description: sessionDescription || null,
+          image_url: sessionImageUrl || null,
+          post_type: postKind,
           status: "scheduled",
           starts_at: new Date(startsAt).toISOString(),
           duration_minutes: Number(sessionDuration),
-          open_slots: Number(openSlots),
-          max_slots: Number(maxSlots),
-          required_skill_min: "Beginner",
-          required_skill_max: "Advanced",
-          slot_price_vnd: Number(slotPrice),
+          open_slots: postKind === "rental" ? totalSlots : Number(openSlots),
+          max_slots: totalSlots,
+          required_skill_min: skillMin,
+          required_skill_max: skillMax,
+          slot_price_vnd: postKind === "rental" ? 0 : Number(slotPrice),
           full_court_price_vnd: Number(fullCourtPrice),
           is_peak_hour: false,
-          allows_solo_join: true,
+          allows_solo_join: postKind === "pool",
         }),
       });
       setSessionTitle("");
+      setSessionDescription("");
+      setSessionImageUrl("");
       setStartsAt(localDateTimeValue(1440));
       await loadInventory();
     } catch (caught) {
-      setError(errorMessage(caught, "Không tạo được khung giờ"));
+      setError(errorMessage(caught, "Không đăng được bài"));
     } finally {
       setIsSubmitting(false);
     }
@@ -209,7 +263,7 @@ export default function OwnerCourtsPage() {
     <div className="space-y-5">
       <PageHero
         eyebrow="Quản lý sân"
-        title="Tạo cụm sân, sân nhỏ và khung giờ mở bán."
+        title="Đăng bài thuê nguyên sân hoặc mở slot ghép người chơi."
         description={message}
         actions={
           <>
@@ -228,132 +282,224 @@ export default function OwnerCourtsPage() {
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Cụm sân" value={complexes.length} helper="Địa điểm kinh doanh" />
         <StatCard label="Sân nhỏ" value={courts.length} helper={`${activeCourts.length} đang hoạt động`} tone="accent" />
-        <StatCard label="Khung giờ sắp tới" value={upcomingSessions.length} helper="Đang mở cho người chơi" />
-        <StatCard label="Slot còn trống" value={totalOpenSlots} helper="Tổng slot có thể đặt" tone="success" />
+        <StatCard label="Bài bao sân" value={`${rentalPosts}/${quota?.rental_post_limit ?? 10}`} helper={`${quota?.rental_posts_remaining ?? 10} quota còn lại`} tone="warning" />
+        <StatCard label="Bài slot" value={`${slotPosts}/${quota?.slot_post_limit ?? 10}`} helper={`${quota?.slot_posts_remaining ?? 10} quota còn lại`} tone="success" />
       </section>
 
-      <section className="grid gap-5 lg:grid-cols-3">
-        <form onSubmit={createComplex} className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-          <div>
-            <h2 className="font-heading text-lg font-semibold text-ink">1. Tạo cụm sân</h2>
-            <p className="mt-1 text-sm text-slate-600">Ví dụ: NetUp Arena Hà Đông.</p>
-          </div>
-          <Field label="Tên cụm sân">
-            <input className={inputClassName} value={complexName} onChange={(event) => setComplexName(event.target.value)} required />
-          </Field>
-          <Field label="Quận/Huyện">
-            <input className={inputClassName} value={district} onChange={(event) => setDistrict(event.target.value)} required />
-          </Field>
-          <Field label="Địa chỉ">
-            <input className={inputClassName} value={address} onChange={(event) => setAddress(event.target.value)} required />
-          </Field>
-          <Button className="w-full" disabled={isSubmitting}>
-            Lưu cụm sân
-          </Button>
-        </form>
+      <section className="grid gap-5 xl:grid-cols-[420px_1fr]">
+        <div className="space-y-5">
+          <form onSubmit={createComplex} className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <div>
+              <h2 className="font-heading text-lg font-semibold text-ink">1. Tạo cụm sân</h2>
+              <p className="mt-1 text-sm text-slate-600">Cụm sân là địa điểm để gom các sân nhỏ cùng địa chỉ.</p>
+            </div>
+            <Field label="Tên cụm sân">
+              <input className={inputClassName} value={complexName} onChange={(event) => setComplexName(event.target.value)} required />
+            </Field>
+            <Field label="Quận/Huyện">
+              <input className={inputClassName} value={district} onChange={(event) => setDistrict(event.target.value)} required />
+            </Field>
+            <Field label="Địa chỉ">
+              <input className={inputClassName} value={address} onChange={(event) => setAddress(event.target.value)} required />
+            </Field>
+            <Button className="w-full" disabled={isSubmitting}>
+              Lưu cụm sân
+            </Button>
+          </form>
 
-        <form onSubmit={createCourt} className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-          <div>
-            <h2 className="font-heading text-lg font-semibold text-ink">2. Tạo sân nhỏ</h2>
-            <p className="mt-1 text-sm text-slate-600">Mỗi sân nhỏ có môn, giá cơ bản và giới hạn thuê riêng.</p>
-          </div>
-          <Field label="Cụm sân">
-            <select className={inputClassName} value={courtComplexId} onChange={(event) => setCourtComplexId(event.target.value)} disabled={complexes.length === 0}>
-              {complexes.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Tên sân">
-              <input className={inputClassName} value={courtName} onChange={(event) => setCourtName(event.target.value)} required />
-            </Field>
-            <Field label="Mã sân con">
-              <input className={inputClassName} value={subCourtName} onChange={(event) => setSubCourtName(event.target.value)} required />
-            </Field>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Môn">
-              <select className={inputClassName} value={sport} onChange={(event) => setSport(event.target.value)}>
-                {sportOptions.map((item) => (
-                  <option key={item} value={item}>
-                    {sportLabel(item)}
-                  </option>
+          <form onSubmit={createCourt} className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <div>
+              <h2 className="font-heading text-lg font-semibold text-ink">2. Tạo sân nhỏ</h2>
+              <p className="mt-1 text-sm text-slate-600">Ảnh sân sẽ được dùng làm fallback cho các bài đăng.</p>
+            </div>
+            <Field label="Cụm sân">
+              <select className={inputClassName} value={courtComplexId} onChange={(event) => setCourtComplexId(event.target.value)} disabled={complexes.length === 0}>
+                {complexes.map((item) => (
+                  <option key={item.id} value={item.id}>{item.name}</option>
                 ))}
               </select>
             </Field>
-            <Field label="Tối đa mỗi lần thuê">
-              <select className={inputClassName} value={maxRentalDuration} onChange={(event) => setMaxRentalDuration(event.target.value)}>
-                {durationOptions.map((item) => (
-                  <option key={item} value={item}>
-                    {item} phút
-                  </option>
-                ))}
-              </select>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Tên sân">
+                <input className={inputClassName} value={courtName} onChange={(event) => setCourtName(event.target.value)} required />
+              </Field>
+              <Field label="Mã sân con">
+                <input className={inputClassName} value={subCourtName} onChange={(event) => setSubCourtName(event.target.value)} required />
+              </Field>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Môn">
+                <select className={inputClassName} value={sport} onChange={(event) => setSport(event.target.value)}>
+                  {sportOptions.map((item) => <option key={item} value={item}>{sportLabel(item)}</option>)}
+                </select>
+              </Field>
+              <Field label="Tối đa mỗi lần thuê">
+                <select className={inputClassName} value={maxRentalDuration} onChange={(event) => setMaxRentalDuration(event.target.value)}>
+                  {durationOptions.map((item) => <option key={item} value={item}>{item} phút</option>)}
+                </select>
+              </Field>
+            </div>
+            <Field label="Ảnh sân URL">
+              <input className={inputClassName} value={courtImageUrl} onChange={(event) => setCourtImageUrl(event.target.value)} placeholder="https://..." />
             </Field>
-          </div>
-          <Field label="Giá cơ bản">
-            <input className={inputClassName} value={basePrice} onChange={(event) => setBasePrice(event.target.value)} inputMode="numeric" required />
-          </Field>
-          <Button className="w-full" disabled={isSubmitting || complexes.length === 0}>
-            Lưu sân
-          </Button>
-        </form>
+            <Field label="Tiện ích">
+              <input className={inputClassName} value={amenities} onChange={(event) => setAmenities(event.target.value)} />
+            </Field>
+            <Field label="Giá cơ bản">
+              <input className={inputClassName} value={basePrice} onChange={(event) => setBasePrice(event.target.value)} inputMode="numeric" required />
+            </Field>
+            <Button className="w-full" disabled={isSubmitting || complexes.length === 0}>
+              Lưu sân
+            </Button>
+          </form>
+        </div>
 
-        <form onSubmit={createSession} className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-          <div>
-            <h2 className="font-heading text-lg font-semibold text-ink">3. Mở khung giờ</h2>
-            <p className="mt-1 text-sm text-slate-600">Khung giờ sẽ xuất hiện trên discovery của người chơi.</p>
-          </div>
-          <Field label="Sân">
-            <select className={inputClassName} value={sessionCourtId} onChange={(event) => setSessionCourtId(event.target.value)} disabled={activeCourts.length === 0}>
-              {activeCourts.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name} - {item.sub_court_name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Tên khung giờ">
-            <input className={inputClassName} value={sessionTitle} onChange={(event) => setSessionTitle(event.target.value)} required />
-          </Field>
-          <Field label="Thời gian bắt đầu">
-            <input className={inputClassName} type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} required />
-          </Field>
-          <div className="grid grid-cols-3 gap-3">
-            <Field label="Phút">
-              <select className={inputClassName} value={sessionDuration} onChange={(event) => setSessionDuration(event.target.value)}>
-                {durationOptions.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
+        <div className="space-y-5">
+          <form onSubmit={createSession} className="space-y-5 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="font-heading text-xl font-semibold text-ink">3. Đăng bài mở bán</h2>
+                <p className="mt-1 text-sm text-slate-600">Chọn đúng kiểu bài để người chơi thấy ở Đặt Sân hoặc Xếp đối.</p>
+              </div>
+              <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1">
+                {[
+                  { value: "rental", label: "Thuê nguyên sân" },
+                  { value: "pool", label: "Đăng slot" },
+                ].map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    onClick={() => setPostKind(item.value as PostKind)}
+                    className={`rounded-md px-3 py-1.5 text-xs font-bold transition ${
+                      postKind === item.value ? "bg-white text-red-800 shadow-sm" : "text-slate-600 hover:text-red-800"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
                 ))}
-              </select>
-            </Field>
-            <Field label="Tổng slot">
-              <input className={inputClassName} value={maxSlots} onChange={(event) => setMaxSlots(event.target.value)} inputMode="numeric" />
-            </Field>
-            <Field label="Còn trống">
-              <input className={inputClassName} value={openSlots} onChange={(event) => setOpenSlots(event.target.value)} inputMode="numeric" />
-            </Field>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Giá slot">
-              <input className={inputClassName} value={slotPrice} onChange={(event) => setSlotPrice(event.target.value)} inputMode="numeric" />
-            </Field>
-            <Field label="Giá bao sân">
-              <input className={inputClassName} value={fullCourtPrice} onChange={(event) => setFullCourtPrice(event.target.value)} inputMode="numeric" />
-            </Field>
-          </div>
-          <Button className="w-full" disabled={isSubmitting || activeCourts.length === 0}>
-            Lưu khung giờ
-          </Button>
-        </form>
+              </div>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
+              <div className="space-y-4">
+                <Field label="Sân">
+                  <select className={inputClassName} value={sessionCourtId} onChange={(event) => setSessionCourtId(event.target.value)} disabled={activeCourts.length === 0}>
+                    {activeCourts.map((item) => (
+                      <option key={item.id} value={item.id}>{item.name} - {item.sub_court_name}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Tiêu đề bài đăng">
+                  <input className={inputClassName} value={sessionTitle} onChange={(event) => setSessionTitle(event.target.value)} placeholder={postKind === "rental" ? "Bao sân tối nay - Sân A" : "Còn 2 slot cầu lông trình trung bình"} required />
+                </Field>
+                <Field label="Mô tả">
+                  <textarea className={`${inputClassName} min-h-24`} value={sessionDescription} onChange={(event) => setSessionDescription(event.target.value)} placeholder="Ghi chú giờ cao điểm, khu gửi xe, loại mặt sân..." />
+                </Field>
+                <Field label="Ảnh riêng cho bài đăng URL">
+                  <input className={inputClassName} value={sessionImageUrl} onChange={(event) => setSessionImageUrl(event.target.value)} placeholder="Để trống sẽ dùng ảnh sân" />
+                </Field>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Thời gian bắt đầu">
+                    <input className={inputClassName} type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} required />
+                  </Field>
+                  <Field label="Thời lượng">
+                    <select className={inputClassName} value={sessionDuration} onChange={(event) => setSessionDuration(event.target.value)}>
+                      {durationOptions.map((item) => <option key={item} value={item}>{item} phút</option>)}
+                    </select>
+                  </Field>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <Field label="Tổng slot">
+                    <input className={inputClassName} value={maxSlots} onChange={(event) => setMaxSlots(event.target.value)} inputMode="numeric" />
+                  </Field>
+                  <Field label={postKind === "rental" ? "Slot bao sân" : "Slot đang mở"}>
+                    <input className={inputClassName} value={postKind === "rental" ? maxSlots : openSlots} onChange={(event) => setOpenSlots(event.target.value)} inputMode="numeric" disabled={postKind === "rental"} />
+                  </Field>
+                  <Field label="Giá bao sân">
+                    <input className={inputClassName} value={fullCourtPrice} onChange={(event) => setFullCourtPrice(event.target.value)} inputMode="numeric" />
+                  </Field>
+                </div>
+                {postKind === "pool" ? (
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <Field label="Giá mỗi slot">
+                      <input className={inputClassName} value={slotPrice} onChange={(event) => setSlotPrice(event.target.value)} inputMode="numeric" />
+                    </Field>
+                    <Field label="Level thấp nhất">
+                      <select className={inputClassName} value={skillMin} onChange={(event) => setSkillMin(event.target.value)}>
+                        {skillOptions.map((item) => <option key={item} value={item}>{skillLabel(item)}</option>)}
+                      </select>
+                    </Field>
+                    <Field label="Level cao nhất">
+                      <select className={inputClassName} value={skillMax} onChange={(event) => setSkillMax(event.target.value)}>
+                        {skillOptions.map((item) => <option key={item} value={item}>{skillLabel(item)}</option>)}
+                      </select>
+                    </Field>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <img
+                  src={sessionImageUrl || selectedCourt?.image_url || courtImageForSport(selectedCourt?.sport ?? "Badminton")}
+                  alt="Preview bài đăng"
+                  className="h-40 w-full rounded-lg object-cover"
+                />
+                <div>
+                  <Badge tone={postKind === "rental" ? "warning" : "success"}>{postKind === "rental" ? "Thuê nguyên sân" : "Đăng slot"}</Badge>
+                  <h3 className="mt-3 font-heading text-lg font-semibold text-slate-950">{sessionTitle || "Tiêu đề bài đăng"}</h3>
+                  <p className="mt-1 text-sm text-slate-600">{selectedCourt ? `${selectedCourt.name} - ${selectedCourt.sub_court_name}` : "Chọn sân để xem preview"}</p>
+                  <p className="mt-2 text-sm font-semibold text-slate-900">
+                    {postKind === "rental" ? formatVnd(Number(fullCourtPrice)) : `${formatVnd(Number(slotPrice))}/slot`}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">{previewTimeLabel(startsAt, sessionDuration)}</p>
+                </div>
+                <Notice tone="info" className="text-xs">
+                  {postKind === "rental"
+                    ? `Quota bao sân còn ${quota?.rental_posts_remaining ?? 10} bài.`
+                    : `Quota slot còn ${quota?.slot_posts_remaining ?? 10} bài.`}
+                </Notice>
+              </div>
+            </div>
+
+            <Button className="w-full" disabled={isSubmitting || activeCourts.length === 0}>
+              {isSubmitting ? "Đang đăng..." : postKind === "rental" ? "Đăng bài thuê nguyên sân" : "Đăng bài slot"}
+            </Button>
+          </form>
+
+          <Card className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="font-heading text-lg font-semibold text-ink">Bài đăng đang có</h2>
+              <Badge>{sessions.length} bài</Badge>
+            </div>
+            {sessions.length === 0 ? (
+              <p className="text-sm text-slate-600">Chưa có bài đăng.</p>
+            ) : (
+              <div className="grid gap-3 lg:grid-cols-2">
+                {sessions.map((item) => (
+                  <article key={item.id} className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-[120px_1fr]">
+                    <img src={imageForPost(item, courts)} alt={item.title} className="h-28 w-full rounded-lg object-cover" />
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <h3 className="font-semibold text-slate-950">{item.title}</h3>
+                        <Badge tone={item.post_type === "rental" ? "warning" : "success"}>{postTypeLabel(item.post_type)}</Badge>
+                      </div>
+                      <p className="mt-1 text-sm text-slate-600">{item.court_name ?? "Sân"} · {formatTimeRange(item.starts_at, item.duration_minutes)}</p>
+                      <p className="mt-1 text-sm text-slate-600">
+                        {item.open_slots}/{item.max_slots} slot · {item.post_type === "rental" ? formatVnd(item.full_court_price_vnd) : `${formatVnd(item.slot_price_vnd)}/slot`}
+                      </p>
+                      <Button className="mt-3" variant="danger" size="sm" onClick={() => remove(`/api/v1/owner/sessions/${item.id}`)}>
+                        Xóa bài
+                      </Button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </Card>
+        </div>
       </section>
 
-      <section className="grid gap-5 lg:grid-cols-3">
+      <section className="grid gap-5 lg:grid-cols-2">
         <Card className="space-y-3">
           <h2 className="font-heading text-lg font-semibold text-ink">Cụm sân</h2>
           {complexes.length === 0 ? (
@@ -378,47 +524,19 @@ export default function OwnerCourtsPage() {
             <p className="text-sm text-slate-600">Chưa có sân nhỏ.</p>
           ) : (
             courts.map((item) => (
-              <div key={item.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <p className="font-semibold text-slate-950">
-                    {item.name} - {item.sub_court_name}
-                  </p>
-                  <Badge tone={item.status === "active" ? "success" : "warning"}>{item.status}</Badge>
+              <div key={item.id} className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-[104px_1fr]">
+                <img src={item.image_url || courtImageForSport(item.sport)} alt={item.name} className="h-24 w-full rounded-lg object-cover" />
+                <div>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <p className="font-semibold text-slate-950">{item.name} - {item.sub_court_name}</p>
+                    <Badge tone={item.status === "active" ? "success" : "warning"}>{item.status}</Badge>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-600">{sportLabel(item.sport)} · {item.complex_name ?? "chưa gắn cụm"}</p>
+                  <p className="mt-1 text-sm text-slate-600">{formatVnd(item.base_price_vnd)} · tối đa {item.max_rental_duration_minutes} phút</p>
+                  <Button className="mt-3" variant="danger" size="sm" onClick={() => remove(`/api/v1/owner/courts/${item.id}`)}>
+                    Xóa
+                  </Button>
                 </div>
-                <p className="mt-1 text-sm text-slate-600">
-                  {sportLabel(item.sport)} · {item.complex_name ?? "chưa gắn cụm"}
-                </p>
-                <p className="mt-1 text-sm text-slate-600">
-                  {formatVnd(item.base_price_vnd)} · tối đa {item.max_rental_duration_minutes} phút
-                </p>
-                <Button className="mt-3" variant="danger" size="sm" onClick={() => remove(`/api/v1/owner/courts/${item.id}`)}>
-                  Xóa
-                </Button>
-              </div>
-            ))
-          )}
-        </Card>
-
-        <Card className="space-y-3">
-          <h2 className="font-heading text-lg font-semibold text-ink">Khung giờ</h2>
-          {sessions.length === 0 ? (
-            <p className="text-sm text-slate-600">Chưa có khung giờ.</p>
-          ) : (
-            sessions.map((item) => (
-              <div key={item.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <p className="font-semibold text-slate-950">{item.title}</p>
-                  <Badge tone={item.status === "scheduled" ? "success" : "neutral"}>{item.status}</Badge>
-                </div>
-                <p className="mt-1 text-sm text-slate-600">
-                  {item.court_name ?? "Sân"} · {formatTimeRange(item.starts_at, item.duration_minutes)}
-                </p>
-                <p className="mt-1 text-sm text-slate-600">
-                  {item.open_slots}/{item.max_slots} slot · {formatVnd(item.slot_price_vnd)}/slot
-                </p>
-                <Button className="mt-3" variant="danger" size="sm" onClick={() => remove(`/api/v1/owner/sessions/${item.id}`)}>
-                  Xóa
-                </Button>
               </div>
             ))
           )}
@@ -428,7 +546,7 @@ export default function OwnerCourtsPage() {
       {complexes.length === 0 && courts.length === 0 && sessions.length === 0 && !error ? (
         <EmptyState
           title="Bắt đầu bằng cụm sân đầu tiên"
-          description="Tạo cụm sân, sau đó thêm sân nhỏ và khung giờ để người chơi có thể đặt."
+          description="Tạo cụm sân, thêm sân nhỏ rồi đăng bài thuê nguyên sân hoặc slot để người chơi tìm thấy."
         />
       ) : null}
     </div>

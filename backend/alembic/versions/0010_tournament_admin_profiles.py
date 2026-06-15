@@ -19,7 +19,8 @@ def upgrade() -> None:
     op.execute(
         """
         ALTER TABLE public.tournament_registrations
-          ADD COLUMN IF NOT EXISTS reviewed_by_user_id uuid REFERENCES public.users(id) ON DELETE SET NULL,
+          ADD COLUMN IF NOT EXISTS reviewed_by_user_id uuid
+            REFERENCES public.users(id) ON DELETE SET NULL,
           ADD COLUMN IF NOT EXISTS reviewed_at timestamptz,
           ADD COLUMN IF NOT EXISTS review_note text;
 

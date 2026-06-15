@@ -20,9 +20,9 @@ cp backend/.env.example backend/.env
 cp frontend/.env.example frontend/.env
 ```
 
-The root `.env` only controls Docker Compose host ports. Backend secrets and
-OAuth keys belong in `backend/.env`; frontend should only contain public
-browser-safe values such as `NEXT_PUBLIC_API_BASE_URL`.
+The root `.env` controls Docker Compose host ports and public base URLs.
+Backend secrets and OAuth keys belong in `backend/.env`; frontend should only
+contain public browser-safe values such as `NEXT_PUBLIC_API_BASE_URL`.
 Gemini credentials for video assessment also belong in `backend/.env`
 (`GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_TIMEOUT_SECONDS`).
 
@@ -32,7 +32,7 @@ To switch between local development and a public EC2 DNS, edit only
 ```bash
 NETUP_ENV_TARGET=localhost
 # or
-NETUP_ENV_TARGET=ec2-18-143-66-143.ap-southeast-1.compute.amazonaws.com
+NETUP_ENV_TARGET=netup.com.vn
 
 python3 scripts/sync_env.py
 ```
@@ -119,32 +119,33 @@ docker compose config
 docker compose up -d postgres redis adminer backend-api frontend
 ```
 
-## EC2 Static Nginx Deploy
+## EC2 Nginx Deploy
 
-The production `nginx` service builds `frontend/out`, serves it on port `80`,
-and proxies `/api/*` plus `/ws/*` to `backend-api:8000` inside Docker Compose.
+The production `nginx` service listens on host port `80`, proxies the frontend
+to the `frontend:3000` service, and proxies `/api/*`, `/uploads/*`, and `/ws/*`
+to `backend-api:8000` inside Docker Compose.
 
 Current public URL:
 
 ```text
-http://ec2-18-143-66-143.ap-southeast-1.compute.amazonaws.com
+http://netup.com.vn
 ```
 
 Deploy from EC2:
 
 ```bash
 git pull
-docker compose up --build -d
+docker compose up -d
 ```
 
 Register these external callback URLs with the providers:
 
 ```text
 Google OAuth redirect:
-http://ec2-18-143-66-143.ap-southeast-1.compute.amazonaws.com/api/v1/auth/google/callback
+http://netup.com.vn/api/v1/auth/google/callback
 
 VNPay return URL:
-http://ec2-18-143-66-143.ap-southeast-1.compute.amazonaws.com/api/v1/payments/vnpay/return
+http://netup.com.vn/api/v1/payments/vnpay/return
 ```
 
 ## Project Docs

@@ -92,7 +92,8 @@ def upgrade() -> None:
           title = 'Hòa Lạc Badminton Cup 2026',
           start_date = DATE '2026-06-08',
           end_date = DATE '2026-06-16',
-          description = 'Giải đấu đang diễn ra, quy tụ các vợt thủ phong trào nổi bật tại Thạch Thất.',
+          description = 'Giải đấu đang diễn ra, quy tụ các vợt thủ phong trào '
+            || 'nổi bật tại Thạch Thất.',
           bracket = $$[
             {
               "roundName": "Tứ kết",

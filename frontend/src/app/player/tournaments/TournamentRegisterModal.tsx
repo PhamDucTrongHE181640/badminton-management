@@ -7,9 +7,23 @@ import { errorMessage, formatVnd } from "@/lib/format";
 type Props = {
   tournament: Tournament | null;
   onClose: () => void;
-  onSubmit: (tournamentId: string, teamData: { teamName: string; player1: string; player2: string; phone: string; email: string }) => Promise<void> | void;
+  onSubmit: (tournamentId: string, teamData: { teamName: string; player1: string; player2: string; phone: string; email: string }) => Promise<TournamentRegistrationResult>;
   currentUserName: string;
   currentUserEmail: string;
+};
+
+type TournamentRegistrationResult = {
+  id: string;
+  tournamentId: string;
+  status: "pending" | "registered" | "cancelled";
+  teamName: string;
+  registrationCode: string;
+  fee: number;
+  bankQrImageUrl: string | null;
+  bankTransferCaption: string | null;
+  paymentCaption: string;
+  createdAt: string;
+  tournament: Tournament;
 };
 
 export default function TournamentRegisterModal({ tournament, onClose, onSubmit, currentUserName, currentUserEmail }: Props) {
@@ -20,6 +34,7 @@ export default function TournamentRegisterModal({ tournament, onClose, onSubmit,
   const [email, setEmail] = useState(currentUserEmail);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [paymentInfo, setPaymentInfo] = useState<TournamentRegistrationResult | null>(null);
 
   useEffect(() => {
     setPlayer1(currentUserName);
@@ -53,13 +68,14 @@ export default function TournamentRegisterModal({ tournament, onClose, onSubmit,
     setIsSubmitting(true);
     setError("");
     try {
-      await onSubmit(tournament.id, {
+      const created = await onSubmit(tournament.id, {
         teamName: teamName.trim(),
         player1: player1.trim(),
         player2: player2.trim(),
         phone: phone.trim(),
         email: email.trim(),
       });
+      setPaymentInfo(created);
     } catch (caught) {
       setError(errorMessage(caught, "Không đăng ký được giải đấu"));
     } finally {
@@ -96,6 +112,48 @@ export default function TournamentRegisterModal({ tournament, onClose, onSubmit,
 
         {/* Form body */}
         <div className="p-5 space-y-4 flex-1 overflow-y-auto">
+          {paymentInfo ? (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-3.5">
+                <p className="text-sm font-extrabold text-emerald-800">Đã gửi đơn đăng ký</p>
+                <p className="mt-1 text-xs font-semibold leading-relaxed text-emerald-700">
+                  Admin sẽ kiểm tra thanh toán thủ công trước khi xác nhận suất thi đấu.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-bold uppercase tracking-wider text-slate-500">Mã đơn</span>
+                  <span className="rounded-lg bg-white px-3 py-1.5 font-mono text-sm font-black text-slate-950 ring-1 ring-slate-200">
+                    {paymentInfo.registrationCode}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3 border-t border-slate-200 pt-3">
+                  <span className="font-semibold text-slate-650">Lệ phí giải đấu:</span>
+                  <span className="font-extrabold text-slate-900 text-sm">
+                    {paymentInfo.fee === 0 ? "Miễn phí" : formatVnd(paymentInfo.fee)}
+                  </span>
+                </div>
+              </div>
+
+              {paymentInfo.bankQrImageUrl ? (
+                <div className="rounded-xl border border-slate-200 bg-white p-4 text-center">
+                  <img
+                    src={paymentInfo.bankQrImageUrl}
+                    alt="QR chuyển khoản"
+                    className="mx-auto h-56 w-56 max-w-full rounded-xl object-contain"
+                  />
+                </div>
+              ) : null}
+
+              <div className="rounded-xl border border-red-100 bg-red-50 p-3.5">
+                <p className="whitespace-pre-line text-sm font-semibold leading-relaxed text-red-900">
+                  {paymentInfo.paymentCaption}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <>
           {error && (
             <div className="rounded-lg bg-red-50 border border-red-100 p-3 text-xs text-red-700 font-semibold">
               ⚠️ {error}
@@ -193,6 +251,8 @@ export default function TournamentRegisterModal({ tournament, onClose, onSubmit,
               Sau khi gửi đơn, trạng thái sẽ là chờ admin kiểm tra thanh toán thủ công.
             </p>
           </div>
+            </>
+          )}
         </div>
 
         {/* Footer */}
@@ -202,15 +262,17 @@ export default function TournamentRegisterModal({ tournament, onClose, onSubmit,
             onClick={onClose}
             className="rounded-xl border border-slate-300 bg-white px-4.5 py-2 text-xs font-bold text-slate-750 hover:bg-slate-50 transition cursor-pointer"
           >
-            Hủy
+            {paymentInfo ? "Xong" : "Hủy"}
           </button>
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="rounded-xl bg-[#b00c14] hover:bg-red-950 px-4.5 py-2 text-xs font-bold text-white transition shadow-xs cursor-pointer disabled:opacity-60"
-          >
-            {isSubmitting ? "Đang gửi đơn..." : "Gửi đơn đăng ký"}
-          </button>
+          {!paymentInfo && (
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="rounded-xl bg-[#b00c14] hover:bg-red-950 px-4.5 py-2 text-xs font-bold text-white transition shadow-xs cursor-pointer disabled:opacity-60"
+            >
+              {isSubmitting ? "Đang gửi đơn..." : "Gửi đơn đăng ký"}
+            </button>
+          )}
         </div>
       </form>
     </div>

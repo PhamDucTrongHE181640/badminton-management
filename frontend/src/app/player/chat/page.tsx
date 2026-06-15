@@ -27,7 +27,11 @@ type ChatMessage = {
 
 function toWebSocketUrl(httpBaseUrl: string): string {
   if (httpBaseUrl.startsWith("https://")) return httpBaseUrl.replace("https://", "wss://");
-  return httpBaseUrl.replace("http://", "ws://");
+  if (httpBaseUrl.startsWith("http://")) return httpBaseUrl.replace("http://", "ws://");
+  if (typeof window === "undefined") return "";
+
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  return `${protocol}//${window.location.host}`;
 }
 
 function PlayerChatRoomContent() {

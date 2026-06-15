@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { Button, Card, Field, Notice, inputClassName } from "@/components/ui";
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const apiBaseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").replace(/\/$/, "");
 
 export default function AdminLoginPage() {
   const router = useRouter();

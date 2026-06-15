@@ -26,7 +26,26 @@ type MyTournamentRegistration = {
   tournamentId: string;
   status: "pending" | "registered" | "cancelled";
   teamName: string;
+  registrationCode?: string | null;
+  fee?: number | null;
+  bankQrImageUrl?: string | null;
+  bankTransferCaption?: string | null;
+  paymentCaption?: string | null;
   createdAt: string;
+};
+
+type TournamentRegistrationResult = {
+  id: string;
+  tournamentId: string;
+  status: "pending" | "registered" | "cancelled";
+  teamName: string;
+  registrationCode: string;
+  fee: number;
+  bankQrImageUrl: string | null;
+  bankTransferCaption: string | null;
+  paymentCaption: string;
+  createdAt: string;
+  tournament: Tournament;
 };
 
 function parseDisplayDate(value: string) {
@@ -79,6 +98,13 @@ export default function TournamentsPage() {
     const result: Record<string, MyTournamentRegistration["status"]> = {};
     myRegistrations.forEach((item) => {
       result[item.tournamentId] = item.status;
+    });
+    return result;
+  }, [myRegistrations]);
+  const registrationByTournament = useMemo(() => {
+    const result: Record<string, MyTournamentRegistration> = {};
+    myRegistrations.forEach((item) => {
+      result[item.tournamentId] = item;
     });
     return result;
   }, [myRegistrations]);
@@ -143,7 +169,7 @@ export default function TournamentsPage() {
   }, [loadTournaments]);
 
   const handleRegisterSubmit = async (tournamentId: string, teamData: RegistrationInput) => {
-    const updated = await apiFetch<Tournament>(
+    const created = await apiFetch<TournamentRegistrationResult>(
       `/api/v1/player/tournaments/${tournamentId}/registrations`,
       {
         method: "POST",
@@ -155,24 +181,41 @@ export default function TournamentsPage() {
       const exists = prev.some((item) => item.tournamentId === tournamentId);
       if (exists) {
         return prev.map((item) =>
-          item.tournamentId === tournamentId ? { ...item, status: "pending" } : item,
+          item.tournamentId === tournamentId
+            ? {
+                ...item,
+                id: created.id,
+                status: created.status,
+                teamName: created.teamName,
+                registrationCode: created.registrationCode,
+                fee: created.fee,
+                bankQrImageUrl: created.bankQrImageUrl,
+                bankTransferCaption: created.bankTransferCaption,
+                paymentCaption: created.paymentCaption,
+                createdAt: created.createdAt,
+              }
+            : item,
         );
       }
       return [
         {
-          id: `local-${tournamentId}`,
+          id: created.id,
           tournamentId,
-          status: "pending",
-          teamName: teamData.teamName,
-          createdAt: new Date().toISOString(),
+          status: created.status,
+          teamName: created.teamName,
+          registrationCode: created.registrationCode,
+          fee: created.fee,
+          bankQrImageUrl: created.bankQrImageUrl,
+          bankTransferCaption: created.bankTransferCaption,
+          paymentCaption: created.paymentCaption,
+          createdAt: created.createdAt,
         },
         ...prev,
       ];
     });
-    setTournaments(prev => upsertTournament(prev, updated));
-    setIsRegisterOpen(false);
-    setSelectedTournament(updated);
-    setIsDetailOpen(true);
+    setTournaments(prev => upsertTournament(prev, created.tournament));
+    setSelectedTournament(created.tournament);
+    return created;
   };
 
   const toggleFavorite = (id: string, e: React.MouseEvent) => {
@@ -664,6 +707,7 @@ export default function TournamentsPage() {
               ) : (
                 joinedTournaments.slice(0, 3).map((tournament) => {
                   const registrationStatus = registrationStatusByTournament[tournament.id];
+                  const registration = registrationByTournament[tournament.id];
                   return (
                     <button
                       key={tournament.id}
@@ -692,6 +736,11 @@ export default function TournamentsPage() {
                         }`}>
                           {registrationStatus === "pending" ? "Chờ duyệt thanh toán" : getStatusLabel(tournament.status)}
                         </span>
+                        {registrationStatus === "pending" && registration?.registrationCode ? (
+                          <p className="mt-1 text-[10px] font-mono font-bold text-slate-600">
+                            {registration.registrationCode}
+                          </p>
+                        ) : null}
                       </div>
                     </button>
                   );

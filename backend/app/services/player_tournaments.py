@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from secrets import token_hex
 from typing import Any
 
 from psycopg.types.json import Jsonb
@@ -14,6 +15,10 @@ TOURNAMENT_STATUSES = {"upcoming", "ongoing", "completed"}
 TOURNAMENT_LEVELS = {"movement", "semi_pro", "pro"}
 ACTIVE_REGISTRATION_STATUSES = {"pending", "registered"}
 REVIEWABLE_REGISTRATION_STATUSES = {"registered", "cancelled"}
+REGISTRATION_CODE_PLACEHOLDER = "{registrationCode}"
+DEFAULT_TRANSFER_CAPTION = (
+    "Vui lòng chuyển khoản lệ phí đăng ký và ghi mã đơn trong nội dung chuyển khoản."
+)
 
 
 def _display_date(value: date) -> str:
@@ -34,6 +39,26 @@ def _parse_display_date(value: str, *, field: str) -> date:
     )
 
 
+def _clean_optional_text(value: Any) -> str | None:
+    cleaned = str(value or "").strip()
+    return cleaned or None
+
+
+def _new_registration_code() -> str:
+    return f"TREG-{token_hex(6).upper()}"
+
+
+def _payment_caption(caption: Any, registration_code: str) -> str:
+    base_caption = _clean_optional_text(caption) or DEFAULT_TRANSFER_CAPTION
+    if REGISTRATION_CODE_PLACEHOLDER in base_caption:
+        return base_caption.replace(REGISTRATION_CODE_PLACEHOLDER, registration_code)
+    return (
+        f"{base_caption}\n"
+        f"Mã đơn đăng ký: {registration_code}. "
+        f"Nội dung chuyển khoản: {registration_code}"
+    )
+
+
 def _default_bracket() -> list[dict[str, Any]]:
     return [
         {
@@ -50,6 +75,25 @@ def _default_bracket() -> list[dict[str, Any]]:
             ],
         },
     ]
+
+
+def _normalize_bracket(value: Any) -> list[dict[str, Any]]:
+    if value is None:
+        return _default_bracket()
+    if not isinstance(value, list):
+        raise AppError(
+            status_code=422,
+            code="tournament_bracket_invalid",
+            message="Sơ đồ giải phải là danh sách JSON",
+        )
+    for round_item in value:
+        if not isinstance(round_item, dict):
+            raise AppError(
+                status_code=422,
+                code="tournament_bracket_invalid",
+                message="Mỗi vòng đấu phải là object JSON",
+            )
+    return value or _default_bracket()
 
 
 def _player_profile_from_registration_row(row: Any) -> dict[str, Any]:
@@ -85,8 +129,10 @@ def _public_registration_from_row(row: Any) -> dict[str, Any]:
 def _admin_registration_from_row(row: Any) -> dict[str, Any]:
     return {
         **_public_registration_from_row(row),
+        "registrationCode": str(row.registration_code),
         "tournamentId": str(row.tournament_id),
         "tournamentTitle": str(row.tournament_title),
+        "fee": int(row.fee_vnd),
         "contactPhone": str(row.contact_phone),
         "contactEmail": str(row.contact_email),
         "reviewedAt": row.reviewed_at,
@@ -95,11 +141,19 @@ def _admin_registration_from_row(row: Any) -> dict[str, Any]:
 
 
 def _my_registration_from_row(row: Any) -> dict[str, Any]:
+    registration_code = str(row.registration_code)
     return {
         "id": str(row.id),
         "tournamentId": str(row.tournament_id),
         "status": str(row.status),
         "teamName": str(row.team_name),
+        "registrationCode": registration_code,
+        "fee": int(row.fee_vnd),
+        "bankQrImageUrl": str(row.bank_qr_image_url) if row.bank_qr_image_url else None,
+        "bankTransferCaption": str(row.bank_transfer_caption)
+        if row.bank_transfer_caption
+        else None,
+        "paymentCaption": _payment_caption(row.bank_transfer_caption, registration_code),
         "createdAt": row.created_at,
     }
 
@@ -121,6 +175,10 @@ def _tournament_from_row(row: Any) -> dict[str, Any]:
         "level": str(row.level),
         "fee": int(row.fee_vnd),
         "description": str(row.description),
+        "bankQrImageUrl": str(row.bank_qr_image_url) if row.bank_qr_image_url else None,
+        "bankTransferCaption": str(row.bank_transfer_caption)
+        if row.bank_transfer_caption
+        else None,
         "bracket": list(bracket) if isinstance(bracket, list) else [],
         "registrations": [],
     }
@@ -142,6 +200,8 @@ def _select_tournaments(where_clause: str = "") -> str:
           t.level,
           t.fee_vnd,
           t.description,
+          t.bank_qr_image_url,
+          t.bank_transfer_caption,
           t.bracket,
           COUNT(tr.id) FILTER (WHERE tr.status IN ('pending', 'registered')) AS joined_teams
         FROM public.tournaments t
@@ -204,7 +264,7 @@ def _attach_tournament_registrations(
 
 def _get_tournament(connection: Any, *, tournament_id: str) -> dict[str, Any]:
     row = connection.execute(
-        text(_select_tournaments("WHERE t.id = :tournament_id")),
+        text(_select_tournaments("WHERE t.id = :tournament_id AND t.deleted_at IS NULL")),
         {"tournament_id": tournament_id},
     ).first()
     if row is None:
@@ -219,7 +279,9 @@ def _get_tournament(connection: Any, *, tournament_id: str) -> dict[str, Any]:
 
 def list_tournaments() -> list[dict[str, Any]]:
     with get_engine().begin() as connection:
-        rows = connection.execute(text(_select_tournaments())).all()
+        rows = connection.execute(
+            text(_select_tournaments("WHERE t.deleted_at IS NULL"))
+        ).all()
         tournaments = [_tournament_from_row(row) for row in rows]
         return _attach_tournament_registrations(connection, tournaments)
 
@@ -229,11 +291,13 @@ def list_my_tournament_registration_ids(*, player_user_id: str) -> list[str]:
         rows = connection.execute(
             text(
                 """
-                SELECT tournament_id
-                FROM public.tournament_registrations
-                WHERE player_user_id = :player_user_id
-                  AND status IN ('pending', 'registered')
-                ORDER BY created_at DESC
+                SELECT tr.tournament_id
+                FROM public.tournament_registrations tr
+                JOIN public.tournaments t ON t.id = tr.tournament_id
+                WHERE tr.player_user_id = :player_user_id
+                  AND tr.status IN ('pending', 'registered')
+                  AND t.deleted_at IS NULL
+                ORDER BY tr.created_at DESC
                 """
             ),
             {"player_user_id": player_user_id},
@@ -246,11 +310,22 @@ def list_my_tournament_registrations(*, player_user_id: str) -> list[dict[str, A
         rows = connection.execute(
             text(
                 """
-                SELECT id, tournament_id, status, team_name, created_at
-                FROM public.tournament_registrations
-                WHERE player_user_id = :player_user_id
-                  AND status IN ('pending', 'registered')
-                ORDER BY created_at DESC
+                SELECT
+                  tr.id,
+                  tr.tournament_id,
+                  tr.status,
+                  tr.team_name,
+                  tr.registration_code,
+                  tr.created_at,
+                  t.fee_vnd,
+                  t.bank_qr_image_url,
+                  t.bank_transfer_caption
+                FROM public.tournament_registrations tr
+                JOIN public.tournaments t ON t.id = tr.tournament_id
+                WHERE tr.player_user_id = :player_user_id
+                  AND tr.status IN ('pending', 'registered')
+                  AND t.deleted_at IS NULL
+                ORDER BY tr.created_at DESC
                 """
             ),
             {"player_user_id": player_user_id},
@@ -264,6 +339,8 @@ def create_tournament(*, actor_user_id: str, data: dict[str, Any]) -> dict[str, 
     location = str(data.get("location") or "").strip()
     description = str(data.get("description") or "").strip()
     image = str(data.get("image") or "").strip()
+    bank_qr_image_url = _clean_optional_text(data.get("bankQrImageUrl"))
+    bank_transfer_caption = _clean_optional_text(data.get("bankTransferCaption"))
     level = str(data.get("level") or "movement").strip()
     start_date = _parse_display_date(str(data.get("startDate") or ""), field="startDate")
     end_date = _parse_display_date(str(data.get("endDate") or ""), field="endDate")
@@ -319,9 +396,7 @@ def create_tournament(*, actor_user_id: str, data: dict[str, Any]) -> dict[str, 
     if not description:
         description = f"Giải đấu giao lưu môn {sport} trên NetUp."
 
-    bracket = data.get("bracket")
-    if not isinstance(bracket, list) or not bracket:
-        bracket = _default_bracket()
+    bracket = _normalize_bracket(data.get("bracket"))
 
     with get_engine().begin() as connection:
         row = connection.execute(
@@ -341,6 +416,8 @@ def create_tournament(*, actor_user_id: str, data: dict[str, Any]) -> dict[str, 
                   level,
                   fee_vnd,
                   description,
+                  bank_qr_image_url,
+                  bank_transfer_caption,
                   bracket
                 )
                 VALUES (
@@ -357,6 +434,8 @@ def create_tournament(*, actor_user_id: str, data: dict[str, Any]) -> dict[str, 
                   :level,
                   :fee_vnd,
                   :description,
+                  :bank_qr_image_url,
+                  :bank_transfer_caption,
                   :bracket
                 )
                 RETURNING id
@@ -375,6 +454,8 @@ def create_tournament(*, actor_user_id: str, data: dict[str, Any]) -> dict[str, 
                 "level": level,
                 "fee_vnd": fee,
                 "description": description,
+                "bank_qr_image_url": bank_qr_image_url,
+                "bank_transfer_caption": bank_transfer_caption,
                 "bracket": Jsonb(bracket),
             },
         ).first()
@@ -406,6 +487,244 @@ def create_tournament(*, actor_user_id: str, data: dict[str, Any]) -> dict[str, 
         return _get_tournament(connection, tournament_id=str(row.id))
 
 
+def update_tournament(
+    *, actor_user_id: str, tournament_id: str, data: dict[str, Any]
+) -> dict[str, Any]:
+    if not data:
+        with get_engine().begin() as connection:
+            return _get_tournament(connection, tournament_id=tournament_id)
+
+    allowed_columns = {
+        "title": "title = :title",
+        "sport": "sport = :sport",
+        "status": "status = :status",
+        "startDate": "start_date = :start_date",
+        "endDate": "end_date = :end_date",
+        "location": "location = :location",
+        "maxTeams": "max_teams = :max_teams",
+        "prizeMoney": "prize_money_vnd = :prize_money_vnd",
+        "image": "banner_url = :banner_url",
+        "bankQrImageUrl": "bank_qr_image_url = :bank_qr_image_url",
+        "bankTransferCaption": "bank_transfer_caption = :bank_transfer_caption",
+        "level": "level = :level",
+        "fee": "fee_vnd = :fee_vnd",
+        "description": "description = :description",
+        "bracket": "bracket = :bracket",
+    }
+    params: dict[str, Any] = {"tournament_id": tournament_id}
+    assignments: list[str] = []
+
+    for key, assignment in allowed_columns.items():
+        if key not in data:
+            continue
+        value = data[key]
+        if key in {"title", "sport", "location", "description"}:
+            cleaned = str(value or "").strip()
+            if key != "description" and not cleaned:
+                raise AppError(
+                    status_code=422,
+                    code=f"tournament_{key}_required",
+                    message="Thông tin giải đấu không được để trống",
+                )
+            params[key] = cleaned
+        elif key == "status":
+            status = str(value or "").strip()
+            if status not in TOURNAMENT_STATUSES:
+                raise AppError(
+                    status_code=422,
+                    code="tournament_status_invalid",
+                    message="Trạng thái giải đấu không hợp lệ",
+                )
+            params["status"] = status
+        elif key == "level":
+            level = str(value or "").strip()
+            if level not in TOURNAMENT_LEVELS:
+                raise AppError(
+                    status_code=422,
+                    code="tournament_level_invalid",
+                    message="Cấp độ giải không hợp lệ",
+                )
+            params["level"] = level
+        elif key == "startDate":
+            params["start_date"] = _parse_display_date(str(value or ""), field="startDate")
+        elif key == "endDate":
+            params["end_date"] = _parse_display_date(str(value or ""), field="endDate")
+        elif key == "maxTeams":
+            max_teams = int(value or 0)
+            if max_teams <= 0:
+                raise AppError(
+                    status_code=422,
+                    code="tournament_max_teams_invalid",
+                    message="Số đội tối đa không hợp lệ",
+                )
+            params["max_teams"] = max_teams
+        elif key == "prizeMoney":
+            prize_money = int(value or 0)
+            if prize_money < 0:
+                raise AppError(
+                    status_code=422,
+                    code="tournament_money_invalid",
+                    message="Số tiền không hợp lệ",
+                )
+            params["prize_money_vnd"] = prize_money
+        elif key == "fee":
+            fee = int(value or 0)
+            if fee < 0:
+                raise AppError(
+                    status_code=422,
+                    code="tournament_money_invalid",
+                    message="Số tiền không hợp lệ",
+                )
+            params["fee_vnd"] = fee
+        elif key == "image":
+            params["banner_url"] = (
+                str(value or "").strip()
+                or "https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?w=600&fit=crop&q=80"
+            )
+        elif key == "bankQrImageUrl":
+            params["bank_qr_image_url"] = _clean_optional_text(value)
+        elif key == "bankTransferCaption":
+            params["bank_transfer_caption"] = _clean_optional_text(value)
+        elif key == "bracket":
+            params["bracket"] = Jsonb(_normalize_bracket(value))
+        assignments.append(assignment)
+
+    if not assignments:
+        with get_engine().begin() as connection:
+            return _get_tournament(connection, tournament_id=tournament_id)
+
+    with get_engine().begin() as connection:
+        current = connection.execute(
+            text(
+                """
+                SELECT id, start_date, end_date, max_teams
+                FROM public.tournaments
+                WHERE id = :tournament_id AND deleted_at IS NULL
+                FOR UPDATE
+                """
+            ),
+            {"tournament_id": tournament_id},
+        ).first()
+        if current is None:
+            raise AppError(
+                status_code=404,
+                code="tournament_not_found",
+                message="Không tìm thấy giải đấu",
+            )
+
+        next_start = params.get("start_date", current.start_date)
+        next_end = params.get("end_date", current.end_date)
+        if next_end < next_start:
+            raise AppError(
+                status_code=422,
+                code="tournament_date_range_invalid",
+                message="Ngày kết thúc không được trước ngày bắt đầu",
+            )
+
+        if "max_teams" in params:
+            joined_row = connection.execute(
+                text(
+                    """
+                    SELECT COUNT(*) AS joined_teams
+                    FROM public.tournament_registrations
+                    WHERE tournament_id = :tournament_id
+                      AND status IN ('pending', 'registered')
+                    """
+                ),
+                {"tournament_id": tournament_id},
+            ).first()
+            joined_teams = int(joined_row.joined_teams if joined_row else 0)
+            if int(params["max_teams"]) < joined_teams:
+                raise AppError(
+                    status_code=409,
+                    code="tournament_capacity_below_registrations",
+                    message="Số đội tối đa không được nhỏ hơn số đơn đang giữ slot",
+                )
+
+        connection.execute(
+            text(
+                f"""
+                UPDATE public.tournaments
+                SET {", ".join(assignments)}
+                WHERE id = :tournament_id AND deleted_at IS NULL
+                """
+            ),
+            params,
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO public.audit_logs (
+                  actor_user_id,
+                  event_type,
+                  entity_type,
+                  entity_id,
+                  payload
+                )
+                VALUES (
+                  :actor_user_id,
+                  'tournament_updated',
+                  'tournament',
+                  :entity_id,
+                  :payload
+                )
+                """
+            ),
+            {
+                "actor_user_id": actor_user_id,
+                "entity_id": tournament_id,
+                "payload": Jsonb({"fields": sorted(data.keys())}),
+            },
+        )
+        return _get_tournament(connection, tournament_id=tournament_id)
+
+
+def delete_tournament(*, actor_user_id: str, tournament_id: str) -> None:
+    with get_engine().begin() as connection:
+        row = connection.execute(
+            text(
+                """
+                UPDATE public.tournaments
+                SET deleted_at = now()
+                WHERE id = :tournament_id AND deleted_at IS NULL
+                RETURNING id, title
+                """
+            ),
+            {"tournament_id": tournament_id},
+        ).first()
+        if row is None:
+            raise AppError(
+                status_code=404,
+                code="tournament_not_found",
+                message="Không tìm thấy giải đấu",
+            )
+        connection.execute(
+            text(
+                """
+                INSERT INTO public.audit_logs (
+                  actor_user_id,
+                  event_type,
+                  entity_type,
+                  entity_id,
+                  payload
+                )
+                VALUES (
+                  :actor_user_id,
+                  'tournament_deleted',
+                  'tournament',
+                  :entity_id,
+                  :payload
+                )
+                """
+            ),
+            {
+                "actor_user_id": actor_user_id,
+                "entity_id": tournament_id,
+                "payload": Jsonb({"title": str(row.title)}),
+            },
+        )
+
+
 def register_for_tournament(
     *, tournament_id: str, player_user_id: str, data: dict[str, Any]
 ) -> dict[str, Any]:
@@ -432,29 +751,34 @@ def register_for_tournament(
     if not email:
         raise AppError(status_code=422, code="email_required", message="Vui lòng nhập email")
 
+    registration_code = _new_registration_code()
     try:
         with get_engine().begin() as connection:
-            row = connection.execute(
+            tournament_row = connection.execute(
                 text(
                     """
                     SELECT
                       t.id,
                       t.status,
-                      t.max_teams
+                      t.max_teams,
+                      t.fee_vnd,
+                      t.bank_qr_image_url,
+                      t.bank_transfer_caption
                     FROM public.tournaments t
                     WHERE t.id = :tournament_id
+                      AND t.deleted_at IS NULL
                     FOR UPDATE OF t
                     """
                 ),
                 {"tournament_id": tournament_id},
             ).first()
-            if row is None:
+            if tournament_row is None:
                 raise AppError(
                     status_code=404,
                     code="tournament_not_found",
                     message="Không tìm thấy giải đấu",
                 )
-            if str(row.status) != "upcoming":
+            if str(tournament_row.status) != "upcoming":
                 raise AppError(
                     status_code=409,
                     code="tournament_registration_closed",
@@ -472,19 +796,20 @@ def register_for_tournament(
                 {"tournament_id": tournament_id},
             ).first()
             joined_teams = int(joined_row.joined_teams if joined_row else 0)
-            if joined_teams >= int(row.max_teams):
+            if joined_teams >= int(tournament_row.max_teams):
                 raise AppError(
                     status_code=409,
                     code="tournament_full",
                     message="Giải đấu đã đủ số đội",
                 )
 
-            connection.execute(
+            registration_row = connection.execute(
                 text(
                     """
                     INSERT INTO public.tournament_registrations (
                       tournament_id,
                       player_user_id,
+                      registration_code,
                       team_name,
                       player1_name,
                       player2_name,
@@ -495,6 +820,7 @@ def register_for_tournament(
                     VALUES (
                       :tournament_id,
                       :player_user_id,
+                      :registration_code,
                       :team_name,
                       :player1_name,
                       :player2_name,
@@ -502,19 +828,41 @@ def register_for_tournament(
                       :contact_email,
                       'pending'
                     )
+                    RETURNING id, tournament_id, registration_code, status, team_name, created_at
                     """
                 ),
                 {
                     "tournament_id": tournament_id,
                     "player_user_id": player_user_id,
+                    "registration_code": registration_code,
                     "team_name": team_name,
                     "player1_name": player1,
                     "player2_name": player2,
                     "contact_phone": phone,
                     "contact_email": email,
                 },
-            )
-            return _get_tournament(connection, tournament_id=tournament_id)
+            ).one()
+            tournament = _get_tournament(connection, tournament_id=tournament_id)
+            return {
+                "id": str(registration_row.id),
+                "tournamentId": str(registration_row.tournament_id),
+                "status": str(registration_row.status),
+                "teamName": str(registration_row.team_name),
+                "registrationCode": str(registration_row.registration_code),
+                "fee": int(tournament_row.fee_vnd),
+                "bankQrImageUrl": str(tournament_row.bank_qr_image_url)
+                if tournament_row.bank_qr_image_url
+                else None,
+                "bankTransferCaption": str(tournament_row.bank_transfer_caption)
+                if tournament_row.bank_transfer_caption
+                else None,
+                "paymentCaption": _payment_caption(
+                    tournament_row.bank_transfer_caption,
+                    str(registration_row.registration_code),
+                ),
+                "createdAt": registration_row.created_at,
+                "tournament": tournament,
+            }
     except IntegrityError as exc:
         raise AppError(
             status_code=409,
@@ -527,7 +875,7 @@ def list_tournament_registrations_for_admin(
     *, status: str | None = None, tournament_id: str | None = None
 ) -> list[dict[str, Any]]:
     params: dict[str, Any] = {}
-    where_parts: list[str] = []
+    where_parts: list[str] = ["t.deleted_at IS NULL"]
     if status:
         if status not in {"pending", "registered", "cancelled"}:
             raise AppError(
@@ -541,7 +889,7 @@ def list_tournament_registrations_for_admin(
         where_parts.append("tr.tournament_id = :tournament_id")
         params["tournament_id"] = tournament_id
 
-    where_clause = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+    where_clause = f"WHERE {' AND '.join(where_parts)}"
     with get_engine().begin() as connection:
         rows = connection.execute(
             text(
@@ -550,6 +898,7 @@ def list_tournament_registrations_for_admin(
                   tr.id,
                   tr.tournament_id,
                   tr.player_user_id,
+                  tr.registration_code,
                   tr.team_name,
                   tr.player1_name,
                   tr.player2_name,
@@ -560,6 +909,7 @@ def list_tournament_registrations_for_admin(
                   tr.reviewed_at,
                   tr.review_note,
                   t.title AS tournament_title,
+                  t.fee_vnd,
                   u.full_name,
                   u.avatar_url,
                   u.city,
@@ -617,6 +967,7 @@ def review_tournament_registration(
                 FROM public.tournament_registrations tr
                 JOIN public.tournaments t ON t.id = tr.tournament_id
                 WHERE tr.id = :registration_id
+                  AND t.deleted_at IS NULL
                 FOR UPDATE OF tr
                 """
             ),
@@ -711,6 +1062,7 @@ def review_tournament_registration(
                   tr.id,
                   tr.tournament_id,
                   tr.player_user_id,
+                  tr.registration_code,
                   tr.team_name,
                   tr.player1_name,
                   tr.player2_name,
@@ -721,6 +1073,7 @@ def review_tournament_registration(
                   tr.reviewed_at,
                   tr.review_note,
                   t.title AS tournament_title,
+                  t.fee_vnd,
                   u.full_name,
                   u.avatar_url,
                   u.city,

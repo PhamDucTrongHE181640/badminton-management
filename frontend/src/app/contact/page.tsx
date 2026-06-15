@@ -1,10 +1,14 @@
 "use client";
 
 import React, { useState } from "react";
-import { apiFetch } from "@/lib/http";
+import { API_BASE_URL, apiFetch } from "@/lib/http";
 import { errorMessage } from "@/lib/format";
 
 const fanpageUrl = process.env.NEXT_PUBLIC_NETUP_FACEBOOK_URL ?? "https://www.facebook.com/netup.vn";
+
+function loginUrl() {
+  return `${API_BASE_URL}/api/v1/auth/google/start`;
+}
 
 // Static marketing content.
 const testimonials = [
@@ -80,6 +84,7 @@ export default function ContactPage() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [successPartnerType, setSuccessPartnerType] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
 
   // Testimonial state
@@ -106,20 +111,38 @@ export default function ContactPage() {
 
     setIsSubmitting(true);
     try {
-      await apiFetch("/api/v1/public/contact-leads", {
-        method: "POST",
-        body: JSON.stringify({
-          fullName: formData.fullName,
-          phone: formData.phone,
-          email: formData.email,
-          partnerType: formData.partnerType,
-          organizationName: formData.courtName,
-          address: formData.courtAddress,
-          message: formData.content || null,
-          source: "contact_page",
-        }),
-      });
+      if (formData.partnerType === "owner") {
+        await apiFetch("/api/v1/owner/requests", {
+          method: "POST",
+          credentials: "include",
+          body: JSON.stringify({
+            business_name: formData.courtName,
+            contact_phone: formData.phone,
+            facility_overview: [
+              `Người liên hệ: ${formData.fullName}`,
+              `Email: ${formData.email}`,
+              `Địa chỉ sân: ${formData.courtAddress}`,
+              formData.content ? `Ghi chú: ${formData.content}` : "",
+            ].filter(Boolean).join("\n"),
+          }),
+        });
+      } else {
+        await apiFetch("/api/v1/public/contact-leads", {
+          method: "POST",
+          body: JSON.stringify({
+            fullName: formData.fullName,
+            phone: formData.phone,
+            email: formData.email,
+            partnerType: formData.partnerType,
+            organizationName: formData.courtName,
+            address: formData.courtAddress,
+            message: formData.content || null,
+            source: "contact_page",
+          }),
+        });
+      }
       setIsSubmitting(false);
+      setSuccessPartnerType(formData.partnerType);
       setSubmitSuccess(true);
       setFormData({
         fullName: "",
@@ -132,7 +155,12 @@ export default function ContactPage() {
       });
     } catch (caught) {
       setIsSubmitting(false);
-      setErrorMsg(errorMessage(caught, "Không gửi được yêu cầu hợp tác."));
+      const message = errorMessage(caught, "Không gửi được yêu cầu hợp tác.");
+      setErrorMsg(
+        message === "Thiếu token người dùng" || message === "user_unauthorized"
+          ? "Vui lòng đăng nhập trước khi gửi yêu cầu trở thành chủ sân."
+          : message,
+      );
     }
   };
 
@@ -395,6 +423,11 @@ export default function ContactPage() {
             {errorMsg && (
               <div className="rounded-xl bg-red-50 border border-red-100 p-3 text-xs text-red-800 font-bold">
                 ⚠️ {errorMsg}
+                {formData.partnerType === "owner" && errorMsg.includes("đăng nhập") ? (
+                  <a href={loginUrl()} className="ml-2 underline">
+                    Đăng nhập Google
+                  </a>
+                ) : null}
               </div>
             )}
 
@@ -402,7 +435,11 @@ export default function ContactPage() {
             {submitSuccess && (
               <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-4 text-xs text-emerald-800 font-bold flex flex-col gap-1">
                 <p className="text-sm">🎉 Gửi yêu cầu thành công!</p>
-                <p className="font-medium text-slate-500 mt-1">NetUP đã nhận được thông tin hợp tác của bạn. Chúng tôi sẽ chủ động liên hệ hỗ trợ trong thời gian sớm nhất.</p>
+                <p className="font-medium text-slate-500 mt-1">
+                  {successPartnerType === "owner"
+                    ? "NetUP đã nhận yêu cầu owner và sẽ chờ admin duyệt."
+                    : "NetUP đã nhận được thông tin hợp tác của bạn. Chúng tôi sẽ chủ động liên hệ hỗ trợ trong thời gian sớm nhất."}
+                </p>
               </div>
             )}
 

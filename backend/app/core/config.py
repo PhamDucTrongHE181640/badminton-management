@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     video_assessment_max_size_mb: int = 5
     video_assessment_max_duration_seconds: int = 60
     video_assessment_storage_dir: str = "/tmp/netup-video-assessments"
+    local_upload_storage_dir: str = "/app/uploads"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

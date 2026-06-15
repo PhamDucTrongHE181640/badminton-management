@@ -36,6 +36,8 @@ def _tournament_payload() -> dict[str, object]:
         "level": "movement",
         "fee": 150_000,
         "description": "Giải đấu phong trào",
+        "bankQrImageUrl": "https://example.com/qr.png",
+        "bankTransferCaption": "Chuyển khoản với mã {registrationCode}",
         "bracket": [
             {
                 "roundName": "Chung kết",
@@ -150,6 +152,8 @@ def test_admin_create_tournament_endpoint(client: TestClient, monkeypatch) -> No
             "level": "movement",
             "fee": 150_000,
             "description": "Giải đấu phong trào",
+            "bankQrImageUrl": "https://example.com/qr.png",
+            "bankTransferCaption": "Chuyển khoản với mã {registrationCode}",
         },
     )
 
@@ -157,10 +161,62 @@ def test_admin_create_tournament_endpoint(client: TestClient, monkeypatch) -> No
     assert response.json()["title"] == "NetUP Hoa Lac Open"
 
 
+def test_admin_update_tournament_endpoint(client: TestClient, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    app.dependency_overrides[require_admin] = _admin
+    monkeypatch.setattr(
+        "app.api.player_tournaments.update_tournament",
+        lambda **_: {**_tournament_payload(), "status": "ongoing"},
+    )
+
+    response = client.patch(
+        "/api/v1/admin/tournaments/tournament-id",
+        json={"status": "ongoing", "title": "NetUP Hoa Lac Open"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ongoing"
+
+
+def test_admin_delete_tournament_endpoint(client: TestClient, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    app.dependency_overrides[require_admin] = _admin
+    called: dict[str, str] = {}
+
+    def fake_delete(**kwargs: str) -> None:
+        called["tournament_id"] = kwargs["tournament_id"]
+
+    monkeypatch.setattr("app.api.player_tournaments.delete_tournament", fake_delete)
+
+    response = client.delete("/api/v1/admin/tournaments/tournament-id")
+
+    assert response.status_code == 204
+    assert called["tournament_id"] == "tournament-id"
+
+
+def test_admin_upload_tournament_qr_image_endpoint(
+    client: TestClient, monkeypatch, tmp_path
+) -> None:  # type: ignore[no-untyped-def]
+    app.dependency_overrides[require_admin] = _admin
+    monkeypatch.setenv("LOCAL_UPLOAD_STORAGE_DIR", str(tmp_path))
+    monkeypatch.setenv("BACKEND_BASE_URL", "http://backend.test")
+
+    response = client.post(
+        "/api/v1/admin/tournaments/qr-images",
+        files={"image": ("qr.png", b"qr-image-content", "image/png")},
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["imageUrl"].startswith(
+        "http://backend.test/uploads/tournament-bank-qrs/"
+    )
+    assert payload["storageKey"].startswith("tournament-bank-qrs/")
+    assert (tmp_path / payload["storageKey"]).read_bytes() == b"qr-image-content"
+
+
 def test_player_create_tournament_endpoint_removed(client: TestClient) -> None:
     response = client.post("/api/v1/player/tournaments", json={})
 
-    assert response.status_code == 405
+    assert response.status_code == 404
 
 
 def test_register_tournament_endpoint(client: TestClient, monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -174,7 +230,19 @@ def test_register_tournament_endpoint(client: TestClient, monkeypatch) -> None: 
     app.dependency_overrides[require_player] = lambda: player
     monkeypatch.setattr(
         "app.api.player_tournaments.register_for_tournament",
-        lambda **_: {**_tournament_payload(), "joinedTeams": 5},
+        lambda **_: {
+            "id": "registration-id",
+            "tournamentId": "tournament-id",
+            "status": "pending",
+            "teamName": "Hoa Lac Warriors",
+            "registrationCode": "TREG-ABC123",
+            "fee": 150_000,
+            "bankQrImageUrl": "https://example.com/qr.png",
+            "bankTransferCaption": "Chuyển khoản với mã {registrationCode}",
+            "paymentCaption": "Chuyển khoản với mã TREG-ABC123",
+            "createdAt": "2026-06-12T08:00:00Z",
+            "tournament": {**_tournament_payload(), "joinedTeams": 5},
+        },
     )
 
     response = client.post(
@@ -189,12 +257,15 @@ def test_register_tournament_endpoint(client: TestClient, monkeypatch) -> None: 
     )
 
     assert response.status_code == 201
-    assert response.json()["joinedTeams"] == 5
+    assert response.json()["registrationCode"] == "TREG-ABC123"
+    assert response.json()["paymentCaption"] == "Chuyển khoản với mã TREG-ABC123"
+    assert response.json()["tournament"]["joinedTeams"] == 5
 
 
 def _admin_registration_payload() -> dict[str, object]:
     return {
         "id": "registration-id",
+        "registrationCode": "TREG-ABC123",
         "status": "pending",
         "teamName": "Hoa Lac Warriors",
         "player1": "Minh Tuấn",
@@ -202,6 +273,7 @@ def _admin_registration_payload() -> dict[str, object]:
         "createdAt": "2026-06-12T08:00:00Z",
         "tournamentId": "tournament-id",
         "tournamentTitle": "NetUP Hoa Lac Open",
+        "fee": 150_000,
         "contactPhone": "0912345678",
         "contactEmail": "player@example.com",
         "reviewedAt": None,
@@ -234,6 +306,7 @@ def test_admin_list_tournament_registrations_endpoint(
     response = client.get("/api/v1/admin/tournaments/registrations?status=pending")
 
     assert response.status_code == 200
+    assert response.json()[0]["registrationCode"] == "TREG-ABC123"
     assert response.json()[0]["contactPhone"] == "0912345678"
     assert response.json()[0]["profile"]["elo_value"] == 1350
 

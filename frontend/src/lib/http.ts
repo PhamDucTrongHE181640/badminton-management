@@ -1,6 +1,6 @@
 const DEFAULT_TIMEOUT_MS = 10000;
 
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+export const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").replace(/\/$/, "");
 
 export class ApiError extends Error {
   status: number;
@@ -29,18 +29,31 @@ export async function apiFetch<T>(
   options?: { timeoutMs?: number; allowNoContent?: boolean }
 ): Promise<T> {
   const isFormData = typeof FormData !== "undefined" && init?.body instanceof FormData;
-  const response = await withTimeout(
-    `${API_BASE_URL}${path}`,
-    {
-      ...init,
-      cache: "no-store",
-      headers: {
-        ...(isFormData ? {} : { "Content-Type": "application/json" }),
-        ...(init?.headers ?? {}),
+  let response: Response;
+
+  try {
+    response = await withTimeout(
+      `${API_BASE_URL}${path}`,
+      {
+        ...init,
+        cache: "no-store",
+        headers: {
+          ...(isFormData ? {} : { "Content-Type": "application/json" }),
+          ...(init?.headers ?? {}),
+        },
       },
-    },
-    options?.timeoutMs ?? DEFAULT_TIMEOUT_MS
-  );
+      options?.timeoutMs ?? DEFAULT_TIMEOUT_MS
+    );
+  } catch (caught) {
+    const isTimeout = caught instanceof Error && caught.name === "AbortError";
+    throw new ApiError({
+      status: 0,
+      code: isTimeout ? "api_timeout" : "network_error",
+      message: isTimeout
+        ? "API phản hồi quá lâu. Vui lòng thử lại sau."
+        : `Không kết nối được API tại ${API_BASE_URL || "/api"}. Hãy kiểm tra backend đang chạy và đúng NEXT_PUBLIC_API_BASE_URL.`,
+    });
+  }
 
   const payload = response.status === 204 ? null : await response.json().catch(() => null);
 

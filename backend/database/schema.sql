@@ -263,6 +263,7 @@ CREATE TABLE IF NOT EXISTS public.courts (
   sport public.sport_type NOT NULL,
   status public.court_status NOT NULL DEFAULT 'active',
   rating numeric(2,1) NOT NULL DEFAULT 0 CHECK (rating BETWEEN 0 AND 5),
+  image_url text,
   amenities text[] NOT NULL DEFAULT '{}',
   base_price_vnd integer NOT NULL CHECK (base_price_vnd >= 0),
   max_rental_duration_minutes integer NOT NULL CHECK (
@@ -279,8 +280,10 @@ CREATE TABLE IF NOT EXISTS public.sessions (
   court_id uuid NOT NULL REFERENCES public.courts(id) ON DELETE CASCADE,
   created_by_user_id uuid REFERENCES public.users(id) ON DELETE SET NULL,
   title text NOT NULL,
+  description text,
   post_type public.session_post_type NOT NULL DEFAULT 'pool',
   status public.session_status NOT NULL DEFAULT 'scheduled',
+  image_url text,
   starts_at timestamptz NOT NULL,
   duration_minutes integer NOT NULL CHECK (
     duration_minutes IN (30, 60, 90, 120, 150, 180, 210, 240, 270, 300)
@@ -327,6 +330,15 @@ CREATE TABLE IF NOT EXISTS public.pool_posts (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   CHECK (host_slots <= total_slots)
+);
+
+CREATE TABLE IF NOT EXISTS public.owner_post_quotas (
+  owner_user_id uuid PRIMARY KEY REFERENCES public.users(id) ON DELETE CASCADE,
+  rental_post_limit integer NOT NULL DEFAULT 10 CHECK (rental_post_limit >= 0),
+  slot_post_limit integer NOT NULL DEFAULT 10 CHECK (slot_post_limit >= 0),
+  updated_by_user_id uuid REFERENCES public.users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
 );
 
 -- Booking, payment, check-in
@@ -842,6 +854,11 @@ CREATE TRIGGER trg_pool_posts_updated_at
 BEFORE UPDATE ON public.pool_posts
 FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
+DROP TRIGGER IF EXISTS trg_owner_post_quotas_updated_at ON public.owner_post_quotas;
+CREATE TRIGGER trg_owner_post_quotas_updated_at
+BEFORE UPDATE ON public.owner_post_quotas
+FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
 DROP TRIGGER IF EXISTS trg_bookings_updated_at ON public.bookings;
 CREATE TRIGGER trg_bookings_updated_at
 BEFORE UPDATE ON public.bookings
@@ -926,6 +943,7 @@ CREATE INDEX IF NOT EXISTS idx_sessions_post_type_start ON public.sessions(post_
 CREATE INDEX IF NOT EXISTS idx_sessions_open_slots ON public.sessions(open_slots) WHERE open_slots > 0;
 
 CREATE INDEX IF NOT EXISTS idx_pool_posts_host_status ON public.pool_posts(host_user_id, status);
+CREATE INDEX IF NOT EXISTS idx_owner_post_quotas_limits ON public.owner_post_quotas(rental_post_limit, slot_post_limit);
 
 CREATE INDEX IF NOT EXISTS idx_bookings_session_status ON public.bookings(session_id, status);
 CREATE INDEX IF NOT EXISTS idx_bookings_player_created ON public.bookings(player_user_id, created_at DESC);

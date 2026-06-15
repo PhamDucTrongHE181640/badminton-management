@@ -19,3 +19,4 @@ venv/
 # Docker volumes / generated data
 postgres-data/
 redis-data/
+backend/uploads/

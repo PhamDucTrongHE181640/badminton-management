@@ -55,8 +55,10 @@ class DiscoverySessionResponse(BaseModel):
     id: str
     court_id: str
     title: str
+    description: str | None = None
     post_type: str
     status: str
+    image_url: str | None = None
     starts_at: datetime
     duration_minutes: int
     ends_at: datetime
@@ -70,6 +72,7 @@ class DiscoverySessionResponse(BaseModel):
     allows_solo_join: bool
     court_name: str
     sub_court_name: str
+    court_image_url: str | None = None
     sport: str
     amenities: list[str]
     base_price_vnd: int

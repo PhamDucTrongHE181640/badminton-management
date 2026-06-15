@@ -121,6 +121,59 @@ def test_admin_approves_owner_request(
     assert response.json()["reviewed_by"] == admin.user_id
 
 
+def test_owner_post_quota_endpoint(
+    client: TestClient, monkeypatch, owner: UserPrincipal
+) -> None:
+    app.dependency_overrides[require_owner] = lambda: owner
+    monkeypatch.setattr(
+        "app.api.owner_inventory.get_owner_post_quota",
+        lambda **_: {
+            "owner_user_id": owner.id,
+            "rental_post_limit": 10,
+            "slot_post_limit": 10,
+            "rental_posts_used": 2,
+            "slot_posts_used": 3,
+            "rental_posts_remaining": 8,
+            "slot_posts_remaining": 7,
+            "updated_at": None,
+        },
+    )
+
+    response = client.get("/api/v1/owner/post-quota")
+
+    assert response.status_code == 200
+    assert response.json()["rental_posts_remaining"] == 8
+
+
+def test_admin_updates_owner_post_quota(
+    client: TestClient, monkeypatch, admin: AdminPrincipal
+) -> None:
+    app.dependency_overrides[require_admin] = lambda: admin
+    monkeypatch.setattr(
+        "app.api.admin_owner_quotas.update_owner_post_quota_for_admin",
+        lambda **_: {
+            "owner_user_id": "owner-id",
+            "owner_full_name": "Chủ sân",
+            "owner_email": "owner@example.com",
+            "rental_post_limit": 20,
+            "slot_post_limit": 15,
+            "rental_posts_used": 2,
+            "slot_posts_used": 3,
+            "rental_posts_remaining": 18,
+            "slot_posts_remaining": 12,
+            "updated_at": None,
+        },
+    )
+
+    response = client.put(
+        "/api/v1/admin/owner-post-quotas/owner-id",
+        json={"rental_post_limit": 20, "slot_post_limit": 15},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["slot_post_limit"] == 15
+
+
 def test_owner_session_create_endpoint(
     client: TestClient, monkeypatch, owner: UserPrincipal
 ) -> None:

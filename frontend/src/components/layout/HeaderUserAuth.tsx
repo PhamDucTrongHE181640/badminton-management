@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { Button, ButtonLink } from "@/components/ui";
@@ -66,22 +67,22 @@ export function HeaderUserAuth() {
 
   if (user) {
     return (
-      <div className="flex items-center gap-2">
-        <div className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-red-100 text-xs font-semibold text-red-800">
+      <div className="flex shrink-0 items-center gap-2 lg:gap-3">
+        <Link href="/player/profile" className="flex shrink-0 items-center gap-2 rounded-xl px-1 py-1 transition hover:bg-slate-50" title="Hồ sơ của tôi">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-100 text-xs font-semibold text-red-800">
             {initials}
           </span>
-          <div className="hidden max-w-[220px] leading-tight sm:block">
+          <div className="hidden max-w-[190px] leading-tight 2xl:block">
             <p className="truncate text-sm font-semibold text-slate-900">{user.full_name}</p>
             <p className="truncate text-xs text-slate-500">{user.email}</p>
           </div>
-        </div>
+        </Link>
         {isOwner ? (
-          <ButtonLink href="/owner/courts" size="sm" variant="outline">
-            Quản lý sân
+          <ButtonLink href="/owner/dashboard" size="sm" variant="outline" className="hidden whitespace-nowrap lg:inline-flex" title="Quản lý owner">
+            Quản lý
           </ButtonLink>
         ) : null}
-        <Button size="sm" variant="outline" onClick={logout} disabled={isLoggingOut}>
+        <Button size="sm" variant="outline" onClick={logout} disabled={isLoggingOut} className="whitespace-nowrap">
           {isLoggingOut ? "Đang đăng xuất..." : "Đăng xuất"}
         </Button>
       </div>

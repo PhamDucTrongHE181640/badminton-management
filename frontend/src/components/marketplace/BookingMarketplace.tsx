@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 import { Badge, Button, ButtonLink, Card, EmptyState, Field, Notice, inputClassName } from "@/components/ui";
-import { API_BASE_URL, apiFetch } from "@/lib/http";
+import { API_BASE_URL, ApiError, apiFetch } from "@/lib/http";
 import {
   courtImageForSport,
   errorMessage,
@@ -50,8 +50,10 @@ type JoinedPlayerProfile = {
 type Session = {
   id: string;
   title: string;
+  description?: string | null;
   post_type: string;
   status: string;
+  image_url?: string | null;
   starts_at: string;
   duration_minutes: number;
   ends_at: string;
@@ -65,6 +67,7 @@ type Session = {
   allows_solo_join: boolean;
   court_name: string;
   sub_court_name: string;
+  court_image_url?: string | null;
   sport: string;
   amenities: string[];
   complex_name: string;
@@ -141,6 +144,10 @@ function getSportIcon(sport: string) {
 
 function loginUrl() {
   return `${API_BASE_URL}/api/v1/auth/google/start`;
+}
+
+function isAuthFailure(caught: unknown) {
+  return caught instanceof ApiError && (caught.status === 401 || caught.status === 403);
 }
 
 function recommendationTone(label: string | null | undefined): "success" | "info" | "neutral" {
@@ -234,6 +241,10 @@ function playerSkillLabel(tier: string | null | undefined) {
   return tierLabels[tier ?? ""] ?? "Người mới";
 }
 
+function sessionImage(session: Session) {
+  return session.image_url || session.court_image_url || courtImageForSport(session.sport);
+}
+
 function toMatchmakingSession(session: Session, index: number, activeTier: string): MatchmakingSession {
   const slotsJoined = Math.max(0, session.max_slots - session.open_slots);
   const players = (session.joined_players ?? []).slice(0, 4).map((player) => ({
@@ -273,6 +284,7 @@ function toMatchmakingSession(session: Session, index: number, activeTier: strin
 export function BookingMarketplace({ variant }: { variant: Variant }) {
   const searchParams = useSearchParams();
   const isMatchmaking = searchParams.get("mode") === "matchmaking";
+  const isBookingMode = searchParams.get("mode") === "booking";
 
   const [user, setUser] = useState<UserProfile | null>(null);
   const [skillTier, setSkillTier] = useState<SkillTierSummary | null>(null);
@@ -299,7 +311,7 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [selectedPlayerProfile, setSelectedPlayerProfile] = useState<JoinedPlayerProfile | null>(null);
 
-  const effectivePostType: PostTypeFilter = isMatchmaking ? "pool" : postType;
+  const effectivePostType: PostTypeFilter = isMatchmaking ? "pool" : isBookingMode ? "rental" : postType;
 
   const query = useMemo(() => {
     const params = new URLSearchParams();
@@ -320,11 +332,22 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
 
       try {
         nextUser = await apiFetch<UserProfile>("/api/v1/auth/me", { credentials: "include" });
-        nextTier = await apiFetch<SkillTierSummary>("/api/v1/player/skill-tier", { credentials: "include" });
         endpoint = "/api/v1/player/discovery/sessions";
-      } catch {
-        nextUser = null;
-        nextTier = null;
+      } catch (caught) {
+        if (!isAuthFailure(caught)) throw caught;
+      }
+
+      if (nextUser) {
+        try {
+          nextTier = await apiFetch<SkillTierSummary>("/api/v1/player/skill-tier", { credentials: "include" });
+        } catch (caught) {
+          if (isAuthFailure(caught)) {
+            nextUser = null;
+            endpoint = "/api/v1/public/discovery/sessions";
+          } else {
+            nextTier = null;
+          }
+        }
       }
 
       const nextSessions = await apiFetch<Session[]>(`${endpoint}${query ? `?${query}` : ""}`, {
@@ -335,14 +358,23 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
       setSessions(nextSessions);
       setMessage(
         nextUser
-          ? `Có ${nextSessions.length} khung giờ đang được xếp theo độ phù hợp.`
-          : `Có ${nextSessions.length} khung giờ công khai. Đăng nhập để đặt sân và cá nhân hóa level.`,
+          ? isBookingMode
+            ? `Có ${nextSessions.length} sân đang mở cho thuê nguyên sân.`
+            : `Có ${nextSessions.length} khung giờ đang được xếp theo độ phù hợp.`
+          : isBookingMode
+            ? `Có ${nextSessions.length} sân công khai đang mở cho thuê nguyên sân. Đăng nhập để đặt sân.`
+            : `Có ${nextSessions.length} khung giờ công khai. Đăng nhập để đặt sân và cá nhân hóa level.`,
       );
     } catch (caught) {
       setUser(null);
       setSkillTier(null);
       setSessions([]);
-      setError(errorMessage(caught, "Không tải được danh sách sân"));
+      setError(
+        errorMessage(
+          caught,
+          isBookingMode ? "Không tải được danh sách sân cho thuê nguyên sân" : "Không tải được danh sách xếp đối",
+        ),
+      );
       setMessage("Chưa tải được dữ liệu sân.");
     } finally {
       setIsLoading(false);
@@ -443,15 +475,16 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
   }, [selectedSessionId, visibleMatchmakingSessions]);
 
   useEffect(() => {
-    if (isMatchmaking) {
-      if (visibleMatchmakingSessions.length > 0) {
-        const exists = visibleMatchmakingSessions.some((s) => s.id === selectedSessionId);
-        if (!exists) {
-          setSelectedSessionId(visibleMatchmakingSessions[0].id);
-        }
-      } else {
-        setSelectedSessionId(null);
-      }
+    if (!isMatchmaking && selectedSessionId !== null) {
+      setSelectedSessionId(null);
+      return;
+    }
+    if (
+      isMatchmaking &&
+      selectedSessionId !== null &&
+      !visibleMatchmakingSessions.some((session) => session.id === selectedSessionId)
+    ) {
+      setSelectedSessionId(null);
     }
   }, [visibleMatchmakingSessions, isMatchmaking, selectedSessionId]);
 
@@ -755,7 +788,7 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
                       {/* Div 1: Sân Image */}
                       <div className="relative h-40 w-full md:w-52 shrink-0 rounded-xl overflow-hidden bg-slate-100">
                         <img
-                          src={courtImageForSport(session.sport)}
+                          src={sessionImage(session)}
                           alt={session.courtName}
                           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                         />
@@ -986,7 +1019,7 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
                 {/* Court Image with Index and Badge */}
                 <div className="relative h-44 w-full rounded-xl overflow-hidden bg-slate-100 shrink-0">
                   <img
-                    src={courtImageForSport(selectedSession.sport)}
+                    src={sessionImage(selectedSession)}
                     alt={selectedSession.courtName}
                     className="h-full w-full object-cover"
                   />
@@ -1424,10 +1457,12 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
               {variant === "owner" ? "NetUp thị trường" : "NetUp đặt sân"}
             </p>
             <h1 className="mt-3 max-w-3xl font-heading text-3xl font-semibold leading-tight text-slate-950 sm:text-4xl">
-              Tìm sân theo lưới, đặt lịch nhanh.
+              {isBookingMode ? "Thuê nguyên sân theo khung giờ còn trống." : "Tìm sân theo lưới, đặt lịch nhanh."}
             </h1>
             <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600 sm:text-base">
-              Tìm theo tên sân hoặc khu vực, xem nhanh bản đồ, trạng thái slot và đặt lịch trực quan.
+              {isBookingMode
+                ? "Chọn sân, xem ảnh và giá bao sân, sau đó giữ toàn bộ khung giờ cho nhóm của bạn."
+                : "Tìm theo tên sân hoặc khu vực, xem nhanh bản đồ, trạng thái slot và đặt lịch trực quan."}
             </p>
           </div>
           <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[420px]">
@@ -1436,11 +1471,17 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
               <p className="mt-1 font-heading text-2xl font-semibold text-emerald-950">{visibleSessions.length}</p>
             </div>
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Kèo ghép</p>
-              <p className="mt-1 font-heading text-2xl font-semibold text-slate-950">{stats.poolCount}</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                {isBookingMode ? "Sân bao" : "Kèo ghép"}
+              </p>
+              <p className="mt-1 font-heading text-2xl font-semibold text-slate-950">
+                {isBookingMode ? stats.rentalCount : stats.poolCount}
+              </p>
             </div>
             <div className="rounded-lg border border-amber-100 bg-amber-50 p-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-amber-700">Slot trống</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-amber-700">
+                {isBookingMode ? "Khung còn mở" : "Slot trống"}
+              </p>
               <p className="mt-1 font-heading text-2xl font-semibold text-amber-950">{stats.openSlotCount}</p>
             </div>
           </div>
@@ -1513,7 +1554,7 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
                 <select
                   className={inputClassName}
                   value={effectivePostType}
-                  disabled={isMatchmaking}
+                  disabled={isMatchmaking || isBookingMode}
                   onChange={(event) => setPostType(event.target.value as PostTypeFilter)}
                 >
                   {postTypeOptions.map((item) => (
@@ -1566,7 +1607,7 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
       ) : (
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {visibleSessions.map((session, index) => {
-            const image = courtImageForSport(session.sport);
+            const image = sessionImage(session);
             const open = hasOpenSlots(session);
             const isPool = session.post_type === "pool";
             const isFavorite = favorites.includes(session.id);
@@ -1640,7 +1681,7 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
                     </p>
                     <p>
                       <span className="font-semibold text-slate-950">Môn:</span> {sportLabel(session.sport)} ·{" "}
-                      <span className="font-semibold text-slate-950">Slot:</span> {session.open_slots}/{session.max_slots}
+                      <span className="font-semibold text-slate-950">{isPool ? "Slot" : "Sức chứa"}:</span> {session.open_slots}/{session.max_slots}
                     </p>
                     <p>
                       <span className="font-semibold text-slate-950">Giá:</span>{" "}
@@ -1656,7 +1697,7 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
                         : "bg-amber-400 text-slate-950 hover:bg-amber-300"
                     } ${!open ? "pointer-events-none opacity-60" : ""}`}
                   >
-                    {isPool ? "THAM GIA NGAY" : "ĐẶT LỊCH"}
+                    {isPool ? "THAM GIA NGAY" : "ĐẶT NGUYÊN SÂN"}
                   </a>
                 </div>
               </article>

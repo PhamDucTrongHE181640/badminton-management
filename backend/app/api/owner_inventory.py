@@ -14,6 +14,7 @@ from app.services.owner_inventory import (
     delete_court,
     delete_court_complex,
     delete_session,
+    get_owner_post_quota,
     list_court_complexes,
     list_courts,
     list_sessions,
@@ -70,6 +71,7 @@ class CourtCreate(InventoryModel):
     sub_court_name: str = Field(min_length=1, max_length=120)
     sport: SportType
     status: CourtStatus = "active"
+    image_url: str | None = Field(default=None, max_length=1000)
     amenities: list[str] = Field(default_factory=list)
     base_price_vnd: int = Field(ge=0)
     max_rental_duration_minutes: int = Field(ge=30, le=300)
@@ -81,6 +83,7 @@ class CourtUpdate(InventoryModel):
     sub_court_name: str | None = Field(default=None, min_length=1, max_length=120)
     sport: SportType | None = None
     status: CourtStatus | None = None
+    image_url: str | None = Field(default=None, max_length=1000)
     amenities: list[str] | None = None
     base_price_vnd: int | None = Field(default=None, ge=0)
     max_rental_duration_minutes: int | None = Field(default=None, ge=30, le=300)
@@ -95,6 +98,7 @@ class CourtResponse(BaseModel):
     sport: str
     status: str
     rating: float
+    image_url: str | None = None
     amenities: list[str]
     base_price_vnd: int
     max_rental_duration_minutes: int
@@ -107,8 +111,10 @@ class CourtResponse(BaseModel):
 class SessionCreate(InventoryModel):
     court_id: str
     title: str = Field(min_length=2, max_length=200)
+    description: str | None = Field(default=None, max_length=2000)
     post_type: SessionPostType = "pool"
     status: SessionStatus = "scheduled"
+    image_url: str | None = Field(default=None, max_length=1000)
     starts_at: datetime
     duration_minutes: int = Field(ge=30, le=300)
     open_slots: int = Field(ge=0)
@@ -124,8 +130,10 @@ class SessionCreate(InventoryModel):
 class SessionUpdate(InventoryModel):
     court_id: str | None = None
     title: str | None = Field(default=None, min_length=2, max_length=200)
+    description: str | None = Field(default=None, max_length=2000)
     post_type: SessionPostType | None = None
     status: SessionStatus | None = None
+    image_url: str | None = Field(default=None, max_length=1000)
     starts_at: datetime | None = None
     duration_minutes: int | None = Field(default=None, ge=30, le=300)
     open_slots: int | None = Field(default=None, ge=0)
@@ -143,8 +151,10 @@ class SessionResponse(BaseModel):
     court_id: str
     created_by_user_id: str | None
     title: str
+    description: str | None = None
     post_type: str
     status: str
+    image_url: str | None = None
     starts_at: datetime
     duration_minutes: int
     ends_at: datetime
@@ -160,6 +170,19 @@ class SessionResponse(BaseModel):
     updated_at: datetime
     court_name: str | None = None
     complex_name: str | None = None
+
+
+class OwnerPostQuotaResponse(BaseModel):
+    owner_user_id: str
+    owner_full_name: str | None = None
+    owner_email: str | None = None
+    rental_post_limit: int
+    slot_post_limit: int
+    rental_posts_used: int
+    slot_posts_used: int
+    rental_posts_remaining: int
+    slot_posts_remaining: int
+    updated_at: datetime | None = None
 
 
 @router.get("/court-complexes", response_model=list[CourtComplexResponse])
@@ -235,6 +258,13 @@ def remove_court(
 ) -> Response:
     delete_court(owner_user_id=owner.id, court_id=court_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/post-quota", response_model=OwnerPostQuotaResponse)
+def get_post_quota(
+    owner: Annotated[UserPrincipal, Depends(require_owner)],
+) -> dict[str, object]:
+    return get_owner_post_quota(owner_user_id=owner.id)
 
 
 @router.get("/sessions", response_model=list[SessionResponse])
