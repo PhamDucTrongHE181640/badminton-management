@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 
-import { Button, ButtonLink } from "@/components/ui";
+import { Button } from "@/components/ui";
 import { API_BASE_URL } from "@/lib/http";
 
 export type UserProfile = {
@@ -31,7 +31,6 @@ export function HeaderUserAuth({ user, logout, isLoggingOut }: HeaderUserAuthPro
       .map((item) => item[0]?.toUpperCase() ?? "")
       .join("");
   }, [user?.full_name]);
-  const isOwner = user?.roles.includes("owner") ?? false;
 
   if (user) {
     return (
@@ -45,11 +44,6 @@ export function HeaderUserAuth({ user, logout, isLoggingOut }: HeaderUserAuthPro
             <p className="truncate text-xs text-slate-500">{user.email}</p>
           </div>
         </div>
-        {isOwner ? (
-          <ButtonLink href="/owner/dashboard" size="sm" variant="outline">
-            Kênh quản lý
-          </ButtonLink>
-        ) : null}
         <Button size="sm" variant="outline" onClick={logout} disabled={isLoggingOut}>
           {isLoggingOut ? "Đang đăng xuất..." : "Đăng xuất"}
         </Button>
@@ -66,4 +60,5 @@ export function HeaderUserAuth({ user, logout, isLoggingOut }: HeaderUserAuthPro
     </a>
   );
 }
+
 
