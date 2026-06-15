@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 
 import { Button, ButtonLink } from "@/components/ui";
-import { API_BASE_URL, apiFetch } from "@/lib/http";
+import { API_BASE_URL } from "@/lib/http";
 
-type UserProfile = {
+export type UserProfile = {
   email: string;
   full_name: string;
   roles: string[];
@@ -15,44 +15,13 @@ function loginUrl() {
   return `${API_BASE_URL}/api/v1/auth/google/start`;
 }
 
-export function HeaderUserAuth() {
-  const [user, setUser] = useState<UserProfile | null>(null);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
+type HeaderUserAuthProps = {
+  user: UserProfile | null;
+  logout: () => Promise<void>;
+  isLoggingOut: boolean;
+};
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadProfile() {
-      try {
-        const profile = await apiFetch<UserProfile>("/api/v1/auth/me", {
-          credentials: "include",
-        });
-        if (!cancelled) setUser(profile);
-      } catch {
-        if (!cancelled) setUser(null);
-      }
-    }
-
-    void loadProfile();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  async function logout() {
-    setIsLoggingOut(true);
-    try {
-      await apiFetch("/api/v1/auth/logout", {
-        method: "POST",
-        credentials: "include",
-        body: JSON.stringify({}),
-      });
-      setUser(null);
-    } finally {
-      setIsLoggingOut(false);
-    }
-  }
-
+export function HeaderUserAuth({ user, logout, isLoggingOut }: HeaderUserAuthProps) {
   const initials = useMemo(() => {
     if (!user?.full_name) return "U";
     return user.full_name
@@ -77,8 +46,8 @@ export function HeaderUserAuth() {
           </div>
         </div>
         {isOwner ? (
-          <ButtonLink href="/owner/courts" size="sm" variant="outline">
-            Quản lý sân
+          <ButtonLink href="/owner/dashboard" size="sm" variant="outline">
+            Kênh quản lý
           </ButtonLink>
         ) : null}
         <Button size="sm" variant="outline" onClick={logout} disabled={isLoggingOut}>
@@ -97,3 +66,4 @@ export function HeaderUserAuth() {
     </a>
   );
 }
+

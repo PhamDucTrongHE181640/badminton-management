@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { HeaderUserAuth } from "./HeaderUserAuth";
+import { HeaderUserAuth, UserProfile } from "./HeaderUserAuth";
+import { apiFetch } from "@/lib/http";
 
 const bookingLinks = [
   {
@@ -29,6 +30,45 @@ export function MainHeader() {
   const [location, setLocation] = useState("Hòa Lạc, Hà Nội");
   const [isLocationDropdownOpen, setIsLocationDropdownOpen] = useState(false);
   const [isMatchmakingMode, setIsMatchmakingMode] = useState(false);
+
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadProfile() {
+      try {
+        const profile = await apiFetch<UserProfile>("/api/v1/auth/me", {
+          credentials: "include",
+        });
+        if (!cancelled) setUser(profile);
+      } catch {
+        if (!cancelled) setUser(null);
+      }
+    }
+
+    void loadProfile();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function logout() {
+    setIsLoggingOut(true);
+    try {
+      await apiFetch("/api/v1/auth/logout", {
+        method: "POST",
+        credentials: "include",
+        body: JSON.stringify({}),
+      });
+      setUser(null);
+    } finally {
+      setIsLoggingOut(false);
+    }
+  }
+
+  const isOwner = user?.roles.includes("owner") ?? false;
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -129,18 +169,35 @@ export function MainHeader() {
               )}
             </Link>
 
+            {/* Kênh quản lý */}
+            {isOwner && (
+              <Link
+                href="/owner/dashboard"
+                className={`relative h-full flex items-center transition duration-150 ${
+                  pathname.startsWith("/owner") ? "text-red-800" : "text-slate-700 hover:text-red-800"
+                }`}
+              >
+                Kênh quản lý
+                {pathname.startsWith("/owner") && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-red-800 rounded-full" />
+                )}
+              </Link>
+            )}
+
             {/* Liên hệ */}
-            <Link
-              href="/contact"
-              className={`relative h-full flex items-center transition duration-150 ${
-                pathname === "/contact" ? "text-red-800" : "text-slate-700 hover:text-red-800"
-              }`}
-            >
-              Liên hệ
-              {pathname === "/contact" && (
-                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-red-800 rounded-full" />
-              )}
-            </Link>
+            {!isOwner && (
+              <Link
+                href="/contact"
+                className={`relative h-full flex items-center transition duration-150 ${
+                  pathname === "/contact" ? "text-red-800" : "text-slate-700 hover:text-red-800"
+                }`}
+              >
+                Liên hệ
+                {pathname === "/contact" && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-red-800 rounded-full" />
+                )}
+              </Link>
+            )}
           </nav>
         </div>
 
@@ -219,7 +276,7 @@ export function MainHeader() {
           </button>
 
           {/* Authentication State button */}
-          <HeaderUserAuth />
+          <HeaderUserAuth user={user} logout={logout} isLoggingOut={isLoggingOut} />
 
           {/* Mobile Menu Toggle button */}
           <button
@@ -296,15 +353,29 @@ export function MainHeader() {
               Giải đấu
             </Link>
 
-            <Link
-              href="/contact"
-              onClick={() => setIsMobileMenuOpen(false)}
-              className={`block rounded-lg px-4 py-2.5 text-sm font-semibold transition duration-150 ${
-                pathname === "/contact" ? "bg-red-50 text-red-800" : "text-slate-700 hover:bg-slate-50"
-              }`}
-            >
-              Liên hệ
-            </Link>
+            {isOwner && (
+              <Link
+                href="/owner/dashboard"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className={`block rounded-lg px-4 py-2.5 text-sm font-semibold transition duration-150 ${
+                  pathname.startsWith("/owner") ? "bg-red-50 text-red-800" : "text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                Kênh quản lý
+              </Link>
+            )}
+
+            {!isOwner && (
+              <Link
+                href="/contact"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className={`block rounded-lg px-4 py-2.5 text-sm font-semibold transition duration-150 ${
+                  pathname === "/contact" ? "bg-red-50 text-red-800" : "text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                Liên hệ
+              </Link>
+            )}
           </div>
         </>
       )}

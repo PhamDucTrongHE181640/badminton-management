@@ -444,13 +444,11 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
 
   useEffect(() => {
     if (isMatchmaking) {
-      if (visibleMatchmakingSessions.length > 0) {
+      if (selectedSessionId) {
         const exists = visibleMatchmakingSessions.some((s) => s.id === selectedSessionId);
         if (!exists) {
-          setSelectedSessionId(visibleMatchmakingSessions[0].id);
+          setSelectedSessionId(null);
         }
-      } else {
-        setSelectedSessionId(null);
       }
     }
   }, [visibleMatchmakingSessions, isMatchmaking, selectedSessionId]);
