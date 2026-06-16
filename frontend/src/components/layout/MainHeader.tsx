@@ -1,23 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { HeaderUserAuth, UserProfile } from "./HeaderUserAuth";
 import { apiFetch } from "@/lib/http";
 
-const bookingLinks = [
-  {
-    href: "/player/discovery?mode=booking",
-    label: "Đặt lịch trực quan",
-    description: "Tìm sân và xem khung giờ còn trống",
-  },
-  {
-    href: "/player/discovery?mode=matchmaking",
-    label: "Xếp đối (Matchmaking)",
-    description: "Ghép kèo theo Elo đã lưu",
-  },
-];
+
 
 function isActive(pathname: string, href: string) {
   const cleanHref = href.split("?")[0];
@@ -26,6 +15,7 @@ function isActive(pathname: string, href: string) {
 
 export function MainHeader() {
   const pathname = usePathname();
+  const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [location, setLocation] = useState("Hòa Lạc, Hà Nội");
   const [isLocationDropdownOpen, setIsLocationDropdownOpen] = useState(false);
@@ -34,24 +24,19 @@ export function MainHeader() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadProfile() {
-      try {
-        const profile = await apiFetch<UserProfile>("/api/v1/auth/me", {
-          credentials: "include",
-        });
-        if (!cancelled) setUser(profile);
-      } catch {
-        if (!cancelled) setUser(null);
-      }
+  const loadProfile = async () => {
+    try {
+      const profile = await apiFetch<UserProfile>("/api/v1/auth/me", {
+        credentials: "include",
+      });
+      setUser(profile);
+    } catch {
+      setUser(null);
     }
+  };
 
+  useEffect(() => {
     void loadProfile();
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   async function logout() {
@@ -63,6 +48,7 @@ export function MainHeader() {
         body: JSON.stringify({}),
       });
       setUser(null);
+      router.push("/");
     } finally {
       setIsLoggingOut(false);
     }
@@ -110,35 +96,20 @@ export function MainHeader() {
               )}
             </Link>
 
-            {/* Đặt sân Dropdown */}
-            <div className="group relative h-full flex items-center shrink-0">
-              <button
-                className={`inline-flex items-center gap-1 h-full transition duration-150 cursor-pointer ${
-                  isActive(pathname, "/player/discovery") && !isMatchmakingMode
-                    ? "text-red-800"
-                    : "text-slate-700 hover:text-red-800"
-                }`}
-              >
-                Đặt sân
-                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 text-current transition-transform duration-200 group-hover:rotate-180" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-              <div className="invisible absolute left-0 top-[72px] z-50 w-[260px] translate-y-1 opacity-0 transition duration-150 group-hover:visible group-hover:translate-y-0 group-hover:opacity-100">
-                <div className="rounded-xl border border-slate-200/80 bg-white p-2 shadow-lg mt-1">
-                  {bookingLinks.map((item) => (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className="block rounded-lg px-3 py-2 text-left transition duration-150 hover:bg-red-50"
-                    >
-                      <span className="block text-sm font-semibold text-slate-950">{item.label}</span>
-                      <span className="mt-0.5 block text-xs font-normal leading-relaxed text-slate-500">{item.description}</span>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            </div>
+            {/* Đặt sân */}
+            <Link
+              href="/player/discovery?mode=booking"
+              className={`relative h-full flex items-center transition duration-150 ${
+                isActive(pathname, "/player/discovery") && !isMatchmakingMode
+                  ? "text-red-800"
+                  : "text-slate-700 hover:text-red-800"
+              }`}
+            >
+              Đặt sân
+              {isActive(pathname, "/player/discovery") && !isMatchmakingMode && (
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-red-800 rounded-full" />
+              )}
+            </Link>
 
             {/* Separator • */}
             <span className="text-slate-300 pointer-events-none select-none">•</span>
@@ -169,20 +140,7 @@ export function MainHeader() {
               )}
             </Link>
 
-            {/* Kênh quản lý */}
-            {isOwner && (
-              <Link
-                href="/owner/dashboard"
-                className={`relative h-full flex items-center transition duration-150 ${
-                  pathname.startsWith("/owner") ? "text-red-800" : "text-slate-700 hover:text-red-800"
-                }`}
-              >
-                Kênh quản lý
-                {pathname.startsWith("/owner") && (
-                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-red-800 rounded-full" />
-                )}
-              </Link>
-            )}
+
 
             {/* Liên hệ */}
             {!isOwner && (
@@ -248,35 +206,39 @@ export function MainHeader() {
           </div>
 
           {/* Cart Icon with red badge */}
-          <Link
-            href="/player/bookings"
-            aria-label="Giỏ hàng và đơn đặt sân"
-            title="Giỏ hàng / đơn đã đặt"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition duration-150 hover:border-red-300 hover:bg-red-50 hover:text-red-700 relative shrink-0"
-          >
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
-              <path d="M6.5 7.5h11l-1 8h-8.5l-1.5-11h-2.5" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M9 19.5h.01M16 19.5h.01" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-red-600 ring-2 ring-white" />
-          </Link>
+          {user && (
+            <Link
+              href="/player/bookings"
+              aria-label="Giỏ hàng và đơn đặt sân"
+              title="Giỏ hàng / đơn đã đặt"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition duration-150 hover:border-red-300 hover:bg-red-50 hover:text-red-700 relative shrink-0"
+            >
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M6.5 7.5h11l-1 8h-8.5l-1.5-11h-2.5" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M9 19.5h.01M16 19.5h.01" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-red-600 ring-2 ring-white" />
+            </Link>
+          )}
 
           {/* Notification Bell with circle badge showing '2' */}
-          <button
-            aria-label="Thông báo"
-            title="Thông báo của bạn"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition duration-150 hover:border-red-300 hover:bg-red-50 hover:text-red-700 relative shrink-0 cursor-pointer"
-          >
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
-              <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <span className="absolute -top-1 -right-1 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-red-600 text-[9px] font-bold text-white ring-2 ring-white">
-              2
-            </span>
-          </button>
+          {user && (
+            <button
+              aria-label="Thông báo"
+              title="Thông báo của bạn"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition duration-150 hover:border-red-300 hover:bg-red-50 hover:text-red-700 relative shrink-0 cursor-pointer"
+            >
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span className="absolute -top-1 -right-1 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-red-600 text-[9px] font-bold text-white ring-2 ring-white">
+                2
+              </span>
+            </button>
+          )}
 
           {/* Authentication State button */}
-          <HeaderUserAuth user={user} logout={logout} isLoggingOut={isLoggingOut} />
+          <HeaderUserAuth user={user} logout={logout} isLoggingOut={isLoggingOut} onProfileUpdated={loadProfile} />
 
           {/* Mobile Menu Toggle button */}
           <button
@@ -313,23 +275,15 @@ export function MainHeader() {
               Trang chủ
             </Link>
             
-            <div className="border-t border-slate-100 my-1" />
-            
-            <div className="px-4 py-1 text-xs font-bold uppercase tracking-wider text-slate-400">
+            <Link
+              href="/player/discovery?mode=booking"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className={`block rounded-lg px-4 py-2.5 text-sm font-semibold transition duration-150 ${
+                isActive(pathname, "/player/discovery") && !isMatchmakingMode ? "bg-red-50 text-red-800" : "text-slate-700 hover:bg-slate-50"
+              }`}
+            >
               Đặt sân
-            </div>
-            
-            {bookingLinks.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setIsMobileMenuOpen(false)}
-                className="block rounded-lg pl-8 pr-4 py-2 text-sm transition duration-150 hover:bg-slate-50 text-slate-700"
-              >
-                <span className="block font-semibold text-slate-900">{item.label}</span>
-                <span className="block text-xs text-slate-500 mt-0.5">{item.description}</span>
-              </Link>
-            ))}
+            </Link>
 
             <div className="border-t border-slate-100 my-1" />
             
@@ -353,17 +307,7 @@ export function MainHeader() {
               Giải đấu
             </Link>
 
-            {isOwner && (
-              <Link
-                href="/owner/dashboard"
-                onClick={() => setIsMobileMenuOpen(false)}
-                className={`block rounded-lg px-4 py-2.5 text-sm font-semibold transition duration-150 ${
-                  pathname.startsWith("/owner") ? "bg-red-50 text-red-800" : "text-slate-700 hover:bg-slate-50"
-                }`}
-              >
-                Kênh quản lý
-              </Link>
-            )}
+
 
             {!isOwner && (
               <Link
