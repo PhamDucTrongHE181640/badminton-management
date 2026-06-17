@@ -486,6 +486,7 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
     ) {
       setSelectedSessionId(null);
     }
+    }
   }, [visibleMatchmakingSessions, isMatchmaking, selectedSessionId]);
 
   const userTierLabel = skillTier?.visible_skill_tier === "Beginner"

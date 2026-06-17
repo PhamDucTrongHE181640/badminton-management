@@ -60,6 +60,15 @@ services:
       - "${BACKEND_HOST_BIND:-127.0.0.1}:${BACKEND_HOST_PORT:-8000}:8000"
     volumes:
       - ./backend:/app
+    entrypoint: >
+      sh -c "
+      echo 'Running database migrations...' &&
+      alembic upgrade head &&
+      echo 'Seeding development admin if enabled...' &&
+      python -m app.scripts.seed_admin &&
+      echo 'Starting NetUp API...' &&
+      exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      "
     depends_on:
       postgres:
         condition: service_healthy

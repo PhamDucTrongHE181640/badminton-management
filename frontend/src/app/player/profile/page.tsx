@@ -163,7 +163,54 @@ export default function PlayerProfilePage() {
           </div>
 
           <Field label="Ảnh đại diện URL">
-            <input className={inputClassName} value={avatarUrl} onChange={(event) => setAvatarUrl(event.target.value)} placeholder="https://..." />
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt="Preview Avatar"
+                    className="h-14 w-14 rounded-full object-cover ring-2 ring-slate-100"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = "https://api.dicebear.com/7.x/adventurer/svg?seed=fallback";
+                    }}
+                  />
+                ) : (
+                  <span className="flex h-14 w-14 items-center justify-center rounded-full bg-red-100 text-lg font-black text-red-800">
+                    {initial(fullName)}
+                  </span>
+                )}
+                <input
+                  className={`${inputClassName} flex-1`}
+                  value={avatarUrl}
+                  onChange={(event) => setAvatarUrl(event.target.value)}
+                  placeholder="https://... hoặc chọn avatar bên dưới"
+                />
+              </div>
+
+              {/* Dicebear Avatar presets */}
+              <div className="space-y-1 mt-1.5">
+                <p className="text-[10px] font-bold text-slate-505 uppercase tracking-wider">Chọn nhanh avatar ngộ nghĩnh</p>
+                <div className="flex flex-wrap gap-2 py-1">
+                  {["Felix", "Aneka", "Jack", "Kim", "Buster", "Luna", "Oliver", "Milo"].map((seed) => {
+                    const url = `https://api.dicebear.com/7.x/adventurer/svg?seed=${seed}`;
+                    const isSelected = avatarUrl === url;
+                    return (
+                      <button
+                        key={seed}
+                        type="button"
+                        onClick={() => setAvatarUrl(url)}
+                        className={`h-9 w-9 rounded-full overflow-hidden border-2 bg-slate-50 transition cursor-pointer shrink-0 ${
+                          isSelected ? "border-red-800 scale-110 shadow-sm" : "border-transparent opacity-80 hover:opacity-100 hover:scale-105"
+                        }`}
+                        title={`Chọn avatar ${seed}`}
+                      >
+                        <img src={url} alt={seed} className="h-full w-full object-cover" />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
           </Field>
 
           <Button disabled={isSaving}>{isSaving ? "Đang lưu..." : "Lưu hồ sơ"}</Button>

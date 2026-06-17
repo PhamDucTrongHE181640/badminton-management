@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-
-import { HeaderUserAuth } from "./HeaderUserAuth";
+import { HeaderUserAuth, UserProfile } from "./HeaderUserAuth";
+import { apiFetch } from "@/lib/http";
 
 const navLinks = [
   { href: "/", label: "Trang Chủ" },
@@ -24,10 +24,46 @@ function splitHref(href: string) {
 
 export function MainHeader() {
   const pathname = usePathname();
+  const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [location, setLocation] = useState("Hòa Lạc, Hà Nội");
   const [isLocationDropdownOpen, setIsLocationDropdownOpen] = useState(false);
   const [currentSearch, setCurrentSearch] = useState("");
+
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const loadProfile = async () => {
+    try {
+      const profile = await apiFetch<UserProfile>("/api/v1/auth/me", {
+        credentials: "include",
+      });
+      setUser(profile);
+    } catch {
+      setUser(null);
+    }
+  };
+
+  useEffect(() => {
+    void loadProfile();
+  }, []);
+
+  async function logout() {
+    setIsLoggingOut(true);
+    try {
+      await apiFetch("/api/v1/auth/logout", {
+        method: "POST",
+        credentials: "include",
+        body: JSON.stringify({}),
+      });
+      setUser(null);
+      router.push("/");
+    } finally {
+      setIsLoggingOut(false);
+    }
+  }
+
+  const isOwner = user?.roles.includes("owner") ?? false;
 
   useEffect(() => {
     const syncSearch = () => setCurrentSearch(window.location.search);
@@ -65,22 +101,24 @@ export function MainHeader() {
           </Link>
 
           <nav className="hidden h-full items-center gap-5 text-sm font-semibold xl:flex 2xl:gap-6">
-            {navLinks.map((item) => {
-              const active = isActive(item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => handleNavClick(item.href)}
-                  className={`relative flex h-full items-center whitespace-nowrap transition duration-150 ${
-                    active ? "text-red-800" : "text-slate-700 hover:text-red-800"
-                  }`}
-                >
-                  {item.label}
-                  {active ? <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-red-800" /> : null}
-                </Link>
-              );
-            })}
+            {navLinks
+              .filter((item) => !(isOwner && item.href === "/contact"))
+              .map((item) => {
+                const active = isActive(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => handleNavClick(item.href)}
+                    className={`relative flex h-full items-center whitespace-nowrap transition duration-150 ${
+                      active ? "text-red-800" : "text-slate-700 hover:text-red-800"
+                    }`}
+                  >
+                    {item.label}
+                    {active ? <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-red-800" /> : null}
+                  </Link>
+                );
+              })}
           </nav>
         </div>
 
@@ -123,34 +161,41 @@ export function MainHeader() {
             ) : null}
           </div>
 
-          <Link
-            href="/player/bookings"
-            onClick={() => handleNavClick("/player/bookings")}
-            aria-label="Booking của tôi"
-            title="Booking của tôi"
-            className="relative hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition duration-150 hover:border-red-300 hover:bg-red-50 hover:text-red-700 sm:inline-flex xl:hidden"
-          >
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
-              <path d="M6.5 7.5h11l-1 8h-8.5l-1.5-11h-2.5" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M9 19.5h.01M16 19.5h.01" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-red-600 ring-2 ring-white" />
-          </Link>
+          {/* Cart Icon with red badge */}
+          {user && (
+            <Link
+              href="/player/bookings"
+              onClick={() => handleNavClick("/player/bookings")}
+              aria-label="Giỏ hàng và đơn đặt sân"
+              title="Giỏ hàng / đơn đã đặt"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition duration-150 hover:border-red-300 hover:bg-red-50 hover:text-red-700 relative shrink-0"
+            >
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M6.5 7.5h11l-1 8h-8.5l-1.5-11h-2.5" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M9 19.5h.01M16 19.5h.01" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-red-600 ring-2 ring-white" />
+            </Link>
+          )}
 
-          <button
-            aria-label="Thông báo"
-            title="Thông báo của bạn"
-            className="relative hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition duration-150 hover:border-red-300 hover:bg-red-50 hover:text-red-700 2xl:inline-flex"
-          >
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
-              <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <span className="absolute -right-1 -top-1 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-red-600 text-[9px] font-bold text-white ring-2 ring-white">
-              2
-            </span>
-          </button>
+          {/* Notification Bell with circle badge showing '2' */}
+          {user && (
+            <button
+              aria-label="Thông báo"
+              title="Thông báo của bạn"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition duration-150 hover:border-red-300 hover:bg-red-50 hover:text-red-700 relative shrink-0 cursor-pointer"
+            >
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span className="absolute -top-1 -right-1 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-red-600 text-[9px] font-bold text-white ring-2 ring-white">
+                2
+              </span>
+            </button>
+          )}
 
-          <HeaderUserAuth />
+          {/* Authentication State button */}
+          <HeaderUserAuth user={user} logout={logout} isLoggingOut={isLoggingOut} onProfileUpdated={loadProfile} />
 
           <button
             onClick={() => setIsMobileMenuOpen((value) => !value)}
@@ -174,21 +219,23 @@ export function MainHeader() {
         <>
           <div className="fixed inset-0 top-[72px] z-30 bg-slate-900/20 backdrop-blur-xs xl:hidden" onClick={() => setIsMobileMenuOpen(false)} />
           <div className="absolute left-0 right-0 top-[72px] z-40 flex max-h-[calc(100vh-72px)] flex-col gap-2 overflow-y-auto border-b border-slate-200 bg-white p-4 shadow-xl xl:hidden">
-            {navLinks.map((item) => {
-              const active = isActive(item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => handleNavClick(item.href)}
-                  className={`block rounded-lg px-4 py-2.5 text-sm font-semibold transition duration-150 ${
-                    active ? "bg-red-50 text-red-800" : "text-slate-700 hover:bg-slate-50"
-                  }`}
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
+            {navLinks
+              .filter((item) => !(isOwner && item.href === "/contact"))
+              .map((item) => {
+                const active = isActive(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => handleNavClick(item.href)}
+                    className={`block rounded-lg px-4 py-2.5 text-sm font-semibold transition duration-150 ${
+                      active ? "bg-red-50 text-red-800" : "text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
           </div>
         </>
       ) : null}
