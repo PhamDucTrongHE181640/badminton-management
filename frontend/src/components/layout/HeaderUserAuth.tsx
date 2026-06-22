@@ -53,129 +53,183 @@ export function HeaderUserAuth({ user, logout, isLoggingOut }: HeaderUserAuthPro
 
   if (user) {
     return (
-      <div className="relative" ref={dropdownRef}>
-        {/* Toggle trigger */}
+      <div className="relative flex items-center gap-3" ref={dropdownRef}>
+        {/* Share Button (Left of Avatar) */}
+        <button className="hidden sm:flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200/80 text-slate-800 text-[13px] font-semibold px-4.5 py-2.5 rounded-full transition duration-200 select-none cursor-pointer border border-slate-200/30 shadow-xs">
+          <span className="font-medium">Share</span>
+          <span className="text-base font-light leading-none">+</span>
+        </button>
+
+        {/* Avatar Trigger (With gradient ring) */}
         <button
           onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-          className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl hover:bg-slate-100/80 text-left transition select-none cursor-pointer focus:outline-none"
+          className="p-[2.5px] bg-gradient-to-tr from-amber-500 via-rose-500 to-violet-600 rounded-full hover:scale-105 transition duration-200 focus:outline-none cursor-pointer shadow-sm active:scale-95"
         >
-          {user.avatar_url ? (
-            <img src={user.avatar_url} alt={user.full_name} className="h-9 w-9 rounded-full object-cover ring-2 ring-slate-100" />
-          ) : (
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-red-100 text-sm font-bold text-red-800 ring-2 ring-red-50">
-              {initials}
-            </span>
-          )}
-          <div className="hidden max-w-[150px] leading-tight sm:block">
-            <p className="truncate text-sm font-bold text-slate-900 flex items-center gap-1">
-              {user.full_name}
-              <svg viewBox="0 0 24 24" className={`h-3.5 w-3.5 text-slate-400 transition duration-200 ${isDropdownOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </p>
-            <p className="truncate text-[10px] text-slate-400 font-semibold">{user.email}</p>
+          <div className="bg-white rounded-full p-[1.5px]">
+            {user.avatar_url ? (
+              <img src={user.avatar_url} alt={user.full_name} className="h-8.5 w-8.5 rounded-full object-cover" />
+            ) : (
+              <span className="flex h-8.5 w-8.5 items-center justify-center rounded-full bg-red-100 text-xs font-bold text-red-800">
+                {initials}
+              </span>
+            )}
           </div>
         </button>
 
-        {/* Dropdown Menu (Facebook style) */}
+        {/* Dropdown Menu (Premium styled) */}
         {isDropdownOpen && (
-          <div className="absolute right-0 top-14 z-50 w-[320px] rounded-2xl border border-slate-200/80 bg-white p-4 shadow-2xl animate-in fade-in slide-in-from-top-3 duration-200">
-            {/* Profile Brief Card */}
-            <div className="rounded-xl border border-slate-100 bg-slate-50/50 p-3 shadow-xs">
-              <div className="flex items-center gap-3">
-                {user.avatar_url ? (
-                  <img src={user.avatar_url} alt={user.full_name} className="h-12 w-12 rounded-full object-cover ring-4 ring-white shadow-xs" />
-                ) : (
-                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-base font-black text-red-800 ring-4 ring-white shadow-xs">
-                    {initials}
-                  </span>
-                )}
-                <div className="min-w-0 flex-1">
-                  <h4 className="truncate font-heading text-sm font-bold text-slate-900">{user.full_name}</h4>
-                  <p className="truncate text-[11px] text-slate-400 font-semibold">{user.email}</p>
+          <div className="absolute right-0 top-15 z-50 w-[290px] rounded-[22px] border border-slate-100/90 bg-white p-3.5 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.08)] animate-in fade-in slide-in-from-top-3 duration-200 select-none">
+            {/* Profile Brief Header inside Dropdown */}
+            <div className="flex items-center justify-between px-1.5 py-2 pb-3.5">
+              <div className="min-w-0 flex-1 pr-3">
+                <h4 className="truncate text-[15px] font-bold text-slate-900 leading-snug">{user.full_name}</h4>
+                <p className="truncate text-xs text-slate-400 font-medium leading-none mt-0.5">{user.email}</p>
+              </div>
+              <div className="p-[2px] bg-gradient-to-tr from-amber-500 via-rose-500 to-violet-600 rounded-full shrink-0 shadow-xs">
+                <div className="bg-white rounded-full p-[1px]">
+                  {user.avatar_url ? (
+                    <img src={user.avatar_url} alt={user.full_name} className="h-10.5 w-10.5 rounded-full object-cover" />
+                  ) : (
+                    <span className="flex h-10.5 w-10.5 items-center justify-center rounded-full bg-red-100 text-sm font-bold text-red-800">
+                      {initials}
+                    </span>
+                  )}
                 </div>
               </div>
-              <div className="border-t border-slate-100 my-2.5" />
-              <Link
-                href="/player/profile/"
-                onClick={() => setIsDropdownOpen(false)}
-                className="w-full flex items-center justify-center gap-2 rounded-xl bg-slate-150/70 hover:bg-slate-200/80 px-4 py-2 text-xs font-bold text-slate-750 transition cursor-pointer select-none text-center"
-              >
-                👤 Chỉnh sửa thông tin cá nhân
-              </Link>
             </div>
 
-            <div className="my-2 border-t border-slate-100" />
-
-            {/* Menu Links by Roles */}
-            <div className="space-y-1">
-              {user.roles.includes("admin") && (
-                <Link
-                  href="/_internal/netup-admin/"
-                  onClick={() => setIsDropdownOpen(false)}
-                  className="flex items-center justify-between rounded-xl px-2.5 py-2 hover:bg-slate-50 transition text-slate-700 hover:text-slate-950"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-50 text-amber-750 text-sm">🛡️</span>
-                    <span className="text-xs font-bold">Trang quản trị (Admin)</span>
-                  </div>
-                  <span className="text-slate-400 text-xs">➔</span>
-                </Link>
-              )}
-
+            {/* Menu Links */}
+            <div className="space-y-0.5">
+              {/* Roles-based Dashboards (Admin / Owner Roles) - Đưa lên trên cùng */}
               {user.roles.includes("owner") && (
                 <Link
                   href="/owner/dashboard/"
                   onClick={() => setIsDropdownOpen(false)}
-                  className="flex items-center justify-between rounded-xl px-2.5 py-2 hover:bg-slate-50 transition text-slate-700 hover:text-slate-950"
+                  className="flex items-center justify-between rounded-[12px] px-3.5 py-2.5 hover:bg-slate-50 transition duration-150 text-slate-700 hover:text-slate-900 font-semibold text-[13px]"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-rose-50 text-rose-750 text-sm">📊</span>
-                    <span className="text-xs font-bold">Kênh quản lý (Owner)</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4.5 w-4.5 text-slate-500 shrink-0">
+                      <rect width="7" height="9" x="3" y="3" rx="1" />
+                      <rect width="7" height="5" x="14" y="3" rx="1" />
+                      <rect width="7" height="9" x="14" y="12" rx="1" />
+                      <rect width="7" height="5" x="3" y="16" rx="1" />
+                    </svg>
+                    <span>Kênh chủ sân (Owner)</span>
                   </div>
-                  <span className="text-slate-400 text-xs">➔</span>
+                  <span className="px-2 py-0.5 text-[9px] font-black text-rose-700 bg-rose-50 rounded-[4px] uppercase">Owner</span>
                 </Link>
               )}
 
+              {user.roles.includes("admin") && (
+                <Link
+                  href="/_internal/netup-admin/"
+                  onClick={() => setIsDropdownOpen(false)}
+                  className="flex items-center justify-between rounded-[12px] px-3.5 py-2.5 hover:bg-slate-50 transition duration-150 text-slate-700 hover:text-slate-900 font-semibold text-[13px]"
+                >
+                  <div className="flex items-center gap-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4.5 w-4.5 text-slate-500 shrink-0">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    </svg>
+                    <span>Trang quản trị (Admin)</span>
+                  </div>
+                  <span className="px-2 py-0.5 text-[9px] font-black text-amber-700 bg-amber-50 rounded-[4px] uppercase">Admin</span>
+                </Link>
+              )}
+
+              {(user.roles.includes("admin") || user.roles.includes("owner")) && (
+                <div className="my-1.5 border-t border-slate-100/80" />
+              )}
+
+              {/* Profile Link (Selected state style) */}
+              <Link
+                href="/player/profile/"
+                onClick={() => setIsDropdownOpen(false)}
+                className="flex items-center gap-3 rounded-[12px] px-3.5 py-2.5 bg-slate-100/80 hover:bg-slate-200/50 transition duration-150 text-slate-900 font-bold text-[13px]"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4.5 w-4.5 text-slate-800 shrink-0">
+                  <path fillRule="evenodd" d="M8.603 3.799A4.49 4.49 0 0 1 12 2.25c1.357 0 2.573.6 3.397 1.549a4.49 4.49 0 0 1 3.498 1.307 4.491 4.491 0 0 1 1.307 3.497A4.49 4.49 0 0 1 21.75 12a4.49 4.49 0 0 1-1.549 3.397 4.491 4.491 0 0 1-1.307 3.498 4.491 4.491 0 0 1-3.497 1.307A4.49 4.49 0 0 1 12 21.75a4.49 4.49 0 0 1-3.397-1.549 4.49 4.49 0 0 1-3.498-1.307 4.491 4.491 0 0 1-1.307-3.497A4.49 4.49 0 0 1 2.25 12c0-1.357.6-2.573 1.549-3.397a4.49 4.49 0 0 1 1.307-3.497 4.49 4.49 0 0 1 3.497-1.307Zm7.007 6.387a.75.75 0 1 0-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.14-.094l3.75-5.25Z" clipRule="evenodd" />
+                </svg>
+                <span>Trang cá nhân (Profile)</span>
+              </Link>
+
+              {/* Community Link */}
+              <Link
+                href="/player/tournaments/"
+                onClick={() => setIsDropdownOpen(false)}
+                className="flex items-center justify-between rounded-[12px] px-3.5 py-2.5 hover:bg-slate-50 transition duration-150 text-slate-700 hover:text-slate-900 font-semibold text-[13px]"
+              >
+                <div className="flex items-center gap-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4.5 w-4.5 text-slate-500 shrink-0">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  </svg>
+                  <span>Cộng đồng (Community)</span>
+                </div>
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-100/90 text-slate-500 font-semibold hover:bg-slate-200/80 transition text-xs cursor-pointer select-none">+</span>
+              </Link>
+
+              {/* Subscription Link */}
               <Link
                 href="/player/assessment/"
                 onClick={() => setIsDropdownOpen(false)}
-                className="flex items-center justify-between rounded-xl px-2.5 py-2 hover:bg-slate-50 transition text-slate-700 hover:text-slate-950"
+                className="flex items-center justify-between rounded-[12px] px-3.5 py-2.5 hover:bg-slate-50 transition duration-150 text-slate-700 hover:text-slate-900 font-semibold text-[13px]"
               >
                 <div className="flex items-center gap-3">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-50 text-emerald-750 text-sm">⚡</span>
-                  <span className="text-xs font-bold">Đánh giá trình độ AI</span>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4.5 w-4.5 text-slate-500 shrink-0">
+                    <rect width="20" height="14" x="2" y="5" rx="2" />
+                    <line x1="2" x2="22" y1="10" y2="10" />
+                  </svg>
+                  <span>Đăng ký (Subscription)</span>
                 </div>
-                <span className="text-slate-400 text-xs">➔</span>
+                <span className="px-2 py-0.5 text-[9px] font-black text-green-700 bg-green-50 rounded-[4px] uppercase tracking-wider">PRO</span>
               </Link>
 
+              {/* Settings Link */}
               <Link
-                href="/player/bookings/"
+                href="/player/profile/"
                 onClick={() => setIsDropdownOpen(false)}
-                className="flex items-center justify-between rounded-xl px-2.5 py-2 hover:bg-slate-50 transition text-slate-700 hover:text-slate-950"
+                className="flex items-center gap-3 rounded-[12px] px-3.5 py-2.5 hover:bg-slate-50 transition duration-150 text-slate-700 hover:text-slate-900 font-semibold text-[13px]"
               >
-                <div className="flex items-center gap-3">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50 text-blue-750 text-sm">📅</span>
-                  <span className="text-xs font-bold">Lịch đặt sân của tôi</span>
-                </div>
-                <span className="text-slate-400 text-xs">➔</span>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4.5 w-4.5 text-slate-500 shrink-0">
+                  <rect width="20" height="12" x="2" y="6" rx="6" />
+                  <circle cx="16" cy="12" r="3.2" fill="currentColor" className="text-slate-500" />
+                </svg>
+                <span>Cài đặt (Settings)</span>
               </Link>
+
+              {/* Separator line */}
+              <div className="my-1.5 border-t border-slate-100/80" />
+
+              {/* Help Center Link */}
+              <Link
+                href="/contact/"
+                onClick={() => setIsDropdownOpen(false)}
+                className="flex items-center gap-3 rounded-[12px] px-3.5 py-2.5 hover:bg-slate-50 transition duration-150 text-slate-700 hover:text-slate-900 font-semibold text-[13px]"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4.5 w-4.5 text-slate-500 shrink-0">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 16v-4" />
+                  <path d="M12 8h.01" />
+                </svg>
+                <span>Trợ giúp (Help center)</span>
+              </Link>
+
+              {/* Sign Out Button */}
+              <button
+                onClick={() => {
+                  setIsDropdownOpen(false);
+                  void logout();
+                }}
+                disabled={isLoggingOut}
+                className="w-full flex items-center gap-3 rounded-[12px] px-3.5 py-2.5 text-red-600 hover:bg-red-50/70 hover:text-red-700 transition duration-150 text-left font-bold text-[13px] cursor-pointer disabled:opacity-50"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4.5 w-4.5 text-red-500 shrink-0">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                  <polyline points="16 17 21 12 16 7" />
+                  <line x1="21" x2="9" y1="12" y2="12" />
+                </svg>
+                <span>{isLoggingOut ? "Đang đăng xuất..." : "Đăng xuất (Sign out)"}</span>
+              </button>
             </div>
-
-            <div className="my-2 border-t border-slate-100" />
-
-            {/* Logout button */}
-            <button
-              onClick={() => {
-                setIsDropdownOpen(false);
-                void logout();
-              }}
-              disabled={isLoggingOut}
-              className="w-full flex items-center gap-3 rounded-xl px-2.5 py-2 text-slate-700 hover:bg-red-50 hover:text-red-700 transition cursor-pointer select-none text-left"
-            >
-              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-red-50 text-red-650 text-sm">🚪</span>
-              <span className="text-xs font-bold">{isLoggingOut ? "Đang đăng xuất..." : "Đăng xuất"}</span>
-            </button>
           </div>
         )}
       </div>
