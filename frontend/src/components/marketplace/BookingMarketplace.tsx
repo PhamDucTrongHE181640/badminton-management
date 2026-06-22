@@ -281,6 +281,43 @@ function toMatchmakingSession(session: Session, index: number, activeTier: strin
   };
 }
 
+// Type definitions
+type GroupedCourt = {
+  complexName: string;
+  subCourtName: string;
+  courtName: string;
+  id: string;
+  sport: string;
+  address: string;
+  district: string;
+  basePrice: number;
+  amenities: string[];
+  rating: string;
+  distance: string;
+  imageUrl: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  slots: Array<{
+    sessionId: string;
+    timeLabel: string;
+    startsAt: string;
+    openSlots: number;
+  }>;
+};
+
+// Coordinates helper for the SVG map pin positions
+const getPinCoords = (index: number) => {
+  const predefinedCoords = [
+    { x: 30, y: 35 }, // Pin 1
+    { x: 72, y: 25 }, // Pin 2
+    { x: 42, y: 55 }, // Pin 3
+    { x: 60, y: 70 }, // Pin 4
+    { x: 22, y: 65 }, // Pin 5
+    { x: 80, y: 60 }, // Pin 6
+  ];
+  return predefinedCoords[index % predefinedCoords.length];
+};
+
 export function BookingMarketplace({ variant }: { variant: Variant }) {
   const searchParams = useSearchParams();
   const isMatchmaking = searchParams.get("mode") === "matchmaking";
@@ -498,6 +535,99 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
   const matchmakingOpenSlots = visibleMatchmakingSessions.reduce((total, item) => total + item.open_slots, 0);
   const visibleMatchedPlayers = visibleMatchmakingSessions.reduce((total, item) => total + item.slotsJoined, 0);
   const busiestTime = visibleMatchmakingSessions.length > 0 ? visibleMatchmakingSessions[0].time : "Chưa có khung giờ";
+
+  // RENDER BOOKING MODE STATE AND LOGIC (Moved up to follow React Hook rules)
+  const [selectedSlots, setSelectedSlots] = useState<Record<string, string>>({});
+  const [selectedCourtKey, setSelectedCourtKey] = useState<string | null>(null);
+  const [activeBookingTab, setActiveBookingTab] = useState<"all" | "empty" | "near">("all");
+
+  const visibleRentalSessions = useMemo(() => {
+    let items = sessions.filter((item) => item.post_type === "rental" && sessionMatchesSearch(item, search));
+    if (activeTab === "favorites") {
+      items = items.filter((item) => favorites.includes(item.id));
+    }
+    
+    // Filters
+    if (location && location !== "Tất cả khu vực") {
+      const selectedLocWord = location.split(",")[0].toLowerCase().trim();
+      items = items.filter((item) =>
+        item.district.toLowerCase().includes(selectedLocWord) ||
+        item.address.toLowerCase().includes(selectedLocWord) ||
+        item.complex_name.toLowerCase().includes(selectedLocWord)
+      );
+    }
+    if (matchDate !== "Tất cả ngày") {
+      items = items.filter((item) => shortDateLabel(item.starts_at) === matchDate);
+    }
+    if (matchTime !== "Tất cả khung giờ") {
+      items = items.filter((item) => timeBucketMatches(item.starts_at, matchTime));
+    }
+    if (courtType === "Sân trong nhà") {
+      items = items.filter((item) => amenityIncludes(item, ["indoor", "trong nhà", "trong nha"]));
+    } else if (courtType === "Sân ngoài trời") {
+      items = items.filter((item) => amenityIncludes(item, ["outdoor", "ngoài trời", "ngoai troi"]));
+    }
+    return items;
+  }, [activeTab, courtType, favorites, location, matchDate, matchTime, search, sessions]);
+
+  // Group sessions by Court Complex & Sub Court to display hourly slots
+  const groupedCourts = useMemo(() => {
+    const map: Record<string, GroupedCourt> = {};
+    visibleRentalSessions.forEach((session, index) => {
+      const key = `${session.complex_name}-${session.sub_court_name}`;
+      const timeLabel = new Date(session.starts_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+      
+      if (!map[key]) {
+        map[key] = {
+          complexName: session.complex_name,
+          subCourtName: session.sub_court_name,
+          courtName: session.court_name,
+          id: session.id,
+          sport: session.sport,
+          address: session.address,
+          district: session.district,
+          basePrice: session.full_court_price_vnd,
+          amenities: session.amenities,
+          rating: ratingLabel(session, index),
+          distance: distanceLabel(session, index),
+          imageUrl: sessionImage(session),
+          latitude: session.latitude,
+          longitude: session.longitude,
+          slots: []
+        };
+      }
+      
+      map[key].slots.push({
+        sessionId: session.id,
+        timeLabel,
+        startsAt: session.starts_at,
+        openSlots: session.open_slots
+      });
+    });
+    
+    // Sort slots by starting time
+    Object.values(map).forEach((court) => {
+      court.slots.sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
+    });
+    
+    return Object.values(map);
+  }, [visibleRentalSessions]);
+
+  // Filter groupedCourts by booking tabs
+  const filteredGroupedCourts = useMemo(() => {
+    if (activeBookingTab === "empty") {
+      return groupedCourts.filter(c => c.slots.some(s => s.openSlots > 0));
+    }
+    if (activeBookingTab === "near") {
+      return [...groupedCourts].sort((a, b) => parseFloat(a.distance) - parseFloat(b.distance));
+    }
+    return groupedCourts;
+  }, [groupedCourts, activeBookingTab]);
+
+  const activeCourt = useMemo(() => {
+    if (!selectedCourtKey) return filteredGroupedCourts[0] ?? null;
+    return filteredGroupedCourts.find(c => `${c.complexName}-${c.subCourtName}` === selectedCourtKey) || filteredGroupedCourts[0] || null;
+  }, [selectedCourtKey, filteredGroupedCourts]);
 
   // RENDER MATCHMAKING LAYOUT
   if (isMatchmaking) {
@@ -1446,136 +1576,6 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
       </div>
     );
   }
-
-  // RENDER BOOKING MODE STATE AND LOGIC
-  const [selectedSlots, setSelectedSlots] = useState<Record<string, string>>({});
-  const [selectedCourtKey, setSelectedCourtKey] = useState<string | null>(null);
-  const [activeBookingTab, setActiveBookingTab] = useState<"all" | "empty" | "near">("all");
-
-  const visibleRentalSessions = useMemo(() => {
-    let items = sessions.filter((item) => item.post_type === "rental" && sessionMatchesSearch(item, search));
-    if (activeTab === "favorites") {
-      items = items.filter((item) => favorites.includes(item.id));
-    }
-    
-    // Filters
-    if (location && location !== "Tất cả khu vực") {
-      const selectedLocWord = location.split(",")[0].toLowerCase().trim();
-      items = items.filter((item) =>
-        item.district.toLowerCase().includes(selectedLocWord) ||
-        item.address.toLowerCase().includes(selectedLocWord) ||
-        item.complex_name.toLowerCase().includes(selectedLocWord)
-      );
-    }
-    if (matchDate !== "Tất cả ngày") {
-      items = items.filter((item) => shortDateLabel(item.starts_at) === matchDate);
-    }
-    if (matchTime !== "Tất cả khung giờ") {
-      items = items.filter((item) => timeBucketMatches(item.starts_at, matchTime));
-    }
-    if (courtType === "Sân trong nhà") {
-      items = items.filter((item) => amenityIncludes(item, ["indoor", "trong nhà", "trong nha"]));
-    } else if (courtType === "Sân ngoài trời") {
-      items = items.filter((item) => amenityIncludes(item, ["outdoor", "ngoài trời", "ngoai troi"]));
-    }
-    return items;
-  }, [activeTab, courtType, favorites, location, matchDate, matchTime, search, sessions]);
-
-  // Group sessions by Court Complex & Sub Court to display hourly slots
-  const groupedCourts = useMemo(() => {
-    const map: Record<string, GroupedCourt> = {};
-    visibleRentalSessions.forEach((session, index) => {
-      const key = `${session.complex_name}-${session.sub_court_name}`;
-      const timeLabel = new Date(session.starts_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
-      
-      if (!map[key]) {
-        map[key] = {
-          complexName: session.complex_name,
-          subCourtName: session.sub_court_name,
-          courtName: session.court_name,
-          id: session.id,
-          sport: session.sport,
-          address: session.address,
-          district: session.district,
-          basePrice: session.full_court_price_vnd,
-          amenities: session.amenities,
-          rating: ratingLabel(session, index),
-          distance: distanceLabel(session, index),
-          imageUrl: sessionImage(session),
-          latitude: session.latitude,
-          longitude: session.longitude,
-          slots: []
-        };
-      }
-      
-      map[key].slots.push({
-        sessionId: session.id,
-        timeLabel,
-        startsAt: session.starts_at,
-        openSlots: session.open_slots
-      });
-    });
-    
-    // Sort slots by starting time
-    Object.values(map).forEach((court) => {
-      court.slots.sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
-    });
-    
-    return Object.values(map);
-  }, [visibleRentalSessions]);
-
-  // Filter groupedCourts by booking tabs
-  const filteredGroupedCourts = useMemo(() => {
-    if (activeBookingTab === "empty") {
-      return groupedCourts.filter(c => c.slots.some(s => s.openSlots > 0));
-    }
-    if (activeBookingTab === "near") {
-      return [...groupedCourts].sort((a, b) => parseFloat(a.distance) - parseFloat(b.distance));
-    }
-    return groupedCourts;
-  }, [groupedCourts, activeBookingTab]);
-
-  const activeCourt = useMemo(() => {
-    if (!selectedCourtKey) return filteredGroupedCourts[0] ?? null;
-    return filteredGroupedCourts.find(c => `${c.complexName}-${c.subCourtName}` === selectedCourtKey) || filteredGroupedCourts[0] || null;
-  }, [selectedCourtKey, filteredGroupedCourts]);
-
-  // Coordinates helper for the SVG map pin positions
-  const getPinCoords = (index: number) => {
-    const predefinedCoords = [
-      { x: 30, y: 35 }, // Pin 1
-      { x: 72, y: 25 }, // Pin 2
-      { x: 42, y: 55 }, // Pin 3
-      { x: 60, y: 70 }, // Pin 4
-      { x: 22, y: 65 }, // Pin 5
-      { x: 80, y: 60 }, // Pin 6
-    ];
-    return predefinedCoords[index % predefinedCoords.length];
-  };
-
-  // Type definitions
-  type GroupedCourt = {
-    complexName: string;
-    subCourtName: string;
-    courtName: string;
-    id: string;
-    sport: string;
-    address: string;
-    district: string;
-    basePrice: number;
-    amenities: string[];
-    rating: string;
-    distance: string;
-    imageUrl: string;
-    latitude?: number | null;
-    longitude?: number | null;
-    slots: Array<{
-      sessionId: string;
-      timeLabel: string;
-      startsAt: string;
-      openSlots: number;
-    }>;
-  };
 
   // Render method for Booking layout (isBookingMode = true)
   function renderBookingLayout() {
