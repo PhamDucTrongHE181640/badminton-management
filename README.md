@@ -121,9 +121,10 @@ docker compose up -d postgres redis adminer backend-api frontend
 
 ## EC2 Nginx Deploy
 
-The production `nginx` service listens on host port `80`, proxies the frontend
-to the `frontend:3000` service, and proxies `/api/*`, `/uploads/*`, and `/ws/*`
-to `backend-api:8000` inside Docker Compose.
+The `frontend` service runs `pnpm build` and writes the static export to
+`frontend/out`. The production `nginx` service listens on host port `80`, serves
+that folder directly, and proxies `/api/*`, `/uploads/*`, and `/ws/*` to
+`backend-api:8000` inside Docker Compose.
 
 Current public URL:
 
