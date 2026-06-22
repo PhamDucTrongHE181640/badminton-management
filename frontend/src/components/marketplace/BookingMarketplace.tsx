@@ -1447,264 +1447,631 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
     );
   }
 
-  // DEFAULT BOOKING MARKETPLACE LAYOUT
-  return (
-    <div className="space-y-5">
-      <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
-              {variant === "owner" ? "NetUp thị trường" : "NetUp đặt sân"}
-            </p>
-            <h1 className="mt-3 max-w-3xl font-heading text-3xl font-semibold leading-tight text-slate-950 sm:text-4xl">
-              {isBookingMode ? "Thuê nguyên sân theo khung giờ còn trống." : "Tìm sân theo lưới, đặt lịch nhanh."}
+  // RENDER BOOKING MODE STATE AND LOGIC
+  const [selectedSlots, setSelectedSlots] = useState<Record<string, string>>({});
+  const [selectedCourtKey, setSelectedCourtKey] = useState<string | null>(null);
+  const [activeBookingTab, setActiveBookingTab] = useState<"all" | "empty" | "near">("all");
+
+  const visibleRentalSessions = useMemo(() => {
+    let items = sessions.filter((item) => item.post_type === "rental" && sessionMatchesSearch(item, search));
+    if (activeTab === "favorites") {
+      items = items.filter((item) => favorites.includes(item.id));
+    }
+    
+    // Filters
+    if (location && location !== "Tất cả khu vực") {
+      const selectedLocWord = location.split(",")[0].toLowerCase().trim();
+      items = items.filter((item) =>
+        item.district.toLowerCase().includes(selectedLocWord) ||
+        item.address.toLowerCase().includes(selectedLocWord) ||
+        item.complex_name.toLowerCase().includes(selectedLocWord)
+      );
+    }
+    if (matchDate !== "Tất cả ngày") {
+      items = items.filter((item) => shortDateLabel(item.starts_at) === matchDate);
+    }
+    if (matchTime !== "Tất cả khung giờ") {
+      items = items.filter((item) => timeBucketMatches(item.starts_at, matchTime));
+    }
+    if (courtType === "Sân trong nhà") {
+      items = items.filter((item) => amenityIncludes(item, ["indoor", "trong nhà", "trong nha"]));
+    } else if (courtType === "Sân ngoài trời") {
+      items = items.filter((item) => amenityIncludes(item, ["outdoor", "ngoài trời", "ngoai troi"]));
+    }
+    return items;
+  }, [activeTab, courtType, favorites, location, matchDate, matchTime, search, sessions]);
+
+  // Group sessions by Court Complex & Sub Court to display hourly slots
+  const groupedCourts = useMemo(() => {
+    const map: Record<string, GroupedCourt> = {};
+    visibleRentalSessions.forEach((session, index) => {
+      const key = `${session.complex_name}-${session.sub_court_name}`;
+      const timeLabel = new Date(session.starts_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+      
+      if (!map[key]) {
+        map[key] = {
+          complexName: session.complex_name,
+          subCourtName: session.sub_court_name,
+          courtName: session.court_name,
+          id: session.id,
+          sport: session.sport,
+          address: session.address,
+          district: session.district,
+          basePrice: session.full_court_price_vnd,
+          amenities: session.amenities,
+          rating: ratingLabel(session, index),
+          distance: distanceLabel(session, index),
+          imageUrl: sessionImage(session),
+          latitude: session.latitude,
+          longitude: session.longitude,
+          slots: []
+        };
+      }
+      
+      map[key].slots.push({
+        sessionId: session.id,
+        timeLabel,
+        startsAt: session.starts_at,
+        openSlots: session.open_slots
+      });
+    });
+    
+    // Sort slots by starting time
+    Object.values(map).forEach((court) => {
+      court.slots.sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
+    });
+    
+    return Object.values(map);
+  }, [visibleRentalSessions]);
+
+  // Filter groupedCourts by booking tabs
+  const filteredGroupedCourts = useMemo(() => {
+    if (activeBookingTab === "empty") {
+      return groupedCourts.filter(c => c.slots.some(s => s.openSlots > 0));
+    }
+    if (activeBookingTab === "near") {
+      return [...groupedCourts].sort((a, b) => parseFloat(a.distance) - parseFloat(b.distance));
+    }
+    return groupedCourts;
+  }, [groupedCourts, activeBookingTab]);
+
+  const activeCourt = useMemo(() => {
+    if (!selectedCourtKey) return filteredGroupedCourts[0] ?? null;
+    return filteredGroupedCourts.find(c => `${c.complexName}-${c.subCourtName}` === selectedCourtKey) || filteredGroupedCourts[0] || null;
+  }, [selectedCourtKey, filteredGroupedCourts]);
+
+  // Coordinates helper for the SVG map pin positions
+  const getPinCoords = (index: number) => {
+    const predefinedCoords = [
+      { x: 30, y: 35 }, // Pin 1
+      { x: 72, y: 25 }, // Pin 2
+      { x: 42, y: 55 }, // Pin 3
+      { x: 60, y: 70 }, // Pin 4
+      { x: 22, y: 65 }, // Pin 5
+      { x: 80, y: 60 }, // Pin 6
+    ];
+    return predefinedCoords[index % predefinedCoords.length];
+  };
+
+  // Type definitions
+  type GroupedCourt = {
+    complexName: string;
+    subCourtName: string;
+    courtName: string;
+    id: string;
+    sport: string;
+    address: string;
+    district: string;
+    basePrice: number;
+    amenities: string[];
+    rating: string;
+    distance: string;
+    imageUrl: string;
+    latitude?: number | null;
+    longitude?: number | null;
+    slots: Array<{
+      sessionId: string;
+      timeLabel: string;
+      startsAt: string;
+      openSlots: number;
+    }>;
+  };
+
+  // Render method for Booking layout (isBookingMode = true)
+  function renderBookingLayout() {
+    return (
+      <div className="space-y-6">
+        {/* Banner Section */}
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-red-500/10 via-pink-500/5 to-white p-6 sm:p-8 border border-red-100 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="flex-1 space-y-2">
+            <span className="inline-block text-[11px] font-bold uppercase tracking-[0.15em] text-[#b00c14]">ĐẶT SÂN NHANH CHÓNG</span>
+            <h1 className="font-heading text-2xl sm:text-3xl font-extrabold text-slate-900 leading-tight">
+              Tìm sân phù hợp, <span className="text-[#b00c14]">đặt lịch dễ dàng</span>
             </h1>
-            <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600 sm:text-base">
-              {isBookingMode
-                ? "Chọn sân, xem ảnh và giá bao sân, sau đó giữ toàn bộ khung giờ cho nhóm của bạn."
-                : "Tìm theo tên sân hoặc khu vực, xem nhanh bản đồ, trạng thái slot và đặt lịch trực quan."}
+            <p className="text-xs sm:text-sm text-slate-500 max-w-2xl">
+              Tìm kiếm theo môn thể thao, khu vực, khung giờ và đặt sân chỉ trong vài giây.
             </p>
           </div>
-          <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[420px]">
-            <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700">Hiển thị</p>
-              <p className="mt-1 font-heading text-2xl font-semibold text-emerald-950">{visibleSessions.length}</p>
-            </div>
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                {isBookingMode ? "Sân bao" : "Kèo ghép"}
-              </p>
-              <p className="mt-1 font-heading text-2xl font-semibold text-slate-950">
-                {isBookingMode ? stats.rentalCount : stats.poolCount}
-              </p>
-            </div>
-            <div className="rounded-lg border border-amber-100 bg-amber-50 p-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-amber-700">
-                {isBookingMode ? "Khung còn mở" : "Slot trống"}
-              </p>
-              <p className="mt-1 font-heading text-2xl font-semibold text-amber-950">{stats.openSlotCount}</p>
-            </div>
+          {/* Decorative Badminton SVG */}
+          <div className="hidden md:block w-32 h-20 relative opacity-85 shrink-0">
+            <svg viewBox="0 0 100 100" className="h-full w-full text-[#b00c14]" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <circle cx="50" cy="50" r="24" strokeDasharray="3 3" />
+              <path d="M40 35l25 25M35 40l25 25" strokeWidth="1" />
+              <circle cx="65" cy="65" r="8" fill="currentColor" className="text-red-100" />
+            </svg>
           </div>
         </div>
-      </section>
 
-      <Card>
-        <form onSubmit={onFilterSubmit} className="space-y-4">
-          <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
-            <div className="relative">
-              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-emerald-600" aria-hidden="true">
-                ⌕
-              </span>
-              <input
-                className={`${inputClassName} pl-9`}
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Tìm tên sân hoặc khu vực, ví dụ Catchy Pickleball, Hòa Lạc"
-              />
+        {/* Search & Filter Box */}
+        <div className="bg-white p-4.5 rounded-2xl border border-slate-200/60 shadow-md space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1.1fr_1.1fr_auto_auto]">
+            {/* Sport selector */}
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-bold text-slate-400 uppercase">Môn thể thao</span>
+              <select
+                className={`${inputClassName} text-xs font-semibold py-2`}
+                value={sport}
+                onChange={(e) => setSport(e.target.value as SportFilter)}
+              >
+                {sportOptions.map((item) => (
+                  <option key={item.value} value={item.value}>{item.label}</option>
+                ))}
+              </select>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" onClick={() => setShowAdvanced((value) => !value)}>
+
+            {/* Location selector */}
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-bold text-slate-400 uppercase">Khu vực</span>
+              <select
+                className={`${inputClassName} text-xs font-semibold py-2`}
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+              >
+                {locationOptions.map((loc) => (
+                  <option key={loc} value={loc}>{loc}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Date selector */}
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-bold text-slate-400 uppercase">Ngày</span>
+              <select
+                className={`${inputClassName} text-xs font-semibold py-2`}
+                value={matchDate}
+                onChange={(e) => setMatchDate(e.target.value)}
+              >
+                {dateOptions.map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Time selector */}
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-bold text-slate-400 uppercase">Khung giờ</span>
+              <select
+                className={`${inputClassName} text-xs font-semibold py-2`}
+                value={matchTime}
+                onChange={(e) => setMatchTime(e.target.value)}
+              >
+                {timeOptions.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Advanced Filters Button */}
+            <div className="flex items-end">
+              <button
+                type="button"
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                className="w-full flex h-9.5 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 px-3.5 text-xs font-bold text-slate-700 transition cursor-pointer"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4 text-slate-505 shrink-0" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+                </svg>
                 Bộ lọc
-              </Button>
-              <Button disabled={isLoading}>{isLoading ? "Đang tìm..." : "Tìm sân"}</Button>
+              </button>
+            </div>
+
+            {/* Search/Reload Button */}
+            <div className="flex items-end">
+              <button
+                onClick={() => void loadDiscovery()}
+                disabled={isLoading}
+                className="w-full flex h-9.5 items-center justify-center gap-1.5 rounded-xl bg-red-800 hover:bg-red-900 px-4 text-xs font-bold text-white transition cursor-pointer disabled:opacity-50"
+              >
+                {isLoading ? "Đang tìm..." : "Tìm sân"}
+              </button>
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {discoveryTabs.map((tab) => {
-              const active = activeTab === tab.value;
-              return (
+          {/* Quick Filters Capsules */}
+          <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+            <button
+              onClick={() => { setSport(""); setLocation("Tất cả khu vực"); setMatchDate("Tất cả ngày"); setMatchTime("Tất cả khung giờ"); setCourtType("Tất cả sân"); setSearch(""); }}
+              className="px-3.5 py-1.5 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs transition cursor-pointer"
+            >
+              🔄 Tất cả sân
+            </button>
+            <Link
+              href="/player/bookings/"
+              className="px-3.5 py-1.5 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs transition cursor-pointer"
+            >
+              📌 Sân đã đặt
+            </Link>
+            <button
+              onClick={() => setActiveTab(activeTab === "favorites" ? "map" : "favorites")}
+              className={`px-3.5 py-1.5 rounded-full border transition cursor-pointer font-semibold text-xs ${
+                activeTab === "favorites"
+                  ? "border-rose-200 bg-rose-50 text-rose-700"
+                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              ❤️ Sân yêu thích
+            </button>
+            <button
+              onClick={() => setCourtType(courtType === "Sân ngoài trời" ? "Tất cả sân" : "Sân ngoài trời")}
+              className={`px-3.5 py-1.5 rounded-full border transition cursor-pointer font-semibold text-xs ${
+                courtType === "Sân ngoài trời"
+                  ? "border-amber-200 bg-amber-50 text-amber-800"
+                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              🚗 Có gửi xe
+            </button>
+            <button
+              onClick={() => setCourtType(courtType === "Sân trong nhà" ? "Tất cả sân" : "Sân trong nhà")}
+              className={`px-3.5 py-1.5 rounded-full border transition cursor-pointer font-semibold text-xs ${
+                courtType === "Sân trong nhà"
+                  ? "border-blue-200 bg-blue-50 text-blue-800"
+                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              ❄️ Sân điều hòa
+            </button>
+          </div>
+        </div>
+
+        {/* 2-Column Content Layout */}
+        <div className="grid gap-6 lg:grid-cols-[1fr_360px] xl:grid-cols-[1fr_400px]">
+          
+          {/* LEFT COLUMN: Court List */}
+          <div className="space-y-4">
+            {/* Header Tabs */}
+            <div className="flex flex-wrap items-center justify-between border-b border-slate-200 pb-2 gap-3">
+              <div className="flex gap-2">
                 <button
-                  key={tab.value}
-                  type="button"
-                  className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold transition ${
-                    active
-                      ? "border-emerald-500 bg-emerald-600 text-white"
-                      : "border-slate-200 bg-white text-slate-700 hover:border-emerald-300 hover:bg-emerald-50"
+                  onClick={() => setActiveBookingTab("all")}
+                  className={`px-4 py-2 text-xs font-bold transition border-b-2 cursor-pointer ${
+                    activeBookingTab === "all" ? "border-red-800 text-red-800" : "border-transparent text-slate-500 hover:text-slate-900"
                   }`}
-                  onClick={() => setActiveTab(tab.value)}
                 >
-                  <span aria-hidden="true">{tab.icon}</span>
-                  {tab.label}
+                  Tất cả sân ({groupedCourts.length})
                 </button>
-              );
-            })}
-          </div>
-
-          {showAdvanced ? (
-            <div className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 lg:grid-cols-[1fr_1fr_1fr_auto]">
-              <Field label="Môn thể thao">
-                <select className={inputClassName} value={sport} onChange={(event) => setSport(event.target.value as SportFilter)}>
-                  {sportOptions.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Khu vực">
-                <input
-                  className={inputClassName}
-                  value={district}
-                  onChange={(event) => setDistrict(event.target.value)}
-                  placeholder="Ví dụ: Hòa Lạc"
-                />
-              </Field>
-              <Field label="Kiểu đặt">
-                <select
-                  className={inputClassName}
-                  value={effectivePostType}
-                  disabled={isMatchmaking || isBookingMode}
-                  onChange={(event) => setPostType(event.target.value as PostTypeFilter)}
+                <button
+                  onClick={() => setActiveBookingTab("empty")}
+                  className={`px-4 py-2 text-xs font-bold transition border-b-2 cursor-pointer ${
+                    activeBookingTab === "empty" ? "border-red-800 text-red-800" : "border-transparent text-slate-500 hover:text-slate-900"
+                  }`}
                 >
-                  {postTypeOptions.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <label className="flex items-end pb-2">
-                <span className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={openOnly}
-                    onChange={(event) => setOpenOnly(event.target.checked)}
-                  />
-                  Chỉ hiện còn slot
-                </span>
-              </label>
+                  Còn trống ({groupedCourts.filter(c => c.slots.some(s => s.openSlots > 0)).length})
+                </button>
+                <button
+                  onClick={() => setActiveBookingTab("near")}
+                  className={`px-4 py-2 text-xs font-bold transition border-b-2 cursor-pointer ${
+                    activeBookingTab === "near" ? "border-red-800 text-red-800" : "border-transparent text-slate-500 hover:text-slate-900"
+                  }`}
+                >
+                  Gần bạn nhất
+                </button>
+              </div>
+
+              {/* Sort selector */}
+              <div className="text-xs text-slate-505">
+                <span className="font-semibold text-slate-800">Sắp xếp:</span> Gần nhất
+              </div>
             </div>
-          ) : null}
-        </form>
-      </Card>
 
-      {error ? (
-        <Notice tone="danger">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <span>{error}</span>
-            <a className="font-semibold underline" href={loginUrl()}>
-              Đăng nhập Google
-            </a>
-          </div>
-        </Notice>
-      ) : (
-        <Notice tone="info">{message}</Notice>
-      )}
-
-      {activeTab === "booked" ? (
-        <EmptyState
-          title="Sân đã đặt nằm trong trang Booking của tôi"
-          description="Mở danh sách booking để xem mã check-in, trạng thái tiền cọc và lịch chơi sắp tới."
-          action={<ButtonLink href="/player/bookings">Xem booking của tôi</ButtonLink>}
-        />
-      ) : visibleSessions.length === 0 && !isLoading ? (
-        <EmptyState
-          title="Chưa có sân phù hợp"
-          description="Thử đổi từ khóa, mở bộ lọc hoặc bật chế độ chơi với tất cả mọi người."
-          action={<Button onClick={() => void loadDiscovery()}>Tải lại danh sách</Button>}
-        />
-      ) : (
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {visibleSessions.map((session, index) => {
-            const image = sessionImage(session);
-            const open = hasOpenSlots(session);
-            const isPool = session.post_type === "pool";
-            const isFavorite = favorites.includes(session.id);
-            const href = user ? `/player/booking?sessionId=${session.id}&mode=${isPool ? "solo" : "full_court"}` : loginUrl();
-
-            return (
-              <article key={session.id} className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3">
-                  <div className="flex flex-wrap gap-2">
-                    <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
-                      Đơn ngày
-                    </span>
-                    <span className="rounded-full bg-fuchsia-50 px-3 py-1 text-xs font-semibold text-fuchsia-700 ring-1 ring-fuchsia-200">
-                      {isPool ? "Sự kiện" : postTypeLabel(session.post_type)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      aria-label={isFavorite ? "Bỏ yêu thích" : "Thêm yêu thích"}
-                      className={`flex h-8 w-8 items-center justify-center rounded-full border transition ${
-                        isFavorite
-                          ? "border-rose-200 bg-rose-50 text-rose-600"
-                          : "border-slate-200 bg-white text-slate-500 hover:bg-rose-50 hover:text-rose-600"
+            {/* List items */}
+            {isLoading ? (
+              <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-500 shadow-3xs">
+                <p className="text-base font-semibold">Đang tải danh sách sân...</p>
+              </div>
+            ) : filteredGroupedCourts.length === 0 ? (
+              <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-500 shadow-3xs">
+                <p className="text-base font-semibold">Không tìm thấy cụm sân nào phù hợp</p>
+                <p className="text-xs text-slate-400 mt-1">Hãy thử tìm kiếm với từ khóa khác hoặc thay đổi bộ lọc.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {filteredGroupedCourts.map((court, idx) => {
+                  const courtKey = `${court.complexName}-${court.subCourtName}`;
+                  const selectedSessionIdForCourt = selectedSlots[courtKey] || court.slots[0]?.sessionId;
+                  
+                  // Total slots empty check
+                  const emptySlotsCount = court.slots.filter(s => s.openSlots > 0).length;
+                  const isAnyEmpty = emptySlotsCount > 0;
+                  
+                  return (
+                    <article
+                      key={courtKey}
+                      onClick={() => setSelectedCourtKey(courtKey)}
+                      className={`group relative overflow-hidden rounded-2xl border p-4.5 shadow-2xs hover:shadow-md transition duration-205 flex flex-col sm:flex-row gap-4 items-stretch cursor-pointer ${
+                        selectedCourtKey === courtKey ? "border-red-800 bg-slate-50/20" : "border-slate-200 bg-white"
                       }`}
-                      onClick={() => toggleFavorite(session.id)}
                     >
-                      ♥
-                    </button>
-                    <a
-                      href={mapUrl(session)}
-                      target="_blank"
-                      rel="noreferrer"
-                      aria-label="Xem bản đồ"
-                      className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-emerald-600 transition hover:bg-emerald-50"
-                    >
-                      ⌖
-                    </a>
-                  </div>
+                      {/* Left: Court Image */}
+                      <div className="relative h-36 w-full sm:w-48 shrink-0 rounded-xl overflow-hidden bg-slate-100">
+                        <img
+                          src={court.imageUrl}
+                          alt={court.courtName}
+                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-103"
+                        />
+                        {/* Status Badge */}
+                        <div className={`absolute top-3 left-3 px-2 py-0.5 rounded-md font-bold text-[10px] text-white shadow-xs ${
+                          isAnyEmpty ? "bg-emerald-600" : "bg-orange-500"
+                        }`}>
+                          {isAnyEmpty ? "Còn trống" : "Sắp hết chỗ"}
+                        </div>
+                        {/* Heart Favorite button */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleFavorite(court.id);
+                          }}
+                          className={`absolute top-2.5 right-2.5 flex h-7.5 w-7.5 items-center justify-center rounded-lg border transition shadow-xs ${
+                            favorites.includes(court.id)
+                              ? "border-rose-200 bg-rose-50 text-rose-600"
+                              : "border-slate-200/50 bg-white/90 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                          } cursor-pointer`}
+                        >
+                          ♥
+                        </button>
+                      </div>
+
+                      {/* Middle: Details & Time Slots */}
+                      <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+                        <div>
+                          <div className="flex items-start justify-between gap-3">
+                            <h3 className="font-heading text-lg font-bold text-slate-900 truncate leading-snug">
+                              {court.complexName} ({court.subCourtName})
+                            </h3>
+                          </div>
+                          
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-[11px] text-slate-505 font-medium">
+                            <span className="flex items-center gap-1 font-bold text-amber-500">★ {court.rating}</span>
+                            <span>•</span>
+                            <span>{court.distance}</span>
+                            <span>•</span>
+                            <span className="truncate">{court.address}</span>
+                          </div>
+
+                          {/* Time Slots Button Grid */}
+                          <div className="mt-3.5 space-y-1.5">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Khung giờ trống hôm nay</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {court.slots.map((slot) => {
+                                const isSelected = selectedSessionIdForCourt === slot.sessionId;
+                                return (
+                                  <button
+                                    key={slot.sessionId}
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedSlots({ ...selectedSlots, [courtKey]: slot.sessionId });
+                                    }}
+                                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition border cursor-pointer ${
+                                      isSelected
+                                        ? "bg-red-50 text-[#b00c14] border-red-200 shadow-3xs"
+                                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                                    }`}
+                                  >
+                                    {slot.timeLabel}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Amenities Tags */}
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-400 mt-3 pt-2 border-t border-slate-100">
+                          <span className="flex items-center gap-1">🏓 {court.sport}</span>
+                          <span>•</span>
+                          <span>Có gửi xe</span>
+                          <span>•</span>
+                          <span>WC</span>
+                          {court.amenities.includes("AirCond") && (
+                            <>
+                              <span>•</span>
+                              <span>Điều hòa</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Right: Price and CTA Button */}
+                      <div className="w-full sm:w-36 shrink-0 border-t sm:border-t-0 sm:border-l border-slate-100 pt-3.5 sm:pt-0 sm:pl-4 flex flex-col justify-between items-stretch sm:items-end py-0.5">
+                        <div className="text-left sm:text-right">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase">Giá thuê</p>
+                          <p className="font-heading text-lg font-black text-slate-900 leading-snug mt-1">
+                            {formatVnd(court.basePrice)}
+                            <span className="text-[11px] font-semibold text-slate-400">/giờ</span>
+                          </p>
+                          <p className="text-[10px] text-emerald-700 font-bold mt-1">✓ Còn trống</p>
+                        </div>
+
+                        <Link
+                          href={user ? `/player/booking?sessionId=${selectedSessionIdForCourt}&mode=full_court` : loginUrl()}
+                          onClick={(e) => e.stopPropagation()}
+                          className="mt-3 w-full inline-flex h-9 items-center justify-center rounded-xl bg-red-800 hover:bg-red-900 text-xs font-bold text-white transition shadow-xs cursor-pointer text-center whitespace-nowrap"
+                        >
+                          Đặt sân
+                        </Link>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+            
+            {/* Show More Button */}
+            {filteredGroupedCourts.length > 0 && (
+              <div className="pt-2 text-center">
+                <button className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white hover:bg-slate-50 px-5 py-2.5 text-xs font-bold text-slate-700 transition cursor-pointer shadow-3xs">
+                  Xem thêm sân ➔
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* RIGHT COLUMN: Interactive Mock Map */}
+          <div className="relative">
+            <div className="sticky top-20 rounded-3xl border border-slate-200/80 bg-[#f4f6f7] overflow-hidden shadow-sm h-[560px] flex flex-col justify-between p-4">
+              
+              {/* Virtual Map Header (Search address overlay) */}
+              <div className="absolute top-4 left-4 right-4 z-20 flex gap-2">
+                <div className="relative flex-1">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">⌕</span>
+                  <input
+                    type="text"
+                    placeholder="Tìm kiếm khi di chuyển bản đồ"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl pl-8 pr-3 py-2 text-xs font-medium shadow-md focus:outline-none"
+                  />
                 </div>
+                <button className="h-8 w-8 bg-white border border-slate-200 rounded-xl flex items-center justify-center shadow-md shrink-0 cursor-pointer">
+                  ⚙️
+                </button>
+              </div>
 
-                <div className="space-y-3 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <Badge tone={recommendationTone(session.recommendation_label)}>
-                      {recommendationLabel(session.recommendation_label)}
-                    </Badge>
-                    <span className="text-sm font-semibold text-amber-500">★ {ratingLabel(session, index)}</span>
+              {/* SVG Virtual Map Graphics */}
+              <div className="absolute inset-0 z-10 w-full h-full">
+                <svg className="w-full h-full" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid slice">
+                  {/* Background base */}
+                  <rect width="400" height="400" fill="#e8eaed" />
+                  
+                  {/* Green spaces (Parks, CNC zone) */}
+                  <path d="M 50 80 Q 120 40 180 80 T 320 60 L 380 150 L 250 220 Z" fill="#d7ecc9" opacity="0.8" />
+                  <path d="M 20 250 Q 80 200 120 280 T 260 300 L 280 390 L 10 390 Z" fill="#d7ecc9" opacity="0.8" />
+                  
+                  {/* Roads / Streets */}
+                  <path d="M 0 100 L 400 130" stroke="#ffffff" strokeWidth="12" fill="none" />
+                  <path d="M 0 100 L 400 130" stroke="#e0e0e0" strokeWidth="8" fill="none" />
+
+                  <path d="M 120 0 L 160 400" stroke="#ffffff" strokeWidth="12" fill="none" />
+                  <path d="M 120 0 L 160 400" stroke="#e0e0e0" strokeWidth="8" fill="none" />
+
+                  <path d="M 50 400 C 150 250 200 150 350 0" stroke="#ffffff" strokeWidth="10" fill="none" strokeDasharray="3 3" />
+                  
+                  {/* Map Text Labels */}
+                  <text x="240" y="240" fill="#78909c" fontSize="11" fontWeight="bold" fontFamily="sans-serif" opacity="0.8">HÒA LẠC</text>
+                  <text x="50" y="320" fill="#90a4ae" fontSize="8" fontWeight="bold" fontFamily="sans-serif" opacity="0.7">Khu Công nghệ</text>
+                  <text x="50" y="332" fill="#90a4ae" fontSize="8" fontWeight="bold" fontFamily="sans-serif" opacity="0.7">cao Hòa Lạc</text>
+
+                  {/* Draw Court Location Pins dynamically */}
+                  {filteredGroupedCourts.map((court, index) => {
+                    const coords = getPinCoords(index);
+                    const courtKey = `${court.complexName}-${court.subCourtName}`;
+                    const isActive = activeCourt && `${activeCourt.complexName}-${activeCourt.subCourtName}` === courtKey;
+                    
+                    return (
+                      <g
+                        key={courtKey}
+                        className="cursor-pointer select-none"
+                        onClick={() => setSelectedCourtKey(courtKey)}
+                      >
+                        {/* Marker Pin bubble shadow */}
+                        <circle cx={coords.x * 4} cy={coords.y * 4} r={isActive ? 16 : 13} fill="black" opacity="0.1" transform="translate(0, 2)" />
+                        
+                        {/* Marker Pin body */}
+                        <path
+                          d={`M ${coords.x * 4} ${coords.y * 4 + 12} L ${coords.x * 4 - 4} ${coords.y * 4 + 6} A 8 8 0 1 1 ${coords.x * 4 + 4} ${coords.y * 4 + 6} Z`}
+                          fill={isActive ? "#b00c14" : "#ffffff"}
+                          stroke={isActive ? "#ffffff" : "#b00c14"}
+                          strokeWidth="1.5"
+                        />
+                        
+                        {/* Price Tag Overlay */}
+                        <rect
+                          x={coords.x * 4 - 18}
+                          y={coords.y * 4 - 20}
+                          width="36"
+                          height="14"
+                          rx="4"
+                          fill={isActive ? "#b00c14" : "#ffffff"}
+                          stroke={isActive ? "#ffffff" : "#b00c14"}
+                          strokeWidth="1.2"
+                          shadow-xs="true"
+                        />
+                        <text
+                          x={coords.x * 4}
+                          y={coords.y * 4 - 10}
+                          fill={isActive ? "#ffffff" : "#334155"}
+                          fontSize="8"
+                          fontWeight="bold"
+                          textAnchor="middle"
+                          fontFamily="sans-serif"
+                        >
+                          {Math.round(court.basePrice / 1000)}K
+                        </text>
+                      </g>
+                    );
+                  })}
+                </svg>
+              </div>
+
+              {/* Map Zoom Controls */}
+              <div className="absolute right-4 bottom-32 z-20 flex flex-col gap-1.5">
+                <button className="h-7 w-7 bg-white border border-slate-200 rounded-lg flex items-center justify-center shadow-md font-bold text-slate-700 hover:bg-slate-50 cursor-pointer">+</button>
+                <button className="h-7 w-7 bg-white border border-slate-200 rounded-lg flex items-center justify-center shadow-md font-bold text-slate-700 hover:bg-slate-50 cursor-pointer">-</button>
+                <button className="h-7 w-7 bg-white border border-slate-200 rounded-lg flex items-center justify-center shadow-md text-red-650 hover:bg-slate-50 cursor-pointer mt-1">⌖</button>
+              </div>
+
+              {/* Floating Bottom Card Preview for Active Court Complex */}
+              {activeCourt && (
+                <div className="absolute bottom-4 left-4 right-4 z-20 bg-white rounded-2xl border border-slate-100 p-3 shadow-2xl flex gap-3 items-center animate-in fade-in slide-in-from-bottom-2 duration-200">
+                  <img
+                    src={activeCourt.imageUrl}
+                    alt={activeCourt.courtName}
+                    className="h-15 w-18 rounded-lg object-cover shrink-0 bg-slate-50"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <h4 className="font-bold text-slate-900 text-xs truncate leading-snug">{activeCourt.complexName}</h4>
+                    <p className="text-[10px] text-amber-500 font-semibold mt-0.5">★ {activeCourt.rating} <span className="text-slate-400 font-normal">({activeCourt.distance})</span></p>
+                    <p className="text-xs font-extrabold text-[#b00c14] mt-1">{formatVnd(activeCourt.basePrice)}<span className="text-[10px] text-slate-400 font-normal">/giờ</span></p>
                   </div>
-
-                  <div className="grid grid-cols-[104px_1fr] gap-3">
-                    <img
-                      src={image}
-                      alt={session.sub_court_name}
-                      className="h-28 w-full rounded-lg object-cover"
-                    />
-                    <div className="min-w-0">
-                      <h2 className="line-clamp-2 font-heading text-lg font-semibold leading-snug text-emerald-700">
-                        {session.complex_name} ({session.sub_court_name})
-                      </h2>
-                      <p className="mt-2 text-sm leading-6 text-slate-600">
-                        <span className="font-semibold text-orange-500">({distanceLabel(session, index)})</span>{" "}
-                        {session.address}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-                    <p>
-                      <span className="font-semibold text-slate-950">🕒 Giờ hoạt động:</span>{" "}
-                      {formatTimeRange(session.starts_at, session.duration_minutes)}
-                    </p>
-                    <p>
-                      <span className="font-semibold text-slate-950">Môn:</span> {sportLabel(session.sport)} ·{" "}
-                      <span className="font-semibold text-slate-950">{isPool ? "Slot" : "Sức chứa"}:</span> {session.open_slots}/{session.max_slots}
-                    </p>
-                    <p>
-                      <span className="font-semibold text-slate-950">Giá:</span>{" "}
-                      {formatVnd(isPool ? session.slot_price_vnd : session.full_court_price_vnd)}
-                    </p>
-                  </div>
-
-                  <a
-                    href={href}
-                    className={`inline-flex w-full items-center justify-center rounded-lg px-4 py-3 text-sm font-semibold shadow-sm transition ${
-                      isPool
-                        ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                        : "bg-amber-400 text-slate-950 hover:bg-amber-300"
-                    } ${!open ? "pointer-events-none opacity-60" : ""}`}
+                  
+                  {/* Chevron Button Link to Booking Page */}
+                  <Link
+                    href={user ? `/player/booking?sessionId=${selectedSlots[`${activeCourt.complexName}-${activeCourt.subCourtName}`] || activeCourt.slots[0]?.sessionId}&mode=full_court` : loginUrl()}
+                    className="h-8 w-8 rounded-full bg-slate-50 hover:bg-red-50 hover:text-red-700 transition flex items-center justify-center shrink-0 border border-slate-100 cursor-pointer text-slate-700 font-bold"
                   >
-                    {isPool ? "THAM GIA NGAY" : "ĐẶT NGUYÊN SÂN"}
-                  </a>
+                    ➔
+                  </Link>
                 </div>
-              </article>
-            );
-          })}
-        </section>
-      )}
+              )}
+
+            </div>
+          </div>
+
+        </div>
+      </div>
+    );
+  }
+
+  // DEFAULT BOOKING MARKETPLACE LAYOUT FALLBACK
+  return isBookingMode ? renderBookingLayout() : (
+    <div className="space-y-5">
+      <p className="text-sm font-semibold text-slate-500">
+        Để xem danh sách đặt sân nâng cao, vui lòng truy cập đường dẫn booking.
+      </p>
     </div>
   );
 }
+
+

@@ -54,12 +54,6 @@ export function HeaderUserAuth({ user, logout, isLoggingOut }: HeaderUserAuthPro
   if (user) {
     return (
       <div className="relative flex items-center gap-3" ref={dropdownRef}>
-        {/* Share Button (Left of Avatar) */}
-        <button className="hidden sm:flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200/80 text-slate-800 text-[13px] font-semibold px-4.5 py-2.5 rounded-full transition duration-200 select-none cursor-pointer border border-slate-200/30 shadow-xs">
-          <span className="font-medium">Share</span>
-          <span className="text-base font-light leading-none">+</span>
-        </button>
-
         {/* Avatar Trigger (With gradient ring) */}
         <button
           onClick={() => setIsDropdownOpen(!isDropdownOpen)}
@@ -152,6 +146,49 @@ export function HeaderUserAuth({ user, logout, isLoggingOut }: HeaderUserAuthPro
                 <span>Trang cá nhân (Profile)</span>
               </Link>
 
+              {/* Booking của tôi Link */}
+              <Link
+                href="/player/bookings/"
+                onClick={() => setIsDropdownOpen(false)}
+                className="flex items-center gap-3 rounded-[12px] px-3.5 py-2.5 hover:bg-slate-50 transition duration-150 text-slate-700 hover:text-slate-900 font-semibold text-[13px]"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4.5 w-4.5 text-slate-500 shrink-0">
+                  <rect width="18" height="18" x="3" y="4" rx="2" ry="2" />
+                  <line x1="16" x2="16" y1="2" y2="6" />
+                  <line x1="8" x2="8" y1="2" y2="6" />
+                  <line x1="3" x2="21" y1="10" y2="10" />
+                </svg>
+                <span>Booking của tôi</span>
+              </Link>
+
+              {/* Lịch thi đấu Link */}
+              <Link
+                href="/player/matches/"
+                onClick={() => setIsDropdownOpen(false)}
+                className="flex items-center gap-3 rounded-[12px] px-3.5 py-2.5 hover:bg-slate-50 transition duration-150 text-slate-700 hover:text-slate-900 font-semibold text-[13px]"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4.5 w-4.5 text-slate-500 shrink-0">
+                  <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+                  <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+                  <path d="M4 22h16" />
+                  <path d="M10 14.66V17c0 .55-.45 1-1 1H4v2h16v-2h-5c-.55 0-1-.45-1-1v-2.34" />
+                  <path d="M12 2a6 6 0 0 1 6 6v5a6 6 0 0 1-6 6 6 6 0 0 1-6-6V8a6 6 0 0 1 6-6Z" />
+                </svg>
+                <span>Lịch thi đấu của tôi</span>
+              </Link>
+
+              {/* Đánh giá kĩ năng AI Link */}
+              <Link
+                href="/player/assessment/"
+                onClick={() => setIsDropdownOpen(false)}
+                className="flex items-center gap-3 rounded-[12px] px-3.5 py-2.5 hover:bg-slate-50 transition duration-150 text-slate-700 hover:text-slate-900 font-semibold text-[13px]"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4.5 w-4.5 text-slate-500 shrink-0">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                </svg>
+                <span>Đánh giá kĩ năng AI</span>
+              </Link>
+
               {/* Community Link */}
               <Link
                 href="/player/tournaments/"
@@ -169,7 +206,7 @@ export function HeaderUserAuth({ user, logout, isLoggingOut }: HeaderUserAuthPro
 
               {/* Subscription Link */}
               <Link
-                href="/player/assessment/"
+                href="/player/profile/"
                 onClick={() => setIsDropdownOpen(false)}
                 className="flex items-center justify-between rounded-[12px] px-3.5 py-2.5 hover:bg-slate-50 transition duration-150 text-slate-700 hover:text-slate-900 font-semibold text-[13px]"
               >

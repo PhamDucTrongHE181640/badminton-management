@@ -11,9 +11,6 @@ const navLinks = [
   { href: "/player/discovery?mode=booking", label: "Đặt Sân" },
   { href: "/player/discovery?mode=matchmaking", label: "Xếp đối" },
   { href: "/player/tournaments", label: "Giải đấu" },
-  { href: "/player/assessment", label: "Đánh giá kĩ năng" },
-  { href: "/player/bookings", label: "Booking của tôi" },
-  { href: "/player/matches", label: "Lịch đấu" },
   { href: "/contact", label: "Liên hệ" },
 ];
 
