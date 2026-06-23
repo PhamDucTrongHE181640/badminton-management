@@ -3,6 +3,7 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Target, MapPin, Users, Dna, Circle, Activity, CircleDashed } from "lucide-react";
 
 import { Badge, Button, Card, Notice, inputClassName } from "@/components/ui";
 import { API_BASE_URL, apiFetch } from "@/lib/http";
@@ -601,12 +602,12 @@ export default function PlayerAssessmentPage() {
 
             <div className="grid gap-3.5">
               {[
-                { icon: "🎯", title: "Ghép đối thủ cùng trình độ", desc: "Không lo lệch trình khi tham gia phòng ghép đối ELO." },
-                { icon: "📍", title: "Sân chơi chất lượng, giá tốt", desc: "Đề xuất cụm sân gần bạn có cơ sở vật chất tương ứng." },
-                { icon: "🤝", title: "Cộng đồng thể thao văn minh", desc: "Môi trường kết nối bạn chơi có văn hóa thể thao cao." }
+                { icon: <Target className="h-6 w-6 text-emerald-600" />, title: "Ghép đối thủ cùng trình độ", desc: "Không lo lệch trình khi tham gia phòng ghép đối ELO." },
+                { icon: <MapPin className="h-6 w-6 text-sky-600" />, title: "Sân chơi chất lượng, giá tốt", desc: "Đề xuất cụm sân gần bạn có cơ sở vật chất tương ứng." },
+                { icon: <Users className="h-6 w-6 text-amber-600" />, title: "Cộng đồng thể thao văn minh", desc: "Môi trường kết nối bạn chơi có văn hóa thể thao cao." }
               ].map(item => (
                 <div key={item.title} className="flex gap-3 bg-slate-50/50 p-3 rounded-2xl border border-slate-100">
-                  <span className="text-2xl shrink-0">{item.icon}</span>
+                  <div className="shrink-0 pt-0.5">{item.icon}</div>
                   <div>
                     <h4 className="text-xs font-bold text-slate-800">{item.title}</h4>
                     <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">{item.desc}</p>
@@ -642,17 +643,19 @@ export default function PlayerAssessmentPage() {
 
           <div className="grid grid-cols-2 gap-4">
             {[
-              { id: "Pickleball", icon: "🏓", label: "Pickleball", desc: "Môn thể thao xu hướng cực hot", color: "hover:border-lime-500 hover:bg-lime-50/30" },
-              { id: "Badminton", icon: "🏸", label: "Cầu lông", desc: "Chơi nhanh, đòi hỏi phản xạ cao", color: "hover:border-rose-500 hover:bg-rose-50/30" },
-              { id: "Tennis", icon: "🎾", label: "Tennis", desc: "Sân rộng, đòi hỏi kỹ thuật chuẩn", color: "hover:border-sky-500 hover:bg-sky-50/30" },
-              { id: "Football", icon: "⚽", label: "Bóng đá", desc: "Môn thể thao vua phối hợp đồng đội", color: "hover:border-emerald-500 hover:bg-emerald-50/30" }
+              { id: "Pickleball", icon: <CircleDashed className="h-7 w-7 text-lime-600" />, label: "Pickleball", desc: "Môn thể thao xu hướng cực hot", color: "hover:border-lime-500 hover:bg-lime-50/30" },
+              { id: "Badminton", icon: <Circle className="h-7 w-7 text-rose-600" />, label: "Cầu lông", desc: "Chơi nhanh, đòi hỏi phản xạ cao", color: "hover:border-rose-500 hover:bg-rose-50/30" },
+              { id: "Tennis", icon: <Dna className="h-7 w-7 text-sky-600" />, label: "Tennis", desc: "Sân rộng, đòi hỏi kỹ thuật chuẩn", color: "hover:border-sky-500 hover:bg-sky-50/30" },
+              { id: "Football", icon: <Activity className="h-7 w-7 text-emerald-600" />, label: "Bóng đá", desc: "Môn thể thao vua phối hợp đồng đội", color: "hover:border-emerald-500 hover:bg-emerald-50/30" }
             ].map(sportItem => (
               <button
                 key={sportItem.id}
                 onClick={() => handleSportSelect(sportItem.id as Sport)}
                 className={`p-5 rounded-3xl border border-slate-200 bg-white text-left transition duration-200 cursor-pointer shadow-sm ${sportItem.color} flex flex-col justify-between h-40`}
               >
-                <span className="text-3xl bg-slate-50 h-12 w-12 rounded-2xl flex items-center justify-center border border-slate-100">{sportItem.icon}</span>
+                <div className="bg-slate-50 h-12 w-12 rounded-2xl flex items-center justify-center border border-slate-100">
+                  {sportItem.icon}
+                </div>
                 <div>
                   <h3 className="font-heading font-bold text-slate-900 text-sm">{sportItem.label}</h3>
                   <p className="text-[10px] text-slate-400 font-semibold mt-1 leading-snug">{sportItem.desc}</p>

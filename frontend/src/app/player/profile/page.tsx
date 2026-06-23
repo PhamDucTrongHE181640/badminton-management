@@ -194,7 +194,10 @@ export default function PlayerProfilePage() {
                 <input
                   className={`${inputClassName} flex-1`}
                   value={avatarUrl}
-                  onChange={(event) => setAvatarUrl(event.target.value)}
+                  onChange={(event) => {
+                    setAvatarUrl(event.target.value);
+                    setFormAvatarError(false);
+                  }}
                   placeholder="https://... hoặc chọn avatar bên dưới"
                 />
               </div>
@@ -210,7 +213,10 @@ export default function PlayerProfilePage() {
                       <button
                         key={seed}
                         type="button"
-                        onClick={() => setAvatarUrl(url)}
+                        onClick={() => {
+                          setAvatarUrl(url);
+                          setFormAvatarError(false);
+                        }}
                         className={`h-9 w-9 rounded-full overflow-hidden border-2 bg-slate-50 transition cursor-pointer shrink-0 ${
                           isSelected ? "border-red-800 scale-110 shadow-sm" : "border-transparent opacity-80 hover:opacity-100 hover:scale-105"
                         }`}

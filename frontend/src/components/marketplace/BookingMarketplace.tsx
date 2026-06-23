@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { Target, Zap, RefreshCw, CalendarCheck, Heart, Car, Snowflake, Lightbulb, Check, Clock, Users, Sparkles, Scale, Handshake, ShieldCheck } from "lucide-react";
 
 import { Badge, Button, ButtonLink, Card, EmptyState, Field, Notice, inputClassName } from "@/components/ui";
 import { API_BASE_URL, ApiError, apiFetch } from "@/lib/http";
@@ -675,14 +676,14 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
               <div className="px-6 py-5 space-y-4">
                 <div className="space-y-3">
                   <div className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
-                    <span className="text-xl">🎯</span>
+                    <Target className="h-6 w-6 shrink-0 text-[#b00c14]" />
                     <div>
                       <p className="text-sm font-bold text-slate-900">Ghép đối thủ cùng trình độ</p>
                       <p className="text-xs text-slate-500 mt-0.5">Không lo lệch trình khi tham gia phòng ghép ELO.</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
-                    <span className="text-xl">⚡</span>
+                    <Zap className="h-6 w-6 shrink-0 text-[#b00c14]" />
                     <div>
                       <p className="text-sm font-bold text-slate-900">Chỉ mất 2–3 phút</p>
                       <p className="text-xs text-slate-500 mt-0.5">Trả lời nhanh vài câu hỏi để AI phân tích level của bạn.</p>
@@ -1457,13 +1458,13 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
               <>
                 <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
                   <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
-                    <span className="text-emerald-700 text-lg">💡</span>
+                    <Lightbulb className="text-emerald-700 h-5 w-5" />
                     <h3 className="font-heading font-bold text-slate-900 text-sm sm:text-base">Lời khuyên cho bạn</h3>
                   </div>
                   <div className="mt-4 space-y-4">
                     <div className="flex gap-3 text-xs">
                       <div className="h-7 w-7 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 font-bold text-sm">
-                        ✓
+                        <Check className="h-4 w-4" />
                       </div>
                       <div>
                         <p className="font-bold text-slate-900 text-sm">
@@ -1479,7 +1480,7 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
 
                     <div className="flex gap-3 text-xs">
                       <div className="h-7 w-7 rounded-full bg-amber-50 text-amber-700 flex items-center justify-center shrink-0 font-bold text-sm">
-                        🕒
+                        <Clock className="h-4 w-4" />
                       </div>
                       <div>
                         <p className="font-bold text-slate-900 text-sm">Khung giờ đang mở</p>
@@ -1491,7 +1492,7 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
 
                     <div className="flex gap-3 text-xs">
                       <div className="h-7 w-7 rounded-full bg-purple-50 text-purple-700 flex items-center justify-center shrink-0 font-bold text-sm">
-                        👥
+                        <Users className="h-4 w-4" />
                       </div>
                       <div>
                         <p className="font-bold text-slate-900 text-sm">Slot còn trống</p>
@@ -1554,7 +1555,7 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
         {/* Bottom AI explanation banner */}
         <div className="bg-red-50/40 border border-red-100 rounded-2xl p-5 flex flex-col md:flex-row items-center gap-4 shadow-2xs">
           <div className="h-10 w-10 rounded-xl bg-red-100 text-red-800 flex items-center justify-center shrink-0 text-xl font-bold">
-            ✨
+            <Sparkles className="h-5 w-5" />
           </div>
           <div className="flex-1 text-center md:text-left">
             <h4 className="font-heading font-bold text-slate-900 text-sm sm:text-base">Ghép đối thủ thông minh</h4>
@@ -1564,13 +1565,13 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
           </div>
           <div className="flex flex-wrap justify-center gap-3">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700 shadow-3xs ring-1 ring-slate-100">
-              ⚖️ Trình độ cân bằng
+              <Scale className="h-3.5 w-3.5" /> Trình độ cân bằng
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700 shadow-3xs ring-1 ring-slate-100">
-              🤝 Cộng đồng văn minh
+              <Handshake className="h-3.5 w-3.5" /> Cộng đồng văn minh
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700 shadow-3xs ring-1 ring-slate-100">
-              🛡️ Trải nghiệm an toàn
+              <ShieldCheck className="h-3.5 w-3.5" /> Trải nghiệm an toàn
             </span>
           </div>
         </div>
@@ -1771,45 +1772,45 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
           <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
             <button
               onClick={() => { setSport(""); setLocation("Tất cả khu vực"); setMatchDate("Tất cả ngày"); setMatchTime("Tất cả khung giờ"); setCourtType("Tất cả sân"); setSearch(""); }}
-              className="px-3.5 py-1.5 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs transition cursor-pointer"
+              className="flex items-center px-3.5 py-1.5 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs transition cursor-pointer"
             >
-              🔄 Tất cả sân
+              <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Tất cả sân
             </button>
             <Link
               href="/player/bookings/"
-              className="px-3.5 py-1.5 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs transition cursor-pointer"
+              className="flex items-center px-3.5 py-1.5 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs transition cursor-pointer"
             >
-              📌 Sân đã đặt
+              <CalendarCheck className="mr-1.5 h-3.5 w-3.5" /> Sân đã đặt
             </Link>
             <button
               onClick={() => setActiveTab(activeTab === "favorites" ? "map" : "favorites")}
-              className={`px-3.5 py-1.5 rounded-full border transition cursor-pointer font-semibold text-xs ${
+              className={`flex items-center px-3.5 py-1.5 rounded-full border transition cursor-pointer font-semibold text-xs ${
                 activeTab === "favorites"
                   ? "border-rose-200 bg-rose-50 text-rose-700"
                   : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
               }`}
             >
-              ❤️ Sân yêu thích
+              <Heart className={`mr-1.5 h-3.5 w-3.5 ${activeTab === "favorites" ? "fill-rose-700" : ""}`} /> Sân yêu thích
             </button>
             <button
               onClick={() => setCourtType(courtType === "Sân ngoài trời" ? "Tất cả sân" : "Sân ngoài trời")}
-              className={`px-3.5 py-1.5 rounded-full border transition cursor-pointer font-semibold text-xs ${
+              className={`flex items-center px-3.5 py-1.5 rounded-full border transition cursor-pointer font-semibold text-xs ${
                 courtType === "Sân ngoài trời"
                   ? "border-amber-200 bg-amber-50 text-amber-800"
                   : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
               }`}
             >
-              🚗 Có gửi xe
+              <Car className="mr-1.5 h-3.5 w-3.5" /> Có gửi xe
             </button>
             <button
               onClick={() => setCourtType(courtType === "Sân trong nhà" ? "Tất cả sân" : "Sân trong nhà")}
-              className={`px-3.5 py-1.5 rounded-full border transition cursor-pointer font-semibold text-xs ${
+              className={`flex items-center px-3.5 py-1.5 rounded-full border transition cursor-pointer font-semibold text-xs ${
                 courtType === "Sân trong nhà"
                   ? "border-blue-200 bg-blue-50 text-blue-800"
                   : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
               }`}
             >
-              ❄️ Sân điều hòa
+              <Snowflake className="mr-1.5 h-3.5 w-3.5" /> Sân điều hòa
             </button>
           </div>
         </div>
