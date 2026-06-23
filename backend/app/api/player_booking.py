@@ -126,11 +126,16 @@ class BookingResponse(BaseModel):
     updated_at: datetime
     session_title: str | None = None
     session_starts_at: datetime | None = None
+    session_allows_solo_join: bool = False
     complex_name: str | None = None
     district: str | None = None
     court_name: str | None = None
     sub_court_name: str | None = None
     sport: str | None = None
+
+
+class PublishPoolRequest(BaseModel):
+    open_slots: int
 
 
 @router.get("/discovery/sessions", response_model=list[DiscoverySessionResponse])
@@ -184,3 +189,23 @@ def get_booking_detail(
     user: Annotated[UserPrincipal, Depends(require_player)],
 ) -> dict[str, object]:
     return get_my_booking(player_user_id=user.id, booking_id=booking_id)
+
+@router.post("/bookings/{booking_id}/publish-pool", response_model=dict)
+def publish_pool_post(
+    booking_id: str,
+    payload: PublishPoolRequest,
+    user: Annotated[UserPrincipal, Depends(require_player)],
+) -> dict[str, object]:
+    from app.services.player_booking import publish_booking_as_pool
+    publish_booking_as_pool(player_user_id=user.id, booking_id=booking_id, open_slots=payload.open_slots)
+    return {"status": "ok"}
+
+@router.post("/bookings/{booking_id}/unpublish-pool", response_model=dict)
+def unpublish_pool_post(
+    booking_id: str,
+    user: Annotated[UserPrincipal, Depends(require_player)],
+) -> dict[str, object]:
+    from app.services.player_booking import unpublish_booking_as_pool
+    unpublish_booking_as_pool(player_user_id=user.id, booking_id=booking_id)
+    return {"status": "ok"}
+

@@ -235,6 +235,7 @@ def _booking_from_row(row: Any) -> dict[str, Any]:
         "updated_at": row.updated_at,
         "session_title": str(row.session_title) if row.session_title else None,
         "session_starts_at": row.session_starts_at if hasattr(row, "session_starts_at") else None,
+        "session_allows_solo_join": bool(row.session_allows_solo_join) if hasattr(row, "session_allows_solo_join") else False,
         "complex_name": str(row.complex_name) if row.complex_name else None,
         "district": str(row.district) if row.district else None,
         "court_name": str(row.court_name) if row.court_name else None,
@@ -619,6 +620,7 @@ def _booking_detail_query() -> str:
           b.updated_at,
           s.title AS session_title,
           s.starts_at AS session_starts_at,
+          s.allows_solo_join AS session_allows_solo_join,
           cc.name AS complex_name,
           cc.district,
           c.name AS court_name,
@@ -1039,3 +1041,167 @@ def create_booking_safe(*, player_user_id: str, data: dict[str, Any]) -> dict[st
             code="booking_conflict",
             message="Booking không hợp lệ do dữ liệu xung đột hoặc đã được người khác giữ chỗ",
         ) from exc
+def publish_booking_as_pool(*, player_user_id: str, booking_id: str, open_slots: int) -> dict[str, Any]:
+    with get_engine().begin() as connection:
+        booking = connection.execute(
+            text(
+                """
+                SELECT id, session_id, mode, status, seats_booked
+                FROM public.bookings
+                WHERE id = :booking_id AND player_user_id = :player_user_id
+                FOR UPDATE
+                """
+            ),
+            {"booking_id": booking_id, "player_user_id": player_user_id},
+        ).first()
+
+        if booking is None:
+            raise AppError(status_code=404, code="booking_not_found", message="Không tìm thấy booking")
+
+        if booking.mode != "full_court":
+            raise AppError(status_code=400, code="invalid_booking_mode", message="Chỉ có thể tìm người vãng lai cho booking thuê nguyên sân")
+
+        if str(booking.status) not in ("confirmed", "checked_in", "deposit_paid"):
+            raise AppError(status_code=400, code="invalid_booking_status", message="Chỉ có thể mở booking đã thanh toán hoặc xác nhận")
+
+        session = connection.execute(
+            text(
+                """
+                SELECT id, max_slots, status
+                FROM public.sessions
+                WHERE id = :session_id
+                FOR UPDATE
+                """
+            ),
+            {"session_id": str(booking.session_id)}
+        ).first()
+
+        if open_slots < 1 or open_slots >= int(session.max_slots):
+            raise AppError(status_code=400, code="invalid_open_slots", message=f"Số slot mở phải từ 1 đến {int(session.max_slots) - 1}")
+
+        connection.execute(
+            text(
+                """
+                UPDATE public.sessions
+                SET post_type = CAST('pool' AS public.session_post_type),
+                    allows_solo_join = true,
+                    open_slots = :open_slots
+                WHERE id = :session_id
+                """
+            ),
+            {"session_id": str(session.id), "open_slots": open_slots}
+        )
+
+        connection.execute(
+            text(
+                """
+                INSERT INTO public.pool_posts (
+                  session_id,
+                  host_user_id,
+                  status,
+                  total_slots,
+                  host_slots,
+                  description
+                )
+                VALUES (
+                  :session_id,
+                  :host_user_id,
+                  CAST('open' AS public.pool_post_status),
+                  :total_slots,
+                  :host_slots,
+                  :description
+                )
+                ON CONFLICT (session_id) DO UPDATE SET
+                  host_user_id = EXCLUDED.host_user_id,
+                  status = EXCLUDED.status,
+                  total_slots = EXCLUDED.total_slots,
+                  host_slots = EXCLUDED.host_slots
+                """
+            ),
+            {
+                "session_id": str(session.id),
+                "host_user_id": player_user_id,
+                "total_slots": int(session.max_slots),
+                "host_slots": int(session.max_slots) - open_slots,
+                "description": "Tìm đồng đội ghép sân",
+            }
+        )
+
+        _audit(
+            connection,
+            actor_user_id=player_user_id,
+            event_type="booking_published_as_pool",
+            entity_type="booking",
+            entity_id=str(booking.id),
+            payload={
+                "session_id": str(session.id),
+                "open_slots": open_slots
+            }
+        )
+
+    return {"status": "ok"}
+def unpublish_booking_as_pool(*, player_user_id: str, booking_id: str) -> dict[str, Any]:
+    with get_engine().begin() as connection:
+        booking = connection.execute(
+            text(
+                """
+                SELECT id, session_id, mode, status
+                FROM public.bookings
+                WHERE id = :booking_id AND player_user_id = :player_user_id
+                FOR UPDATE
+                """
+            ),
+            {"booking_id": booking_id, "player_user_id": player_user_id},
+        ).first()
+
+        if booking is None:
+            raise AppError(status_code=404, code="booking_not_found", message="Không tìm thấy booking")
+
+        if booking.mode != "full_court":
+            raise AppError(status_code=400, code="invalid_booking_mode", message="Chỉ có thể tắt tìm người vãng lai cho booking thuê nguyên sân")
+
+        session = connection.execute(
+            text(
+                """
+                SELECT id, status, allows_solo_join
+                FROM public.sessions
+                WHERE id = :session_id
+                FOR UPDATE
+                """
+            ),
+            {"session_id": str(booking.session_id)}
+        ).first()
+
+        if not session.allows_solo_join:
+            raise AppError(status_code=400, code="pool_not_published", message="Booking chưa bật tính năng tìm vãng lai")
+
+        connection.execute(
+            text(
+                """
+                UPDATE public.sessions
+                SET post_type = CAST('rental' AS public.session_post_type),
+                    allows_solo_join = false,
+                    open_slots = 0
+                WHERE id = :session_id
+                """
+            ),
+            {"session_id": str(session.id)}
+        )
+
+        connection.execute(
+            text("DELETE FROM public.pool_posts WHERE session_id = :session_id"),
+            {"session_id": str(session.id)}
+        )
+
+        _audit(
+            connection,
+            actor_user_id=player_user_id,
+            event_type="booking_unpublished_as_pool",
+            entity_type="booking",
+            entity_id=str(booking.id),
+            payload={
+                "session_id": str(session.id)
+            }
+        )
+
+    return {"status": "ok"}
