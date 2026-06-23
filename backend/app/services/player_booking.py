@@ -808,7 +808,7 @@ def create_booking(*, player_user_id: str, data: dict[str, Any]) -> dict[str, An
                 raise AppError(
                     status_code=409,
                     code="booking_already_exists",
-                    message="Tài khoản đã có booking còn hiệu lực cho phiên này",
+                    message="Bạn đã đặt lịch cho phiên này nhưng chưa thanh toán. Vui lòng vào Quản lý lịch đặt -> Sắp tới để tiếp tục thanh toán.",
                 )
 
         if mode == "full_court":
@@ -1067,7 +1067,7 @@ def publish_booking_as_pool(*, player_user_id: str, booking_id: str, open_slots:
         session = connection.execute(
             text(
                 """
-                SELECT id, max_slots, status
+                SELECT id, max_slots, status, full_court_price_vnd
                 FROM public.sessions
                 WHERE id = :session_id
                 FOR UPDATE
@@ -1079,17 +1079,20 @@ def publish_booking_as_pool(*, player_user_id: str, booking_id: str, open_slots:
         if open_slots < 1 or open_slots >= int(session.max_slots):
             raise AppError(status_code=400, code="invalid_open_slots", message=f"Số slot mở phải từ 1 đến {int(session.max_slots) - 1}")
 
+        slot_price_vnd = int(session.full_court_price_vnd / session.max_slots) if session.max_slots > 0 else 0
+
         connection.execute(
             text(
                 """
                 UPDATE public.sessions
                 SET post_type = CAST('pool' AS public.session_post_type),
                     allows_solo_join = true,
-                    open_slots = :open_slots
+                    open_slots = :open_slots,
+                    slot_price_vnd = :slot_price_vnd
                 WHERE id = :session_id
                 """
             ),
-            {"session_id": str(session.id), "open_slots": open_slots}
+            {"session_id": str(session.id), "open_slots": open_slots, "slot_price_vnd": slot_price_vnd}
         )
 
         connection.execute(
@@ -1181,7 +1184,8 @@ def unpublish_booking_as_pool(*, player_user_id: str, booking_id: str) -> dict[s
                 UPDATE public.sessions
                 SET post_type = CAST('rental' AS public.session_post_type),
                     allows_solo_join = false,
-                    open_slots = 0
+                    open_slots = 0,
+                    slot_price_vnd = 0
                 WHERE id = :session_id
                 """
             ),
