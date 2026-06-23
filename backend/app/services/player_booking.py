@@ -163,6 +163,8 @@ def _session_from_row(row: Any) -> dict[str, Any]:
         "sport": str(row.sport),
         "amenities": list(row.amenities or []),
         "base_price_vnd": int(row.base_price_vnd),
+        "min_rental_duration_minutes": int(row.min_rental_duration_minutes),
+        "max_rental_duration_minutes": int(row.max_rental_duration_minutes),
         "complex_id": str(row.complex_id),
         "complex_name": str(row.complex_name),
         "district": str(row.district),
@@ -300,6 +302,8 @@ def _session_select_sql(where_clause: str) -> str:
           c.sport::text AS sport,
           c.amenities,
           c.base_price_vnd,
+          c.min_rental_duration_minutes,
+          c.max_rental_duration_minutes,
           cc.id AS complex_id,
           cc.name AS complex_name,
           cc.district,
@@ -678,70 +682,132 @@ def create_booking(*, player_user_id: str, data: dict[str, Any]) -> dict[str, An
             message="Phương thức thanh toán không hợp lệ",
         )
 
+    session_ids = data.get("session_ids") or []
+    if not session_ids and "session_id" in data:
+        session_ids = [str(data["session_id"])]
+        
+    if not session_ids:
+        raise AppError(status_code=400, code="missing_session", message="Cần chọn ít nhất 1 khung giờ")
+
     with get_engine().begin() as connection:
-        session = connection.execute(
-            text(
-                """
+        _expire_overdue_deposit_bookings(connection, player_user_id=player_user_id, session_id=None)
+
+        placeholders = ", ".join(f":s{i}" for i in range(len(session_ids)))
+        params = {f"s{i}": s_id for i, s_id in enumerate(session_ids)}
+        
+        sessions_rows = connection.execute(
+            text(f"""
                 SELECT
                   s.id,
                   s.court_id,
+                  s.created_by_user_id,
                   s.title,
                   s.status::text AS status,
                   s.starts_at,
+                  s.ends_at,
+                  s.duration_minutes,
                   s.open_slots,
                   s.max_slots,
                   s.slot_price_vnd,
                   s.full_court_price_vnd,
-                  s.allows_solo_join
+                  s.allows_solo_join,
+                  s.post_type::text AS post_type,
+                  c.min_rental_duration_minutes
                 FROM public.sessions s
-                WHERE s.id = :session_id
+                JOIN public.courts c ON c.id = s.court_id
+                WHERE s.id IN ({placeholders})
+                ORDER BY s.starts_at ASC
                 FOR UPDATE
-                """
-            ),
-            {"session_id": data["session_id"]},
-        ).first()
-        if session is None:
+            """),
+            params
+        ).all()
+
+        if len(sessions_rows) != len(session_ids):
+             raise AppError(status_code=404, code="session_not_found", message="Một số khung giờ không tồn tại hoặc đã bị đặt")
+
+        first_s = sessions_rows[0]
+        court_id = first_s.court_id
+        for i, s in enumerate(sessions_rows):
+            if str(s.status) not in SESSION_DISCOVERY_STATUSES:
+                 raise AppError(status_code=409, code="session_not_bookable", message="Một số khung giờ không còn nhận booking")
+            if str(s.court_id) != str(court_id):
+                 raise AppError(status_code=400, code="invalid_sessions", message="Các khung giờ phải thuộc cùng một sân")
+            if s.starts_at <= datetime.now(UTC):
+                 raise AppError(status_code=409, code="session_already_started", message="Phiên sân đã qua giờ nhận booking")
+            if i > 0:
+                prev_s = sessions_rows[i-1]
+                if s.starts_at != prev_s.ends_at:
+                    raise AppError(status_code=400, code="invalid_sessions", message="Các khung giờ phải liên tiếp nhau")
+
+        total_full_price = sum(int(s.full_court_price_vnd) for s in sessions_rows)
+        total_slot_price = sum(int(s.slot_price_vnd) for s in sessions_rows)
+        total_duration = sum(int(s.duration_minutes) for s in sessions_rows)
+
+        if total_duration < int(first_s.min_rental_duration_minutes):
             raise AppError(
-                status_code=404,
-                code="session_not_found",
-                message="Không tìm thấy phiên sân",
-            )
-        if str(session.status) not in SESSION_DISCOVERY_STATUSES:
-            raise AppError(
-                status_code=409,
-                code="session_not_bookable",
-                message="Phiên sân không còn nhận booking",
-            )
-        if session.starts_at <= datetime.now(UTC):
-            raise AppError(
-                status_code=409,
-                code="session_already_started",
-                message="Phiên sân đã bắt đầu hoặc đã qua giờ nhận booking",
+                status_code=400,
+                code="insufficient_booking_duration",
+                message=f"Sân này yêu cầu đặt tối thiểu {first_s.min_rental_duration_minutes} phút."
             )
 
-        _expire_overdue_deposit_bookings(
-            connection, player_user_id=player_user_id, session_id=str(session.id)
-        )
-
-        active_booking = connection.execute(
-            text(
-                """
-                SELECT id
-                FROM public.bookings
-                WHERE session_id = :session_id
-                  AND player_user_id = :player_user_id
-                  AND status NOT IN ('cancelled', 'expired')
-                LIMIT 1
-                """
-            ),
-            {"session_id": data["session_id"], "player_user_id": player_user_id},
-        ).first()
-        if active_booking is not None:
-            raise AppError(
-                status_code=409,
-                code="booking_already_exists",
-                message="Tài khoản đã có booking còn hiệu lực cho phiên này",
+        if len(session_ids) > 1:
+            connection.execute(
+                text(f"DELETE FROM public.sessions WHERE id IN ({placeholders})"),
+                params
             )
+            starts_local = first_s.starts_at.astimezone()
+            ends_local = sessions_rows[-1].ends_at.astimezone()
+            merged_title = f"Ca {starts_local.strftime('%H:%M')} - {ends_local.strftime('%H:%M')}"
+            
+            session = connection.execute(
+                text("""
+                    INSERT INTO public.sessions (
+                        court_id, created_by_user_id, title, post_type, status,
+                        starts_at, duration_minutes, ends_at,
+                        open_slots, max_slots, slot_price_vnd, full_court_price_vnd, allows_solo_join
+                    ) VALUES (
+                        :court_id, :created_by_user_id, :title, CAST(:post_type AS public.session_post_type), CAST(:status AS public.session_status),
+                        :starts_at, :duration_minutes, :ends_at,
+                        :open_slots, :max_slots, :slot_price_vnd, :full_court_price_vnd, :allows_solo_join
+                    ) RETURNING id, court_id, title, status::text, starts_at, open_slots, max_slots, slot_price_vnd, full_court_price_vnd, allows_solo_join
+                """),
+                {
+                    "court_id": court_id,
+                    "created_by_user_id": first_s.created_by_user_id,
+                    "title": merged_title,
+                    "post_type": first_s.post_type,
+                    "status": first_s.status,
+                    "starts_at": first_s.starts_at,
+                    "duration_minutes": total_duration,
+                    "ends_at": sessions_rows[-1].ends_at,
+                    "open_slots": first_s.open_slots,
+                    "max_slots": first_s.max_slots,
+                    "slot_price_vnd": total_slot_price,
+                    "full_court_price_vnd": total_full_price,
+                    "allows_solo_join": first_s.allows_solo_join
+                }
+            ).first()
+        else:
+            session = first_s
+            
+            # Check active booking only for single session (merged session is fresh so no active booking exists yet)
+            active_booking = connection.execute(
+                text("""
+                    SELECT id
+                    FROM public.bookings
+                    WHERE session_id = :session_id
+                      AND player_user_id = :player_user_id
+                      AND status NOT IN ('cancelled', 'expired')
+                    LIMIT 1
+                """),
+                {"session_id": session.id, "player_user_id": player_user_id},
+            ).first()
+            if active_booking is not None:
+                raise AppError(
+                    status_code=409,
+                    code="booking_already_exists",
+                    message="Tài khoản đã có booking còn hiệu lực cho phiên này",
+                )
 
         if mode == "full_court":
             seats_booked = int(session.max_slots)

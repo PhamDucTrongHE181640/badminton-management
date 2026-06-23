@@ -292,6 +292,8 @@ type GroupedCourt = {
   address: string;
   district: string;
   basePrice: number;
+  minRentalDurationMinutes: number;
+  maxRentalDurationMinutes: number;
   amenities: string[];
   rating: string;
   distance: string;
@@ -360,7 +362,7 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
     if (sport) params.set("sport", sport);
     if (district.trim()) params.set("district", district.trim());
     if (effectivePostType) params.set("post_type", effectivePostType);
-    if (openOnly) params.set("has_open_slots", "true");
+    if (openOnly && !isBookingMode) params.set("has_open_slots", "true");
     return params.toString();
   }, [district, effectivePostType, openOnly, sport]);
 
@@ -551,7 +553,7 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
   const busiestTime = visibleMatchmakingSessions.length > 0 ? visibleMatchmakingSessions[0].time : "Chưa có khung giờ";
 
   // RENDER BOOKING MODE STATE AND LOGIC (Moved up to follow React Hook rules)
-  const [selectedSlots, setSelectedSlots] = useState<Record<string, string>>({});
+  const [selectedSlots, setSelectedSlots] = useState<Record<string, string[]>>({});
   const [selectedCourtKey, setSelectedCourtKey] = useState<string | null>(null);
   const [activeBookingTab, setActiveBookingTab] = useState<"all" | "empty" | "near">("all");
 
@@ -601,6 +603,8 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
           address: session.address,
           district: session.district,
           basePrice: session.full_court_price_vnd,
+          minRentalDurationMinutes: (session as any).min_rental_duration_minutes || 60,
+          maxRentalDurationMinutes: (session as any).max_rental_duration_minutes || 120,
           amenities: session.amenities,
           rating: ratingLabel(session, index),
           distance: distanceLabel(session, index),
@@ -1869,7 +1873,7 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
               <div className="space-y-4">
                 {filteredGroupedCourts.map((court, idx) => {
                   const courtKey = `${court.complexName}-${court.subCourtName}`;
-                  const selectedSessionIdForCourt = selectedSlots[courtKey] || court.slots[0]?.sessionId;
+                  const selectedSessionIdsForCourt = selectedSlots[courtKey] || [];
                   
                   // Total slots empty check
                   const emptySlotsCount = court.slots.filter(s => s.openSlots > 0).length;
@@ -1931,35 +1935,76 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
                           </div>
 
                           {/* Time Slots Button Grid */}
-                          <div className="mt-3.5 space-y-1.5">
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Khung giờ trống hôm nay</p>
+                          <div className={`mt-4 space-y-1.5 transition-all duration-300 ${selectedCourtKey === courtKey ? 'animate-in slide-in-from-top-2 fade-in' : ''}`}>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                              Khung giờ trống hôm nay {selectedCourtKey === courtKey && `(Tối thiểu ${court.minRentalDurationMinutes} phút)`}
+                            </p>
                             <div className="flex flex-wrap gap-1.5">
-                              {court.slots.map((slot) => {
-                                const isSelected = selectedSessionIdForCourt === slot.sessionId;
+                              {(selectedCourtKey === courtKey ? court.slots : court.slots.slice(0, 5)).map((slot) => {
+                                const isSelected = selectedSessionIdsForCourt.includes(slot.sessionId);
+                                const isBooked = slot.openSlots === 0;
                                 return (
                                   <button
                                     key={slot.sessionId}
                                     type="button"
+                                    title={isBooked ? "Đã có người đặt trước" : ""}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      setSelectedSlots({ ...selectedSlots, [courtKey]: slot.sessionId });
+                                      if (isBooked) return;
+                                      
+                                      if (selectedCourtKey !== courtKey) {
+                                        setSelectedCourtKey(courtKey);
+                                      }
+                                      setSelectedSlots(prev => {
+                                        const arr = prev[courtKey] || [];
+                                        const sortedIndices = arr.map(id => court.slots.findIndex(s => s.sessionId === id)).sort((a,b) => a - b);
+                                        const slotIndex = court.slots.findIndex(s => s.sessionId === slot.sessionId);
+
+                                        if (arr.includes(slot.sessionId)) {
+                                          if (arr.length > 1 && slotIndex !== sortedIndices[0] && slotIndex !== sortedIndices[sortedIndices.length - 1]) {
+                                            alert("Vui lòng bỏ chọn các khung giờ ở hai đầu trước.");
+                                            return prev;
+                                          }
+                                          return { ...prev, [courtKey]: arr.filter(id => id !== slot.sessionId) };
+                                        } else {
+                                          if (arr.length > 0 && slotIndex !== sortedIndices[0] - 1 && slotIndex !== sortedIndices[sortedIndices.length - 1] + 1) {
+                                            alert("Vui lòng chọn các khung giờ liên tiếp.");
+                                            return prev;
+                                          }
+                                          return { ...prev, [courtKey]: [...arr, slot.sessionId] };
+                                        }
+                                      });
                                     }}
-                                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition border cursor-pointer ${
-                                      isSelected
-                                        ? "bg-red-50 text-[#b00c14] border-red-200 shadow-3xs"
-                                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                                    className={`px-3 py-1.5 text-xs font-bold rounded-lg transition border ${
+                                      isBooked
+                                        ? "bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed opacity-60"
+                                        : isSelected
+                                        ? "bg-red-50 text-[#b00c14] border-red-200 shadow-3xs cursor-pointer"
+                                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50 cursor-pointer"
                                     }`}
                                   >
                                     {slot.timeLabel}
                                   </button>
                                 );
                               })}
+                              {selectedCourtKey !== courtKey && court.slots.length > 5 && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedCourtKey(courtKey);
+                                  }}
+                                  className="px-3 py-1.5 text-xs font-bold rounded-lg transition border border-slate-200 bg-slate-50 text-slate-500 cursor-pointer hover:bg-slate-100"
+                                >
+                                  +{court.slots.length - 5}
+                                </button>
+                              )}
                             </div>
                           </div>
                         </div>
 
-                        {/* Amenities Tags */}
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-400 mt-3 pt-2 border-t border-slate-100">
+                        {/* Amenities Tags (Always visible like in the image) */}
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-400 mt-4 pt-3 border-t border-slate-100">
                           <span className="flex items-center gap-1">🏓 {court.sport}</span>
                           <span>•</span>
                           <span>Có gửi xe</span>
@@ -1976,22 +2021,59 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
 
                       {/* Right: Price and CTA Button */}
                       <div className="w-full sm:w-36 shrink-0 border-t sm:border-t-0 sm:border-l border-slate-100 pt-3.5 sm:pt-0 sm:pl-4 flex flex-col justify-between items-stretch sm:items-end py-0.5">
-                        <div className="text-left sm:text-right">
-                          <p className="text-[10px] font-bold text-slate-400 uppercase">Giá thuê</p>
-                          <p className="font-heading text-lg font-black text-slate-900 leading-snug mt-1">
-                            {formatVnd(court.basePrice)}
-                            <span className="text-[11px] font-semibold text-slate-400">/giờ</span>
-                          </p>
-                          <p className="text-[10px] text-emerald-700 font-bold mt-1">✓ Còn trống</p>
+                        <div className="text-left sm:text-right flex items-center sm:items-end justify-between sm:flex-col sm:justify-start w-full">
+                          <div>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase hidden sm:block">Giá thuê</p>
+                            <p className="font-heading text-lg font-black text-slate-900 leading-snug mt-0 sm:mt-1">
+                              {formatVnd(court.basePrice)}
+                              <span className="text-[11px] font-semibold text-slate-400">/giờ</span>
+                            </p>
+                            <p className="text-[10px] text-emerald-700 font-bold mt-1 hidden sm:block">✓ Còn trống</p>
+                          </div>
+                          
+                          {/* Caret indicating expansion state */}
+                          <div className="sm:hidden text-slate-400">
+                            <svg className={`h-5 w-5 transition-transform duration-300 ${selectedCourtKey === courtKey ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </div>
                         </div>
 
-                        <Link
-                          href={user ? `/player/booking?sessionId=${selectedSessionIdForCourt}&mode=full_court` : loginUrl()}
-                          onClick={(e) => e.stopPropagation()}
-                          className="mt-3 w-full inline-flex h-9 items-center justify-center rounded-xl bg-red-800 hover:bg-red-900 text-xs font-bold text-white transition shadow-xs cursor-pointer text-center whitespace-nowrap"
-                        >
-                          Đặt sân
-                        </Link>
+                        {selectedCourtKey === courtKey ? (
+                          <Link
+                            href={user ? `/player/booking?sessionIds=${selectedSessionIdsForCourt.join(",")}&mode=full_court` : loginUrl()}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (selectedSessionIdsForCourt.length === 0) {
+                                e.preventDefault();
+                                alert(`Vui lòng chọn khung giờ để đặt. Thời gian tối thiểu là ${court.minRentalDurationMinutes} phút.`);
+                              } else if (selectedSessionIdsForCourt.length * 30 < court.minRentalDurationMinutes) {
+                                e.preventDefault();
+                                alert(`Bạn cần chọn thời gian tối thiểu là ${court.minRentalDurationMinutes} phút.`);
+                              }
+                            }}
+                            className={`mt-3 w-full inline-flex h-9 items-center justify-center rounded-xl font-bold transition shadow-xs cursor-pointer text-center whitespace-nowrap text-xs ${
+                              selectedSessionIdsForCourt.length * 30 >= court.minRentalDurationMinutes
+                                ? "bg-red-800 hover:bg-red-900 text-white"
+                                : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                            }`}
+                          >
+                            <CalendarCheck className="w-3.5 h-3.5 mr-1.5" />
+                            Đặt sân
+                          </Link>
+                        ) : (
+                          <button 
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedCourtKey(courtKey);
+                            }}
+                            className="mt-3 w-full hidden sm:inline-flex h-9 items-center justify-center rounded-xl font-bold transition shadow-xs cursor-pointer text-center whitespace-nowrap text-xs bg-[#b00c14] hover:bg-red-900 text-white"
+                          >
+                            <CalendarCheck className="w-3.5 h-3.5 mr-1.5" />
+                            Đặt sân
+                          </button>
+                        )}
                       </div>
                     </article>
                   );
@@ -2129,7 +2211,14 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
                   
                   {/* Chevron Button Link to Booking Page */}
                   <Link
-                    href={user ? `/player/booking?sessionId=${selectedSlots[`${activeCourt.complexName}-${activeCourt.subCourtName}`] || activeCourt.slots[0]?.sessionId}&mode=full_court` : loginUrl()}
+                    href={user ? `/player/booking?sessionIds=${(selectedSlots[`${activeCourt.complexName}-${activeCourt.subCourtName}`] || []).join(",")}&mode=full_court` : loginUrl()}
+                    onClick={(e) => {
+                      const slots = selectedSlots[`${activeCourt.complexName}-${activeCourt.subCourtName}`] || [];
+                      if (slots.length === 0) {
+                        e.preventDefault();
+                        alert("Vui lòng chọn ít nhất 1 khung giờ");
+                      }
+                    }}
                     className="h-8 w-8 rounded-full bg-slate-50 hover:bg-red-50 hover:text-red-700 transition flex items-center justify-center shrink-0 border border-slate-100 cursor-pointer text-slate-700 font-bold"
                   >
                     ➔

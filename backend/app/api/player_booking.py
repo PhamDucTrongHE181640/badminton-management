@@ -76,6 +76,8 @@ class DiscoverySessionResponse(BaseModel):
     sport: str
     amenities: list[str]
     base_price_vnd: int
+    min_rental_duration_minutes: int
+    max_rental_duration_minutes: int
     complex_id: str
     complex_name: str
     district: str
@@ -92,7 +94,8 @@ class DiscoverySessionResponse(BaseModel):
 
 
 class BookingCreate(PlayerModel):
-    session_id: str
+    session_id: str | None = None
+    session_ids: list[str] | None = None
     mode: BookingMode
     payment_method: PaymentMethod
     seats_booked: int | None = Field(default=None, ge=1, le=2)

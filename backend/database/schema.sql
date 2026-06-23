@@ -269,6 +269,9 @@ CREATE TABLE IF NOT EXISTS public.courts (
   max_rental_duration_minutes integer NOT NULL CHECK (
     max_rental_duration_minutes IN (30, 60, 90, 120, 150, 180, 210, 240, 270, 300)
   ),
+  min_rental_duration_minutes integer NOT NULL DEFAULT 60 CHECK (
+    min_rental_duration_minutes IN (30, 60, 90, 120, 150, 180, 210, 240, 270, 300)
+  ),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (complex_id, sub_court_name)

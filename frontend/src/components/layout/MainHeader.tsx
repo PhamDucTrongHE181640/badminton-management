@@ -6,12 +6,13 @@ import { useEffect, useState } from "react";
 import { HeaderUserAuth, UserProfile } from "./HeaderUserAuth";
 import { apiFetch } from "@/lib/http";
 
-const navLinks = [
+const baseNavLinks = [
   { href: "/", label: "Trang Chủ" },
   { href: "/player/discovery?mode=booking", label: "Đặt sân riêng" },
   { href: "/player/discovery?mode=matchmaking", label: "Xếp đối vãng lai" },
   { href: "/player/tournaments", label: "Giải đấu" },
-  { href: "/contact", label: "Liên hệ" },
+  { href: "/owner/courts", label: "Quản lý sân", requireRole: "owner" },
+  { href: "/contact", label: "Liên hệ", requireRole: "player" },
 ];
 
 function splitHref(href: string) {
@@ -98,8 +99,12 @@ export function MainHeader() {
           </Link>
 
           <nav className="hidden h-full items-center gap-5 text-sm font-semibold xl:flex 2xl:gap-6">
-            {navLinks
-              .filter((item) => !(isOwner && item.href === "/contact"))
+            {baseNavLinks
+              .filter((item) => {
+                if (item.requireRole === "owner" && !isOwner) return false;
+                if (item.requireRole === "player" && isOwner) return false;
+                return true;
+              })
               .map((item) => {
                 const active = isActive(item.href);
                 return (
@@ -212,8 +217,12 @@ export function MainHeader() {
         <>
           <div className="fixed inset-0 top-[72px] z-30 bg-slate-900/20 backdrop-blur-xs xl:hidden" onClick={() => setIsMobileMenuOpen(false)} />
           <div className="absolute left-0 right-0 top-[72px] z-40 flex max-h-[calc(100vh-72px)] flex-col gap-2 overflow-y-auto border-b border-slate-200 bg-white p-4 shadow-xl xl:hidden">
-            {navLinks
-              .filter((item) => !(isOwner && item.href === "/contact"))
+            {baseNavLinks
+              .filter((item) => {
+                if (item.requireRole === "owner" && !isOwner) return false;
+                if (item.requireRole === "player" && isOwner) return false;
+                return true;
+              })
               .map((item) => {
                 const active = isActive(item.href);
                 return (

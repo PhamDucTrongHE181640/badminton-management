@@ -70,6 +70,7 @@ type DepositIntent = {
 function BookingCreateContent() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("sessionId") ?? "";
+  const sessionIdsParam = searchParams.get("sessionIds") ?? "";
   const modeParam = searchParams.get("mode");
   
   // URL Params for payment result
@@ -120,7 +121,9 @@ function BookingCreateContent() {
   }
 
   async function loadSession() {
-    if (!sessionId) {
+    const idsToFetch = sessionIdsParam ? sessionIdsParam.split(",") : (sessionId ? [sessionId] : []);
+    
+    if (idsToFetch.length === 0 || !idsToFetch[0]) {
       setSession(null);
       setMessage("Hãy chọn một khung giờ từ trang đặt sân trước.");
       return;
@@ -128,12 +131,30 @@ function BookingCreateContent() {
 
     setError("");
     try {
-      const detail = await apiFetch<SessionDetail>(`/api/v1/player/sessions/${sessionId}`, {
-        credentials: "include",
-      });
-      setSession(detail);
-      if (!detail.allows_solo_join || modeParam === "full_court") {
-        setMode("full_court");
+      if (idsToFetch.length === 1) {
+        const detail = await apiFetch<SessionDetail>(`/api/v1/player/sessions/${idsToFetch[0]}`, {
+          credentials: "include",
+        });
+        setSession(detail);
+        if (!detail.allows_solo_join || modeParam === "full_court") {
+          setMode("full_court");
+        }
+      } else {
+        let combined: SessionDetail | null = null;
+        for (const id of idsToFetch) {
+          const detail = await apiFetch<SessionDetail>(`/api/v1/player/sessions/${id}`, {
+            credentials: "include",
+          });
+          if (!combined) {
+            combined = detail;
+          } else {
+            combined.duration_minutes += detail.duration_minutes;
+            combined.slot_price_vnd += detail.slot_price_vnd;
+            combined.full_court_price_vnd += detail.full_court_price_vnd;
+          }
+        }
+        setSession(combined);
+        setMode("full_court"); // Multiple slots must be full court for now
       }
       setMessage("Vui lòng chọn phương thức thanh toán để xác nhận giữ chỗ.");
     } catch (caught) {
@@ -147,7 +168,7 @@ function BookingCreateContent() {
     if (!statusParam) {
       void loadSession();
     }
-  }, [sessionId, statusParam]);
+  }, [sessionId, sessionIdsParam, statusParam]);
 
   const estimate = useMemo(() => {
     if (!session) return null;
@@ -171,10 +192,16 @@ function BookingCreateContent() {
     try {
       // 1. Create booking payload
       const payload: Record<string, unknown> = {
-        session_id: session.id,
         mode,
         payment_method: "vnpay", // Force VNPay for online checkout
       };
+      const ids = sessionIdsParam ? sessionIdsParam.split(",") : (sessionId ? [sessionId] : []);
+      if (ids.length > 1) {
+        payload.session_ids = ids;
+      } else {
+        payload.session_id = ids[0];
+      }
+      
       if (mode === "solo") {
         payload.seats_booked = estimate.seats;
       }
@@ -525,7 +552,7 @@ function BookingCreateContent() {
   }
 
   // Render standard checkout form (2 Columns: Method list & details list)
-  if (!sessionId) {
+  if (!sessionId && !sessionIdsParam) {
     return (
       <EmptyState
         title="Chưa chọn khung giờ"

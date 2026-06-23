@@ -75,6 +75,7 @@ class CourtCreate(InventoryModel):
     amenities: list[str] = Field(default_factory=list)
     base_price_vnd: int = Field(ge=0)
     max_rental_duration_minutes: int = Field(ge=30, le=300)
+    min_rental_duration_minutes: int = Field(default=60, ge=30, le=300)
 
 
 class CourtUpdate(InventoryModel):
@@ -87,6 +88,7 @@ class CourtUpdate(InventoryModel):
     amenities: list[str] | None = None
     base_price_vnd: int | None = Field(default=None, ge=0)
     max_rental_duration_minutes: int | None = Field(default=None, ge=30, le=300)
+    min_rental_duration_minutes: int | None = Field(default=None, ge=30, le=300)
 
 
 class CourtResponse(BaseModel):
@@ -102,6 +104,7 @@ class CourtResponse(BaseModel):
     amenities: list[str]
     base_price_vnd: int
     max_rental_duration_minutes: int
+    min_rental_duration_minutes: int
     created_at: datetime
     updated_at: datetime
     complex_name: str | None = None

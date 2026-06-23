@@ -44,6 +44,7 @@ def _court_from_row(row: Any) -> dict[str, Any]:
         "amenities": list(row.amenities or []),
         "base_price_vnd": int(row.base_price_vnd),
         "max_rental_duration_minutes": int(row.max_rental_duration_minutes),
+        "min_rental_duration_minutes": int(getattr(row, "min_rental_duration_minutes", 60)),
         "created_at": row.created_at,
         "updated_at": row.updated_at,
         "complex_name": (
@@ -213,6 +214,7 @@ def _require_court(connection: Any, *, owner_user_id: str, court_id: str) -> Any
               c.amenities,
               c.base_price_vnd,
               c.max_rental_duration_minutes,
+              c.min_rental_duration_minutes,
               c.created_at,
               c.updated_at,
               cc.name AS complex_name,
@@ -484,7 +486,13 @@ def _validate_session_rules(
         raise AppError(
             status_code=422,
             code="session_duration_exceeds_court_limit",
-            message="Thời lượng phiên vượt quá giới hạn thuê của sân",
+            message="Thời lượng phiên vượt quá giới hạn thuê tối đa của sân",
+        )
+    if duration_minutes < int(getattr(court, "min_rental_duration_minutes", 60)):
+        raise AppError(
+            status_code=422,
+            code="session_duration_below_court_limit",
+            message="Thời lượng phiên chưa đạt giới hạn thuê tối thiểu của sân",
         )
 
     if status not in ACTIVE_SESSION_STATUSES:
@@ -864,6 +872,7 @@ def list_courts(*, owner_user_id: str, complex_id: str | None = None) -> list[di
                   c.amenities,
                   c.base_price_vnd,
                   c.max_rental_duration_minutes,
+                  c.min_rental_duration_minutes,
                   c.created_at,
                   c.updated_at,
                   cc.name AS complex_name,
@@ -881,6 +890,7 @@ def list_courts(*, owner_user_id: str, complex_id: str | None = None) -> list[di
 
 def create_court(*, owner_user_id: str, data: dict[str, Any]) -> dict[str, Any]:
     _validate_duration(int(data["max_rental_duration_minutes"]))
+    _validate_duration(int(data.get("min_rental_duration_minutes", 60)))
     data = {**data, "image_url": _clean_optional_text(data.get("image_url"))}
     with get_engine().begin() as connection:
         _require_complex(connection, owner_user_id=owner_user_id, complex_id=data["complex_id"])
@@ -897,7 +907,8 @@ def create_court(*, owner_user_id: str, data: dict[str, Any]) -> dict[str, Any]:
                   image_url,
                   amenities,
                   base_price_vnd,
-                  max_rental_duration_minutes
+                  max_rental_duration_minutes,
+                  min_rental_duration_minutes
                 )
                 VALUES (
                   :complex_id,
@@ -909,7 +920,8 @@ def create_court(*, owner_user_id: str, data: dict[str, Any]) -> dict[str, Any]:
                   :image_url,
                   CAST(:amenities AS text[]),
                   :base_price_vnd,
-                  :max_rental_duration_minutes
+                  :max_rental_duration_minutes,
+                  :min_rental_duration_minutes
                 )
                 RETURNING
                   id,
@@ -924,6 +936,7 @@ def create_court(*, owner_user_id: str, data: dict[str, Any]) -> dict[str, Any]:
                   amenities,
                   base_price_vnd,
                   max_rental_duration_minutes,
+                  min_rental_duration_minutes,
                   created_at,
                   updated_at,
                   NULL::text AS complex_name,
@@ -951,6 +964,8 @@ def update_court(*, owner_user_id: str, court_id: str, data: dict[str, Any]) -> 
             )
     if "max_rental_duration_minutes" in data:
         _validate_duration(int(data["max_rental_duration_minutes"]))
+    if "min_rental_duration_minutes" in data:
+        _validate_duration(int(data["min_rental_duration_minutes"]))
 
     if "complex_id" in data:
         with get_engine().begin() as connection:
@@ -969,6 +984,9 @@ def update_court(*, owner_user_id: str, court_id: str, data: dict[str, Any]) -> 
         "base_price_vnd": "base_price_vnd = :base_price_vnd",
         "max_rental_duration_minutes": (
             "max_rental_duration_minutes = :max_rental_duration_minutes"
+        ),
+        "min_rental_duration_minutes": (
+            "min_rental_duration_minutes = :min_rental_duration_minutes"
         ),
     }
     assignments = [allowed_columns[key] for key in data]
@@ -993,6 +1011,7 @@ def update_court(*, owner_user_id: str, court_id: str, data: dict[str, Any]) -> 
                   amenities,
                   base_price_vnd,
                   max_rental_duration_minutes,
+                  min_rental_duration_minutes,
                   created_at,
                   updated_at,
                   NULL::text AS complex_name,

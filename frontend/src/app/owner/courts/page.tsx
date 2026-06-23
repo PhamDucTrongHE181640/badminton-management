@@ -107,6 +107,7 @@ export default function OwnerCourtsPage() {
   const [amenities, setAmenities] = useState("Có chỗ gửi xe, Đèn LED");
   const [basePrice, setBasePrice] = useState("120000");
   const [maxRentalDuration, setMaxRentalDuration] = useState("120");
+  const [minRentalDuration, setMinRentalDuration] = useState("60");
 
   const [postKind, setPostKind] = useState<PostKind>("rental");
   const [sessionCourtId, setSessionCourtId] = useState("");
@@ -130,6 +131,17 @@ export default function OwnerCourtsPage() {
   const selectedCourt = activeCourts.find((item) => item.id === sessionCourtId);
   const rentalPosts = upcomingSessions.filter((item) => item.post_type === "rental").length;
   const slotPosts = upcomingSessions.filter((item) => item.post_type === "pool").length;
+
+  const groupedSessions = useMemo(() => {
+    const groups: Record<string, Session[]> = {};
+    sessions.forEach(session => {
+      const key = session.court_name ? session.court_name : "Sân chưa rõ";
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(session);
+    });
+    return groups;
+  }, [sessions]);
+  const [expandedCourtGroup, setExpandedCourtGroup] = useState<string | null>(null);
 
   async function loadInventory() {
     setError("");
@@ -196,6 +208,7 @@ export default function OwnerCourtsPage() {
           amenities: amenities.split(",").map((item) => item.trim()).filter(Boolean),
           base_price_vnd: Number(basePrice),
           max_rental_duration_minutes: Number(maxRentalDuration),
+          min_rental_duration_minutes: Number(minRentalDuration),
         }),
       });
       setCourtName("");
@@ -327,10 +340,15 @@ export default function OwnerCourtsPage() {
                 <input className={inputClassName} value={subCourtName} onChange={(event) => setSubCourtName(event.target.value)} required />
               </Field>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-3">
               <Field label="Môn">
                 <select className={inputClassName} value={sport} onChange={(event) => setSport(event.target.value)}>
                   {sportOptions.map((item) => <option key={item} value={item}>{sportLabel(item)}</option>)}
+                </select>
+              </Field>
+              <Field label="Thuê tối thiểu">
+                <select className={inputClassName} value={minRentalDuration} onChange={(event) => setMinRentalDuration(event.target.value)}>
+                  {durationOptions.map((item) => <option key={item} value={item}>{item} phút</option>)}
                 </select>
               </Field>
               <Field label="Tối đa mỗi lần thuê">
@@ -474,25 +492,54 @@ export default function OwnerCourtsPage() {
             {sessions.length === 0 ? (
               <p className="text-sm text-slate-600">Chưa có bài đăng.</p>
             ) : (
-              <div className="grid gap-3 lg:grid-cols-2">
-                {sessions.map((item) => (
-                  <article key={item.id} className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-[120px_1fr]">
-                    <img src={imageForPost(item, courts)} alt={item.title} className="h-28 w-full rounded-lg object-cover" />
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <h3 className="font-semibold text-slate-950">{item.title}</h3>
-                        <Badge tone={item.post_type === "rental" ? "warning" : "success"}>{postTypeLabel(item.post_type)}</Badge>
-                      </div>
-                      <p className="mt-1 text-sm text-slate-600">{item.court_name ?? "Sân"} · {formatTimeRange(item.starts_at, item.duration_minutes)}</p>
-                      <p className="mt-1 text-sm text-slate-600">
-                        {item.open_slots}/{item.max_slots} slot · {item.post_type === "rental" ? formatVnd(item.full_court_price_vnd) : `${formatVnd(item.slot_price_vnd)}/slot`}
-                      </p>
-                      <Button className="mt-3" variant="danger" size="sm" onClick={() => remove(`/api/v1/owner/sessions/${item.id}`)}>
-                        Xóa bài
-                      </Button>
+              <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
+                {Object.entries(groupedSessions).map(([courtName, courtSessions]) => {
+                  const isExpanded = expandedCourtGroup === courtName;
+                  return (
+                    <div key={courtName} className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedCourtGroup(isExpanded ? null : courtName)}
+                        className="w-full flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 transition text-left"
+                      >
+                        <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                          🏟️ {courtName} 
+                          <Badge tone="neutral" className="ml-2">{courtSessions.length} bài</Badge>
+                        </h3>
+                        <span className="text-slate-400">
+                          {isExpanded ? '▲' : '▼'}
+                        </span>
+                      </button>
+                      
+                      {isExpanded && (
+                        <div className="p-4 grid gap-3 lg:grid-cols-2 bg-white animate-in slide-in-from-top-2 fade-in duration-200">
+                          {courtSessions.map((item) => (
+                            <article key={item.id} className="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-[100px_1fr]">
+                              <img src={imageForPost(item, courts)} alt={item.title} className="h-24 w-full rounded-lg object-cover" />
+                              <div className="min-w-0 flex flex-col justify-between">
+                                <div>
+                                  <div className="flex flex-wrap items-start justify-between gap-1">
+                                    <h3 className="font-semibold text-slate-950 text-sm line-clamp-1">{item.title}</h3>
+                                    <Badge tone={item.post_type === "rental" ? "warning" : "success"} className="text-[10px]">
+                                      {postTypeLabel(item.post_type)}
+                                    </Badge>
+                                  </div>
+                                  <p className="mt-1 text-xs text-slate-600 font-medium">🕒 {formatTimeRange(item.starts_at, item.duration_minutes)}</p>
+                                  <p className="mt-1 text-xs text-slate-600">
+                                    {item.open_slots}/{item.max_slots} slot · {item.post_type === "rental" ? formatVnd(item.full_court_price_vnd) : `${formatVnd(item.slot_price_vnd)}/slot`}
+                                  </p>
+                                </div>
+                                <Button className="mt-2 text-xs h-7 py-0" variant="danger" size="sm" onClick={() => remove(`/api/v1/owner/sessions/${item.id}`)}>
+                                  Xóa bài
+                                </Button>
+                              </div>
+                            </article>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  </article>
-                ))}
+                  );
+                })}
               </div>
             )}
           </Card>
