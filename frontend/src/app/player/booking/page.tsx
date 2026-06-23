@@ -496,8 +496,11 @@ function BookingCreateContent() {
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Phương thức thanh toán</h3>
               <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-150">
                 <div className="flex items-center gap-3">
-                  <div className="h-8 w-12 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white text-[10px] font-black shrink-0">
-                    ATM
+                  <div className="h-8 w-12 rounded-lg bg-white border border-slate-200 flex items-center justify-center shrink-0 shadow-xs">
+                    <span className="text-[11px] font-black tracking-tight">
+                      <span className="text-[#ed1c24]">VN</span>
+                      <span className="text-[#005baa]">PAY</span>
+                    </span>
                   </div>
                   <div className="text-xs">
                     <p className="font-bold text-slate-800">Thẻ ATM / Tài khoản ngân hàng</p>
@@ -627,8 +630,11 @@ function BookingCreateContent() {
                 title: "Thẻ ATM / Tài khoản ngân hàng", 
                 sub: "Hỗ trợ napas 247 qua VNPay Sandbox",
                 logo: (
-                  <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white text-xs font-black shrink-0 select-none">
-                    ATM
+                  <div className="h-8 w-12 rounded-lg bg-white border border-slate-200 flex items-center justify-center shrink-0 select-none shadow-xs">
+                    <span className="text-[11px] font-black tracking-tight">
+                      <span className="text-[#ed1c24]">VN</span>
+                      <span className="text-[#005baa]">PAY</span>
+                    </span>
                   </div>
                 ),
                 disabled: false 
