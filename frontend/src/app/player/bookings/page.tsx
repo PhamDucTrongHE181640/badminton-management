@@ -115,7 +115,7 @@ export default function PlayerBookingsPage() {
         description={message}
         actions={
           <>
-            <ButtonLink href="/player/discovery">Đặt sân tiếp</ButtonLink>
+            <ButtonLink href="/player/discovery/?mode=booking">Đặt sân tiếp</ButtonLink>
             <ButtonLink href="/player/matches" variant="outline">
               Lịch đấu
             </ButtonLink>
@@ -136,7 +136,7 @@ export default function PlayerBookingsPage() {
         <EmptyState
           title="Bạn chưa có booking nào"
           description="Chọn kèo chờ ghép hoặc thuê nguyên sân để tạo booking đầu tiên."
-          action={<ButtonLink href="/player/discovery">Tìm sân ngay</ButtonLink>}
+          action={<ButtonLink href="/player/discovery/?mode=booking">Tìm sân ngay</ButtonLink>}
         />
       ) : (
         <section className="grid gap-4 lg:grid-cols-2">

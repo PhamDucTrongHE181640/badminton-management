@@ -8,7 +8,7 @@ import { apiFetch } from "@/lib/http";
 
 const navLinks = [
   { href: "/", label: "Trang Chủ" },
-  { href: "/player/discovery?mode=booking", label: "Đặt Sân" },
+  { href: "/player/discovery?mode=booking", label: "Đặt sân riêng" },
   { href: "/player/discovery?mode=matchmaking", label: "Xếp đối vãng lai" },
   { href: "/player/tournaments", label: "Giải đấu" },
   { href: "/contact", label: "Liên hệ" },

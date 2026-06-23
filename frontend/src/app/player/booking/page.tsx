@@ -271,7 +271,7 @@ function BookingCreateContent() {
               {isSubmitting ? "Đang xử lý..." : "Thanh toán lại booking này"}
             </button>
           )}
-          <ButtonLink href="/player/discovery" variant="outline" className="w-full justify-center">
+          <ButtonLink href="/player/discovery/?mode=booking" variant="outline" className="w-full justify-center">
             Quay lại tìm sân khác
           </ButtonLink>
         </div>
@@ -373,7 +373,7 @@ function BookingCreateContent() {
               <p>Chúng tôi sẽ thông báo khi đủ người hoặc có cập nhật về trận đấu. Vui lòng có mặt trước giờ thi đấu 15 phút.</p>
             </div>
 
-            <ButtonLink href="/player/discovery" className="w-full justify-center h-11 rounded-2xl bg-slate-900 hover:bg-slate-800 text-sm font-bold text-white transition">
+            <ButtonLink href="/player/discovery/?mode=booking" className="w-full justify-center h-11 rounded-2xl bg-slate-900 hover:bg-slate-800 text-sm font-bold text-white transition">
               🏠 Về trang chủ
             </ButtonLink>
           </div>
@@ -530,7 +530,7 @@ function BookingCreateContent() {
       <EmptyState
         title="Chưa chọn khung giờ"
         description="Bạn cần vào trang đặt sân và chọn một khung giờ trước khi tạo booking."
-        action={<ButtonLink href="/player/discovery">Tìm sân ngay</ButtonLink>}
+        action={<ButtonLink href="/player/discovery/?mode=booking">Tìm sân ngay</ButtonLink>}
       />
     );
   }

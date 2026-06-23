@@ -142,7 +142,7 @@ function PlayerChatRoomContent() {
       <EmptyState
         title="Chưa chọn kèo chờ ghép"
         description="Vào trang đặt sân và bấm Chat nhóm trên một kèo pool để mở phòng chat."
-        action={<ButtonLink href="/player/discovery">Tìm kèo chờ ghép</ButtonLink>}
+        action={<ButtonLink href="/player/discovery/?mode=matchmaking">Tìm kèo chờ ghép</ButtonLink>}
       />
     );
   }
@@ -155,7 +155,7 @@ function PlayerChatRoomContent() {
         description={message}
         actions={
           <>
-            <ButtonLink href="/player/discovery" variant="outline">
+            <ButtonLink href="/player/discovery/?mode=matchmaking" variant="outline">
               Về đặt sân
             </ButtonLink>
             <ButtonLink href="/player/bookings" variant="outline">
