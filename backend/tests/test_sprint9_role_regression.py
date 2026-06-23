@@ -82,6 +82,8 @@ def test_player_endpoints_smoke(  # type: ignore[no-untyped-def]
                 "sport": "Badminton",
                 "amenities": [],
                 "base_price_vnd": 120000,
+                "min_rental_duration_minutes": 60,
+                "max_rental_duration_minutes": 180,
                 "complex_id": "complex-id",
                 "complex_name": "NetUp Arena",
                 "district": "Ha Dong",

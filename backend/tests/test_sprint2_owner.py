@@ -243,6 +243,7 @@ def test_owner_court_create_allows_single_character_name(
             "rating": 0,
             "amenities": [],
             "base_price_vnd": 120000,
+            "min_rental_duration_minutes": 60,
             "max_rental_duration_minutes": 120,
             "created_at": created_at,
             "updated_at": created_at,
