@@ -1,9 +1,10 @@
 "use client";
 
 import { FormEvent, Suspense, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
 
-import { Badge, Button, ButtonLink, Card, EmptyState, Field, Notice, PageHero, inputClassName } from "@/components/ui";
+import { Badge, Button, ButtonLink, Card, EmptyState, Field, Notice, PageHero } from "@/components/ui";
 import { apiFetch } from "@/lib/http";
 import {
   bookingModeLabel,
@@ -19,6 +20,7 @@ import {
 
 type BookingMode = "solo" | "full_court";
 type PaymentMethod = "vnpay" | "cash";
+type PaymentMethodKey = "atm" | "visa" | "momo" | "zalopay" | "applepay" | "googlepay";
 
 type SessionDetail = {
   id: string;
@@ -38,6 +40,9 @@ type SessionDetail = {
   complex_name: string;
   district: string;
   address?: string;
+  amenities?: string[];
+  rating?: string;
+  distance?: string;
 };
 
 type BookingResult = {
@@ -48,6 +53,7 @@ type BookingResult = {
   deposit_required_vnd: number;
   remaining_due_vnd: number;
   payment_method: string;
+  session_id: string;
 };
 
 type DepositIntent = {
@@ -65,18 +71,53 @@ function BookingCreateContent() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("sessionId") ?? "";
   const modeParam = searchParams.get("mode");
+  
+  // URL Params for payment result
+  const statusParam = searchParams.get("status");
+  const bookingIdParam = searchParams.get("bookingId");
 
   const [session, setSession] = useState<SessionDetail | null>(null);
-  const [booking, setBooking] = useState<BookingResult | null>(null);
-  const [depositIntent, setDepositIntent] = useState<DepositIntent | null>(null);
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("Đang chuẩn bị thông tin đặt sân...");
+  const [message, setMessage] = useState("Đang tải thông tin thanh toán...");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isCreatingDeposit, setIsCreatingDeposit] = useState(false);
 
   const [mode, setMode] = useState<BookingMode>(modeParam === "full_court" ? "full_court" : "solo");
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [seatsBooked, setSeatsBooked] = useState("1");
+  const [selectedMethod, setSelectedMethod] = useState<PaymentMethodKey>("atm"); // default to ATM (vnpay) which is active
+
+  // Success states
+  const [successBooking, setSuccessBooking] = useState<any | null>(null);
+  const [successSession, setSuccessSession] = useState<SessionDetail | null>(null);
+  const [loadingSuccess, setLoadingSuccess] = useState(false);
+
+  // Load details if payment is successful
+  useEffect(() => {
+    if (statusParam === "success" && bookingIdParam) {
+      void loadSuccessDetails(bookingIdParam);
+    }
+  }, [statusParam, bookingIdParam]);
+
+  async function loadSuccessDetails(id: string) {
+    setLoadingSuccess(true);
+    setError("");
+    try {
+      const bookingData = await apiFetch<any>(`/api/v1/player/bookings/${id}`, {
+        credentials: "include",
+      });
+      setSuccessBooking(bookingData);
+
+      if (bookingData.session_id) {
+        const sessionData = await apiFetch<SessionDetail>(`/api/v1/player/sessions/${bookingData.session_id}`, {
+          credentials: "include",
+        });
+        setSuccessSession(sessionData);
+      }
+    } catch (caught) {
+      setError(errorMessage(caught, "Không tải được thông tin hóa đơn thanh toán"));
+    } finally {
+      setLoadingSuccess(false);
+    }
+  }
 
   async function loadSession() {
     if (!sessionId) {
@@ -94,75 +135,396 @@ function BookingCreateContent() {
       if (!detail.allows_solo_join || modeParam === "full_court") {
         setMode("full_court");
       }
-      setMessage("Kiểm tra lại thông tin rồi xác nhận booking.");
+      setMessage("Vui lòng chọn phương thức thanh toán để xác nhận giữ chỗ.");
     } catch (caught) {
       setSession(null);
       setError(errorMessage(caught, "Không tải được chi tiết phiên sân"));
-      setMessage("Không thể mở form booking.");
+      setMessage("Không thể mở form thanh toán.");
     }
   }
 
   useEffect(() => {
-    void loadSession();
-  }, [sessionId]);
+    if (!statusParam) {
+      void loadSession();
+    }
+  }, [sessionId, statusParam]);
 
   const estimate = useMemo(() => {
     if (!session) return null;
     const seats = mode === "full_court" ? session.max_slots : Math.max(1, Math.min(2, Number(seatsBooked || "1")));
     const base = mode === "full_court" ? session.full_court_price_vnd : session.slot_price_vnd * seats;
-    return { seats, base };
+    
+    // Apply 5% discount for online payment
+    const discount = Math.round(base * 0.05);
+    const total = base - discount;
+    
+    return { seats, base, discount, total };
   }, [mode, seatsBooked, session]);
 
-  async function submitBooking(event: FormEvent<HTMLFormElement>) {
+  // Combined function: Create booking -> get deposit intent -> redirect to VNPay
+  async function handlePaymentSubmit(event: FormEvent) {
     event.preventDefault();
-    if (!session) return;
+    if (!session || !estimate) return;
     setIsSubmitting(true);
     setError("");
-    setDepositIntent(null);
+
     try {
+      // 1. Create booking payload
       const payload: Record<string, unknown> = {
         session_id: session.id,
         mode,
-        payment_method: paymentMethod,
+        payment_method: "vnpay", // Force VNPay for online checkout
       };
       if (mode === "solo") {
-        payload.seats_booked = Math.max(1, Math.min(2, Number(seatsBooked || "1")));
+        payload.seats_booked = estimate.seats;
       }
-      const created = await apiFetch<BookingResult>("/api/v1/player/bookings", {
+
+      const createdBooking = await apiFetch<BookingResult>("/api/v1/player/bookings", {
         method: "POST",
         credentials: "include",
         body: JSON.stringify(payload),
       });
-      setBooking(created);
-      setMessage("Booking đã được tạo. Bước tiếp theo là thanh toán tiền cọc.");
+
+      // 2. Request VNPay payment URL for deposit
+      const intent = await apiFetch<DepositIntent>(`/api/v1/player/bookings/${createdBooking.id}/deposit-payment`, {
+        method: "POST",
+        credentials: "include",
+      });
+
+      // 3. Redirect user to VNPay Sandbox Gateway
+      if (intent.payment_url) {
+        window.location.href = intent.payment_url;
+      } else {
+        throw new Error("Không thể khởi tạo link thanh toán từ cổng VNPay.");
+      }
     } catch (caught) {
-      setBooking(null);
-      setError(errorMessage(caught, "Không tạo được booking"));
-      setMessage("Booking chưa thành công.");
-    } finally {
+      setError(errorMessage(caught, "Không thể hoàn tất thanh toán cọc"));
       setIsSubmitting(false);
     }
   }
 
-  async function createDepositIntent() {
-    if (!booking) return;
-    setIsCreatingDeposit(true);
-    setError("");
-    try {
-      const intent = await apiFetch<DepositIntent>(`/api/v1/player/bookings/${booking.id}/deposit-payment`, {
-        method: "POST",
-        credentials: "include",
-      });
-      setDepositIntent(intent);
-      setMessage("Đã tạo giao dịch cọc. Mở VNPay sandbox để hoàn tất thanh toán.");
-    } catch (caught) {
-      setDepositIntent(null);
-      setError(errorMessage(caught, "Không tạo được giao dịch cọc"));
-    } finally {
-      setIsCreatingDeposit(false);
-    }
+  const sessionStartTime = useMemo(() => {
+    if (!session?.starts_at) return "";
+    const dateObj = new Date(session.starts_at);
+    if (Number.isNaN(dateObj.getTime())) return "";
+    return dateObj.toLocaleDateString("vi-VN", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" });
+  }, [session]);
+
+  const sessionTimeRange = useMemo(() => {
+    if (!session) return "";
+    const start = new Date(session.starts_at);
+    if (Number.isNaN(start.getTime())) return "";
+    const end = new Date(start.getTime() + session.duration_minutes * 60_000);
+    const format = (value: Date) => value.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+    return `${format(start)} - ${format(end)}`;
+  }, [session]);
+
+  // Render Loading Success State
+  if (statusParam === "success" && loadingSuccess) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 space-y-4">
+        <div className="h-12 w-12 rounded-full border-4 border-slate-200 border-t-[#b00c14] animate-spin" />
+        <p className="text-sm text-slate-500 font-bold animate-pulse">Đang tải kết quả thanh toán...</p>
+      </div>
+    );
   }
 
+  // Render Payment Failed State
+  if (statusParam === "failed") {
+    return (
+      <div className="max-w-md mx-auto my-12 text-center space-y-6 bg-white p-8 rounded-3xl border border-slate-200 shadow-md">
+        <div className="h-16 w-16 mx-auto rounded-full bg-red-100 flex items-center justify-center text-red-600">
+          <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </div>
+        <div className="space-y-2">
+          <h1 className="font-heading text-2xl font-black text-slate-900">Thanh toán thất bại</h1>
+          <p className="text-sm text-slate-500 font-medium leading-relaxed">
+            Giao dịch thanh toán cọc qua VNPay không thành công hoặc đã bị huỷ bỏ. Vui lòng thử lại.
+          </p>
+        </div>
+        {error && <Notice tone="danger" className="rounded-2xl">{error}</Notice>}
+        <div className="flex flex-col gap-2.5 pt-2">
+          {bookingIdParam && (
+            <button
+              onClick={async () => {
+                setError("");
+                setIsSubmitting(true);
+                try {
+                  const intent = await apiFetch<DepositIntent>(`/api/v1/player/bookings/${bookingIdParam}/deposit-payment`, {
+                    method: "POST",
+                    credentials: "include",
+                  });
+                  if (intent.payment_url) {
+                    window.location.href = intent.payment_url;
+                  }
+                } catch (caught) {
+                  setError(errorMessage(caught, "Không tạo được link thanh toán mới"));
+                } finally {
+                  setIsSubmitting(false);
+                }
+              }}
+              disabled={isSubmitting}
+              className="w-full flex h-11 items-center justify-center rounded-2xl bg-[#b00c14] hover:bg-[#900a10] text-sm font-bold text-white transition cursor-pointer disabled:opacity-50"
+            >
+              {isSubmitting ? "Đang xử lý..." : "Thanh toán lại booking này"}
+            </button>
+          )}
+          <ButtonLink href="/player/discovery" variant="outline" className="w-full justify-center">
+            Quay lại tìm sân khác
+          </ButtonLink>
+        </div>
+      </div>
+    );
+  }
+
+  // Render Payment Success State (Success Page)
+  if (statusParam === "success" && successBooking) {
+    const sBooking = successBooking;
+    const sSession = successSession;
+
+    const bookingStartTime = sBooking.session_starts_at
+      ? new Date(sBooking.session_starts_at).toLocaleDateString("vi-VN", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" })
+      : "";
+
+    const bookingTimeRange = sBooking.session_starts_at
+      ? (() => {
+          const start = new Date(sBooking.session_starts_at);
+          const duration = sSession ? sSession.duration_minutes : 120;
+          const end = new Date(start.getTime() + duration * 60_000);
+          const format = (v: Date) => v.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+          return `${format(start)} - ${format(end)}`;
+        })()
+      : "";
+
+    const paymentTimeFormatted = sBooking.updated_at
+      ? (() => {
+          const dateObj = new Date(sBooking.updated_at);
+          const time = dateObj.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+          const date = dateObj.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
+          return `${time} - ${date}`;
+        })()
+      : "";
+
+    // Math calculation matching the checkout logic
+    const basePrice = sBooking.base_price_vnd + sBooking.platform_fee_vnd + sBooking.floor_fee_vnd;
+    const discountPrice = Math.round(basePrice * 0.05);
+
+    return (
+      <div className="grid gap-6 lg:grid-cols-[1.1fr_1.1fr] xl:grid-cols-[1.15fr_1.15fr] items-start">
+        {/* COLUMN LEFT: SUCCESS CONFIRMATION & QUICK CARD */}
+        <div className="space-y-6">
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-xs p-8 flex flex-col items-center text-center space-y-5">
+            <div className="h-20 w-20 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
+              <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            
+            <div className="space-y-2">
+              <h1 className="font-heading text-3xl font-black text-slate-900 tracking-tight">
+                Thanh toán <span className="text-emerald-600">thành công!</span>
+              </h1>
+              <p className="text-sm text-slate-500 font-semibold leading-relaxed">
+                Bạn đã tham gia trận đấu thành công. <br />
+                Hẹn gặp bạn trên sân!
+              </p>
+            </div>
+
+            {/* Quick Session Card */}
+            <div className="w-full text-left bg-slate-50 border border-slate-150 rounded-2xl p-4.5 space-y-3.5 mt-2">
+              <div className="flex gap-4">
+                <div className="relative h-18 w-24 rounded-xl overflow-hidden bg-slate-100 shrink-0">
+                  <img
+                    src={courtImageForSport(sBooking.sport || "Pickleball")}
+                    alt={sBooking.court_name || "Sân chơi"}
+                    className="h-full w-full object-cover"
+                  />
+                  <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-black/60 text-white text-[8px] font-bold backdrop-blur-xs">
+                    {sBooking.court_name || "Sân 1"}
+                  </div>
+                </div>
+                
+                <div className="flex-1 min-w-0 space-y-1">
+                  <h3 className="font-heading font-extrabold text-slate-900 text-sm truncate">{sBooking.complex_name}</h3>
+                  <p className="text-[10px] font-semibold text-slate-400 flex items-center gap-1">
+                    📍 {sBooking.district || "Hà Nội"}
+                  </p>
+                  <div className="flex gap-1.5 pt-1">
+                    <span className="px-1.5 py-0.5 bg-white border border-slate-200 text-slate-700 font-bold rounded text-[8px]">{sportLabel(sBooking.sport)}</span>
+                    <span className="px-1.5 py-0.5 bg-white border border-slate-200 text-slate-700 font-bold rounded text-[8px]">Có chỗ gửi xe</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-slate-200/60 pt-3 flex flex-wrap justify-between gap-2 text-xs font-bold text-slate-800">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-slate-400 font-semibold">Thời gian:</span>
+                  <span>{bookingTimeRange}</span>
+                </div>
+                <div className="text-[10px] text-slate-400 font-normal self-center">{bookingStartTime}</div>
+              </div>
+            </div>
+
+            {/* Notification Notice */}
+            <div className="bg-emerald-50 text-emerald-800 p-4.5 rounded-2xl border border-emerald-100 text-xs font-semibold leading-relaxed flex gap-2.5 w-full text-left">
+              <span className="text-base">🔔</span>
+              <p>Chúng tôi sẽ thông báo khi đủ người hoặc có cập nhật về trận đấu. Vui lòng có mặt trước giờ thi đấu 15 phút.</p>
+            </div>
+
+            <ButtonLink href="/player/discovery" className="w-full justify-center h-11 rounded-2xl bg-slate-900 hover:bg-slate-800 text-sm font-bold text-white transition">
+              🏠 Về trang chủ
+            </ButtonLink>
+          </div>
+        </div>
+
+        {/* COLUMN RIGHT: BILL DETAILS */}
+        <div className="space-y-4">
+          <h2 className="font-heading text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+            Chi tiết thanh toán
+          </h2>
+
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-md p-6 space-y-6">
+            
+            {/* Header Transaction Status */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-2 text-emerald-600 font-bold text-xs">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-[10px]">✓</span>
+                Thanh toán thành công
+              </div>
+              <span className="text-xs text-slate-450 font-bold">Mã đơn: #{sBooking.booking_code}</span>
+            </div>
+
+            {/* Game Info Details */}
+            <div className="space-y-4">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Thông tin trận đấu</h3>
+              
+              <div className="flex gap-4">
+                <div className="relative h-20 w-28 rounded-2xl overflow-hidden bg-slate-100 shrink-0">
+                  <img
+                    src={courtImageForSport(sBooking.sport || "Pickleball")}
+                    alt={sBooking.court_name || "Sân chơi"}
+                    className="h-full w-full object-cover"
+                  />
+                  <div className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded bg-black/60 text-white text-[9px] font-bold backdrop-blur-xs">
+                    {sBooking.court_name || "Sân 1"}
+                  </div>
+                </div>
+
+                <div className="flex-1 space-y-1">
+                  <h4 className="font-heading font-extrabold text-slate-900 text-sm">{sBooking.complex_name}</h4>
+                  <p className="text-[10px] font-semibold text-slate-400 flex items-center gap-1">
+                    📍 {sSession?.address || sBooking.district || "Hà Nội"}
+                  </p>
+                  
+                  <div className="flex flex-wrap gap-1.5 pt-1.5">
+                    <span className="px-1.5 py-0.5 bg-slate-100 text-slate-700 font-bold rounded text-[8px]">{sportLabel(sBooking.sport)}</span>
+                    <span className="px-1.5 py-0.5 bg-slate-100 text-slate-700 font-bold rounded text-[8px]">⚡ 2.1 km</span>
+                    <span className="px-1.5 py-0.5 bg-slate-100 text-slate-700 font-bold rounded text-[8px]">🚘 Có chỗ gửi xe</span>
+                  </div>
+
+                  {sSession && (
+                    <div className="flex items-center gap-2 pt-2">
+                      <span className="text-[11px] font-extrabold text-slate-700">
+                        {sSession.max_slots - sSession.open_slots} / {sSession.max_slots} người
+                      </span>
+                      {sSession.open_slots > 0 ? (
+                        <span className="px-1.5 py-0.5 rounded bg-red-50 text-[8px] font-bold text-[#b00c14] border border-red-100 uppercase animate-pulse">
+                          Thiếu {sSession.open_slots} người
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-[8px] font-bold text-emerald-600 border border-emerald-100 uppercase">
+                          Đủ người
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Financial Details */}
+            <div className="border-t border-slate-100 pt-5 space-y-3">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Chi tiết thanh toán</h3>
+
+              <div className="space-y-2.5">
+                <div className="flex justify-between text-xs font-semibold text-slate-500">
+                  <span>Phí tham gia</span>
+                  <span>{formatVnd(basePrice)}</span>
+                </div>
+                <div className="flex justify-between text-xs font-semibold text-emerald-600">
+                  <span>Ưu đãi (VNPay -5%)</span>
+                  <span>-{formatVnd(discountPrice)}</span>
+                </div>
+                <div className="flex justify-between items-baseline pt-2 border-t border-slate-100">
+                  <span className="text-xs font-bold text-slate-800">Tổng thanh toán</span>
+                  <span className="text-base font-black text-slate-900">{formatVnd(sBooking.total_price_vnd)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Paid Method Details */}
+            <div className="border-t border-slate-100 pt-5 space-y-3">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Phương thức thanh toán</h3>
+              <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-150">
+                <div className="flex items-center gap-3">
+                  <div className="h-8 w-12 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white text-[10px] font-black shrink-0">
+                    ATM
+                  </div>
+                  <div className="text-xs">
+                    <p className="font-bold text-slate-800">Thẻ ATM / Tài khoản ngân hàng</p>
+                    <p className="text-[10px] text-slate-400 font-semibold mt-0.5">Thanh toán cọc qua cổng VNPay</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs font-extrabold text-emerald-600">Đã cọc: {formatVnd(sBooking.deposit_required_vnd)}</p>
+                  <p className="text-[9px] text-slate-400 font-bold mt-0.5">Còn lại: {formatVnd(sBooking.remaining_due_vnd)} (tại sân)</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Time of Payment */}
+            <div className="flex justify-between items-center text-xs font-semibold text-slate-700 border-t border-slate-100 pt-5">
+              <span className="text-slate-400 font-bold">Thời gian thanh toán</span>
+              <span>{paymentTimeFormatted}</span>
+            </div>
+
+            {/* Security Notice */}
+            <div className="bg-emerald-50 text-emerald-800 border border-emerald-100 rounded-2xl p-3.5 text-[10px] font-bold flex gap-2 items-center justify-center">
+              <span className="text-xs">✓</span> Thanh toán an toàn 100%. Thông tin được bảo mật tuyệt đối.
+            </div>
+
+            {/* Interactive PDF/Share Buttons */}
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => alert("Chức năng tải hóa đơn PDF đang được chuẩn bị.")}
+                className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-750 transition cursor-pointer"
+              >
+                📥 Tải hóa đơn
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (navigator.clipboard) {
+                    void navigator.clipboard.writeText(window.location.href);
+                    alert("Đã sao chép link hóa đơn thanh toán!");
+                  }
+                }}
+                className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-750 transition cursor-pointer"
+              >
+                🔗 Chia sẻ
+              </button>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Render standard checkout form (2 Columns: Method list & details list)
   if (!sessionId) {
     return (
       <EmptyState
@@ -174,219 +536,277 @@ function BookingCreateContent() {
   }
 
   return (
-    <div className="space-y-5">
-      <PageHero
-        eyebrow="Xác nhận booking"
-        title={session ? session.sub_court_name : "Đang tải khung giờ"}
-        description={message}
-        actions={
-          <>
-            <ButtonLink href="/player/discovery" variant="outline">
-              Chọn khung giờ khác
-            </ButtonLink>
-            <ButtonLink href="/player/bookings" variant="outline">
-              Booking của tôi
-            </ButtonLink>
-          </>
-        }
-        aside={
-          <div
-            className="min-h-[220px] rounded-lg bg-cover bg-center"
-            style={{
-              backgroundImage: `linear-gradient(130deg, rgba(15,23,42,0.2), rgba(127,29,29,0.36)), url('${courtImageForSport(
-                session?.sport,
-              )}')`,
-            }}
-            aria-hidden="true"
-          />
-        }
-      />
+    <div className="space-y-6">
+      {/* Title Section */}
+      <div className="flex items-center gap-3">
+        <Link 
+          href="/player/discovery?mode=booking" 
+          className="text-xs font-bold text-slate-500 hover:text-slate-900 transition flex items-center gap-1 cursor-pointer select-none"
+        >
+          ➔ Quay lại danh sách sân
+        </Link>
+      </div>
 
-      {error ? <Notice tone="danger">{error}</Notice> : null}
+      <div className="space-y-1">
+        <h1 className="font-heading text-3xl font-extrabold tracking-tight text-slate-900">
+          Thanh toán <span className="text-[#b00c14]">tham gia trận đấu</span>
+        </h1>
+        <p className="text-xs sm:text-sm text-slate-500 max-w-3xl font-medium">
+          Hoàn tất thanh toán để giữ chỗ và xác nhận tham gia trận đấu.
+        </p>
+      </div>
 
-      <section className="grid gap-5 lg:grid-cols-[1fr_420px]">
-        <div className="space-y-5">
-          <Card className="space-y-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="font-heading text-xl font-semibold text-ink">
-                  {session?.title ?? "Chưa có thông tin sân"}
-                </h2>
-                <p className="mt-1 text-sm text-slate-600">
-                  {session
-                    ? `${session.complex_name} · ${session.court_name} - ${session.sub_court_name}`
-                    : "Đang tải dữ liệu"}
-                </p>
-              </div>
-              {session ? <Badge tone="accent">{postTypeLabel(session.post_type)}</Badge> : null}
-            </div>
+      {error && <Notice tone="danger" className="rounded-2xl">{error}</Notice>}
 
-            {session ? (
-              <div className="grid gap-3 text-sm text-slate-700 sm:grid-cols-2">
-                <p>
-                  <span className="font-semibold text-slate-950">Thời gian:</span>{" "}
-                  {formatTimeRange(session.starts_at, session.duration_minutes)}
-                </p>
-                <p>
-                  <span className="font-semibold text-slate-950">Môn:</span> {sportLabel(session.sport)}
-                </p>
-                <p>
-                  <span className="font-semibold text-slate-950">Khu vực:</span> {session.district}
-                </p>
-                <p>
-                  <span className="font-semibold text-slate-950">Slot còn:</span> {session.open_slots}/
-                  {session.max_slots}
-                </p>
-                <p>
-                  <span className="font-semibold text-slate-950">Giá ghép:</span>{" "}
-                  {formatVnd(session.slot_price_vnd)}
-                </p>
-                <p>
-                  <span className="font-semibold text-slate-950">Bao sân:</span>{" "}
-                  {formatVnd(session.full_court_price_vnd)}
-                </p>
-              </div>
-            ) : (
-              <p className="text-sm text-slate-600">Chưa đọc được phiên sân.</p>
-            )}
-          </Card>
+      {/* Main 2-Column Payment Grid */}
+      <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr] items-start">
+        
+        {/* COLUMN 1: SELECT PAYMENT METHOD */}
+        <div className="space-y-4">
+          <h2 className="font-heading text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-white">1</span>
+            Chọn phương thức thanh toán
+          </h2>
 
-          {booking ? (
-            <Card className="space-y-4 border-emerald-200 bg-emerald-50">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-emerald-800">Tạo booking thành công</p>
-                  <h2 className="mt-1 font-heading text-2xl font-semibold text-emerald-950">
-                    {booking.booking_code}
-                  </h2>
-                </div>
-                <Badge tone="success">{bookingStatusLabel(booking.status)}</Badge>
-              </div>
-              <div className="grid gap-3 text-sm text-emerald-950 sm:grid-cols-3">
-                <p>
-                  <span className="block text-emerald-800">Tổng tiền</span>
-                  <strong>{formatVnd(booking.total_price_vnd)}</strong>
-                </p>
-                <p>
-                  <span className="block text-emerald-800">Tiền cọc</span>
-                  <strong>{formatVnd(booking.deposit_required_vnd)}</strong>
-                </p>
-                <p>
-                  <span className="block text-emerald-800">Còn lại</span>
-                  <strong>{formatVnd(booking.remaining_due_vnd)}</strong>
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button onClick={createDepositIntent} disabled={isCreatingDeposit} variant="secondary">
-                  {isCreatingDeposit ? "Đang tạo giao dịch..." : "Thanh toán cọc VNPay"}
-                </Button>
-                <ButtonLink href="/player/bookings" variant="outline">
-                  Xem booking của tôi
-                </ButtonLink>
-              </div>
-            </Card>
-          ) : null}
+          <div className="grid gap-3">
+            {[
+              { 
+                key: "momo", 
+                title: "Ví điện tử MoMo", 
+                isPromo: true, 
+                promoText: "Ưu đãi", 
+                discountText: "-5%",
+                logo: (
+                  <div className="h-8 w-8 rounded-lg bg-[#a50064] flex flex-col items-center justify-center text-white font-black text-[9px] leading-tight shrink-0 select-none">
+                    <span>mo</span>
+                    <span>mo</span>
+                  </div>
+                ),
+                disabled: true
+              },
+              { 
+                key: "zalopay", 
+                title: "ZaloPay", 
+                logo: (
+                  <div className="h-8 w-8 rounded-lg bg-[#008fe5] flex flex-col items-center justify-center text-white font-bold text-[8px] leading-tight shrink-0 select-none">
+                    <span className="font-extrabold text-[9px]">Zalo</span>
+                    <span className="text-[7px]">Pay</span>
+                  </div>
+                ),
+                disabled: true 
+              },
+              { 
+                key: "atm", 
+                title: "Thẻ ATM / Tài khoản ngân hàng", 
+                sub: "Hỗ trợ napas 247 qua VNPay Sandbox",
+                logo: (
+                  <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white text-xs font-black shrink-0 select-none">
+                    ATM
+                  </div>
+                ),
+                disabled: false 
+              },
+              { 
+                key: "visa", 
+                title: "Thẻ quốc tế (Visa, MasterCard, JCB)", 
+                sub: "Thanh toán qua cổng bảo mật VNPay",
+                logo: (
+                  <div className="h-8 w-12 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center gap-0.5 px-1 shrink-0 select-none">
+                    <span className="text-blue-850 font-black italic text-[9px]">VISA</span>
+                    <div className="flex -space-x-1 ml-0.5">
+                      <div className="h-2.5 w-2.5 rounded-full bg-red-500 opacity-90" />
+                      <div className="h-2.5 w-2.5 rounded-full bg-amber-500 opacity-90" />
+                    </div>
+                  </div>
+                ),
+                disabled: false 
+              },
+              { 
+                key: "applepay", 
+                title: "Apple Pay", 
+                logo: (
+                  <div className="h-8 w-12 rounded-lg bg-black flex items-center justify-center text-white text-[9px] font-bold shrink-0 select-none">
+                     Pay
+                  </div>
+                ),
+                disabled: true 
+              },
+              { 
+                key: "googlepay", 
+                title: "Google Pay", 
+                logo: (
+                  <div className="h-8 w-12 rounded-lg bg-white border border-slate-200 flex items-center justify-center gap-0.5 shrink-0 select-none">
+                    <span className="text-blue-500 font-bold">G</span>
+                    <span className="text-slate-700 font-bold text-[9px]">Pay</span>
+                  </div>
+                ),
+                disabled: true 
+              }
+            ].map(method => {
+              const isSelected = selectedMethod === method.key;
+              return (
+                <button
+                  key={method.key}
+                  type="button"
+                  disabled={method.disabled}
+                  onClick={() => !method.disabled && setSelectedMethod(method.key as PaymentMethodKey)}
+                  className={`w-full flex items-center gap-4 p-4.5 rounded-2xl border text-left transition select-none ${
+                    method.disabled 
+                      ? "bg-slate-50/70 border-slate-200/50 opacity-55 cursor-not-allowed" 
+                      : isSelected 
+                      ? "border-[#b00c14] bg-red-50/5/10 ring-1 ring-[#b00c14] cursor-pointer" 
+                      : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 cursor-pointer"
+                  }`}
+                >
+                  {/* Radio Indicator */}
+                  <div className={`h-4.5 w-4.5 rounded-full border flex items-center justify-center shrink-0 ${
+                    isSelected ? "border-[#b00c14] bg-[#b00c14]" : "border-slate-300"
+                  }`}>
+                    {isSelected && <div className="h-1.5 w-1.5 rounded-full bg-white" />}
+                  </div>
 
-          {depositIntent ? (
-            <Card className="space-y-3">
-              <h2 className="font-heading text-xl font-semibold text-ink">Giao dịch cọc đã sẵn sàng</h2>
-              <div className="grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
-                <p>
-                  <span className="font-semibold text-slate-950">Mã giao dịch:</span>{" "}
-                  {depositIntent.external_ref}
-                </p>
-                <p>
-                  <span className="font-semibold text-slate-950">Số tiền:</span>{" "}
-                  {formatVnd(depositIntent.amount_vnd)}
-                </p>
-                <p>
-                  <span className="font-semibold text-slate-950">Trạng thái:</span> {depositIntent.status}
-                </p>
-                <p>
-                  <span className="font-semibold text-slate-950">Hết hạn:</span>{" "}
-                  {depositIntent.expires_at
-                    ? new Date(depositIntent.expires_at).toLocaleString("vi-VN")
-                    : "Không có"}
-                </p>
-              </div>
-              <a
-                className="inline-flex items-center justify-center rounded-lg bg-red-800 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-900"
-                href={depositIntent.payment_url}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Mở VNPay sandbox
-              </a>
-            </Card>
-          ) : null}
+                  {/* Logo */}
+                  {method.logo}
+
+                  {/* Text details */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-xs font-bold text-slate-800 truncate">{method.title}</p>
+                      {method.isPromo && (
+                        <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-[8px] font-bold text-emerald-600 border border-emerald-100 uppercase">
+                          {method.promoText}
+                        </span>
+                      )}
+                      {method.discountText && (
+                        <span className="px-1.5 py-0.5 rounded bg-red-50 text-[8px] font-bold text-[#b00c14] border border-red-100 uppercase">
+                          {method.discountText}
+                        </span>
+                      )}
+                      {method.disabled && (
+                        <span className="px-1.5 py-0.5 rounded bg-slate-100 text-[8px] font-bold text-slate-400 border border-slate-200 uppercase">
+                          Đang phát triển
+                        </span>
+                      )}
+                    </div>
+                    {method.sub && <p className="text-[10px] text-slate-400 font-semibold mt-0.5">{method.sub}</p>}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          
+          <p className="text-[10px] text-slate-400 font-medium flex items-center gap-1 pt-2">
+            🛡 Thông tin thanh toán của bạn được bảo mật tuyệt đối.
+          </p>
         </div>
 
-        <form onSubmit={submitBooking} className="space-y-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-          <div>
-            <h2 className="font-heading text-xl font-semibold text-ink">Chọn cách đặt</h2>
-            <p className="mt-1 text-sm leading-6 text-slate-600">
-              Tiền cọc luôn thanh toán online. Phần còn lại có thể trả tại sân hoặc qua VNPay.
-            </p>
-          </div>
+        {/* COLUMN 2: BOOKING SUMMARY & PRICING */}
+        <div className="space-y-4">
+          <h2 className="font-heading text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-white">2</span>
+            Thông tin trận đấu
+          </h2>
 
-          <Field label="Kiểu booking">
-            <select
-              className={inputClassName}
-              value={mode}
-              onChange={(event) => setMode(event.target.value as BookingMode)}
-            >
-              <option value="solo" disabled={session ? !session.allows_solo_join : false}>
-                Ghép lẻ theo slot
-              </option>
-              <option value="full_court">Bao nguyên sân</option>
-            </select>
-          </Field>
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-md p-5 space-y-5">
+            
+            {/* Session Card */}
+            {session ? (
+              <div className="space-y-4">
+                <div className="relative h-28 rounded-2xl overflow-hidden bg-slate-100">
+                  <img
+                    src={courtImageForSport(session.sport)}
+                    alt={session.court_name}
+                    className="h-full w-full object-cover"
+                  />
+                  <div className="absolute top-2.5 left-2.5 px-2.5 py-0.5 rounded bg-black/60 text-white text-[10px] font-bold backdrop-blur-xs">
+                    {session.court_name}
+                  </div>
+                </div>
 
-          {mode === "solo" ? (
-            <Field label="Số slot" helper="Mỗi booking ghép lẻ hiện cho phép 1-2 slot.">
-              <input
-                className={inputClassName}
-                value={seatsBooked}
-                onChange={(event) => setSeatsBooked(event.target.value)}
-                inputMode="numeric"
-                min={1}
-                max={2}
-              />
-            </Field>
-          ) : (
-            <Notice tone="info">Bạn đang bao trọn sân cho nhóm riêng.</Notice>
-          )}
+                <div className="space-y-1.5">
+                  <h3 className="font-heading font-extrabold text-slate-900 text-sm">{session.complex_name}</h3>
+                  <p className="text-[10px] font-semibold text-slate-400 flex items-center gap-1.5">
+                    📍 {session.district}, Hà Nội
+                  </p>
+                  <div className="flex gap-2 pt-1">
+                    <span className="px-2 py-0.5 bg-slate-100 text-slate-700 font-bold rounded text-[9px]">{sportLabel(session.sport)}</span>
+                    <span className="px-2 py-0.5 bg-slate-100 text-slate-700 font-bold rounded text-[9px]">Có chỗ gửi xe</span>
+                  </div>
+                </div>
 
-          <Field label="Thanh toán phần còn lại">
-            <select
-              className={inputClassName}
-              value={paymentMethod}
-              onChange={(event) => setPaymentMethod(event.target.value as PaymentMethod)}
-            >
-              <option value="cash">Trả tại sân</option>
-              <option value="vnpay">Thanh toán VNPay</option>
-            </select>
-          </Field>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            {[
-              ["Loại đặt", bookingModeLabel(mode)],
-              ["Tạm tính", estimate ? formatVnd(estimate.base) : "-"],
-              ["Số slot", String(estimate?.seats ?? "-")],
-              ["Thanh toán", paymentMethodLabel(paymentMethod)],
-            ].map(([label, value]) => (
-              <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</p>
-                <p className="mt-1 text-sm font-semibold text-slate-950">{value}</p>
+                <div className="border-t border-slate-100 pt-3 space-y-2 text-xs font-semibold text-slate-800">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-450 font-medium">Thời gian:</span>
+                    <span>{sessionTimeRange} <p className="text-[10px] text-slate-400 font-normal text-right mt-0.5">{sessionStartTime}</p></span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-455 font-medium">Hình thức đặt:</span>
+                    <span className="font-bold text-red-700">{bookingModeLabel(mode)}</span>
+                  </div>
+                  {mode === "solo" && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-455 font-medium">Số lượng slot:</span>
+                      <div className="flex items-center gap-2">
+                        <select
+                          className="px-2 py-1 border border-slate-200 rounded-lg text-xs font-bold bg-white cursor-pointer focus:outline-none"
+                          value={seatsBooked}
+                          onChange={(e) => setSeatsBooked(e.target.value)}
+                        >
+                          <option value="1">1 slot</option>
+                          <option value="2">2 slots</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-            ))}
-          </div>
+            ) : (
+              <p className="text-xs text-slate-500 text-center py-8 animate-pulse">Đang tải thông tin trận đấu...</p>
+            )}
 
-          <Button className="w-full" disabled={!session || isSubmitting}>
-            {isSubmitting ? "Đang tạo booking..." : "Xác nhận booking"}
-          </Button>
-        </form>
-      </section>
+            {/* Pricing details */}
+            {estimate && (
+              <div className="border-t border-slate-100 pt-4.5 space-y-2.5">
+                <div className="flex justify-between text-xs font-semibold text-slate-700">
+                  <span className="text-slate-450">Tạm tính</span>
+                  <span>{formatVnd(estimate.base)}</span>
+                </div>
+                <div className="flex justify-between text-xs font-semibold text-emerald-600">
+                  <span className="text-slate-455 font-bold">Ưu đãi (VNPay -5%)</span>
+                  <span>-{formatVnd(estimate.discount)}</span>
+                </div>
+                <div className="flex justify-between items-baseline pt-2 border-t border-slate-100">
+                  <span className="text-xs font-bold text-slate-800">Tổng thanh toán</span>
+                  <span className="text-xl font-black text-[#b00c14]">{formatVnd(estimate.total)}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Submit button */}
+            <div className="space-y-3 pt-2">
+              <div className="bg-emerald-50 text-emerald-800 border border-emerald-100 rounded-xl p-3 text-[10px] font-bold flex gap-2 items-center justify-center">
+                <span className="text-xs">✓</span> Thanh toán an toàn 100%
+              </div>
+
+              <button
+                type="button"
+                onClick={handlePaymentSubmit}
+                disabled={!session || isSubmitting}
+                className="w-full flex h-11 items-center justify-center rounded-2xl bg-[#b00c14] hover:bg-[#900a10] text-sm font-bold text-white transition cursor-pointer shadow-md disabled:opacity-50 select-none"
+              >
+                {isSubmitting ? "Đang xử lý..." : `Thanh toán ${estimate ? formatVnd(estimate.total) : ""}`}
+              </button>
+
+              <p className="text-center text-[10px] text-slate-455 font-medium leading-relaxed">
+                Bằng việc thanh toán, bạn đã đồng ý với <br />
+                <a href="#" className="underline font-bold text-slate-600 hover:text-slate-900 transition">Điều khoản sử dụng</a> của NetUp.
+              </p>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
     </div>
   );
 }

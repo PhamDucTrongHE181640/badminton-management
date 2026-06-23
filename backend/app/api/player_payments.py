@@ -82,10 +82,7 @@ def post_vnpay_webhook(
 def get_vnpay_return(request: Request) -> RedirectResponse:
     result = handle_vnpay_return(payload=dict(request.query_params))
     settings = get_settings()
-    query = urlencode(
-        {
-            "paymentStatus": result.get("status", "unknown"),
-            "bookingId": result.get("booking_id") or "",
-        }
+    status_param = "success" if result.get("status") == "paid" else "failed"
+    return RedirectResponse(
+        f"{settings.frontend_base_url}/player/booking?status={status_param}&bookingId={result.get('booking_id') or ''}"
     )
-    return RedirectResponse(f"{settings.frontend_base_url}/player/bookings?{query}")

@@ -83,25 +83,57 @@ def _expire_overdue_deposit_bookings(
             {"booking_id": str(row.id)},
         )
 
-        next_open_slots = min(int(row.max_slots), int(row.open_slots) + int(row.seats_booked))
-        if str(row.session_status) == "locked" and next_open_slots > 0:
-            next_session_status = "scheduled"
-        else:
-            next_session_status = str(row.session_status)
+
+def _expire_all_overdue_deposit_bookings(connection: Any) -> None:
+    rows = connection.execute(
+        text(
+            """
+            SELECT
+              b.id,
+              b.session_id,
+              b.seats_booked,
+              s.open_slots,
+              s.max_slots,
+              s.status::text AS session_status
+            FROM public.bookings b
+            JOIN public.sessions s ON s.id = b.session_id
+            JOIN public.payment_transactions pt ON pt.booking_id = b.id
+            WHERE b.status = CAST('awaiting_deposit' AS public.booking_status)
+              AND pt.kind = CAST('deposit' AS public.payment_transaction_kind)
+              AND pt.status <> CAST('paid' AS public.payment_status)
+              AND pt.expires_at IS NOT NULL
+              AND pt.expires_at <= now()
+            FOR UPDATE OF b, s
+            """
+        )
+    ).all()
+
+    for row in rows:
         connection.execute(
             text(
                 """
-                UPDATE public.sessions
-                SET open_slots = :open_slots,
-                    status = CAST(:status AS public.session_status)
-                WHERE id = :session_id
+                UPDATE public.payment_transactions
+                SET status = CAST('expired' AS public.payment_status),
+                    expires_at = COALESCE(expires_at, now())
+                WHERE booking_id = :booking_id
+                  AND kind = CAST('deposit' AS public.payment_transaction_kind)
+                  AND status <> CAST('paid' AS public.payment_status)
                 """
             ),
-            {
-                "open_slots": next_open_slots,
-                "status": str(next_session_status),
-                "session_id": str(row.session_id),
-            },
+            {"booking_id": str(row.id)},
+        )
+        connection.execute(
+            text(
+                """
+                UPDATE public.bookings
+                SET status = CAST('expired' AS public.booking_status),
+                    cancelled_at = now(),
+                    cancel_reason = 'Deposit payment expired'
+                WHERE id = :booking_id
+                  AND status = CAST('awaiting_deposit' AS public.booking_status)
+                """
+            ),
+            {"booking_id": str(row.id)},
         )
 
 
@@ -468,6 +500,7 @@ def list_discovery_sessions(
     where_clause = f"WHERE {' AND '.join(where_parts)} ORDER BY s.starts_at ASC LIMIT 200"
     query = _session_select_sql(where_clause)
     with get_engine().begin() as connection:
+        _expire_all_overdue_deposit_bookings(connection)
         player_tier = (
             _load_player_tier(connection, player_user_id=player_user_id)
             if player_user_id
@@ -817,25 +850,8 @@ def create_booking(*, player_user_id: str, data: dict[str, Any]) -> dict[str, An
                 message="Không tạo được booking",
             )
 
-        connection.execute(
-            text(
-                """
-                UPDATE public.sessions
-                SET open_slots = :next_open_slots,
-                    status = CASE
-                      WHEN :next_open_slots = 0 THEN CAST('locked' AS public.session_status)
-                      ELSE status
-                    END
-                WHERE id = :session_id
-                """
-            ),
-            {
-                "next_open_slots": open_slots - seats_booked,
-                "session_id": str(session.id),
-            },
-        )
 
-        expires_at = datetime.now(UTC) + timedelta(minutes=int(config["auto_release_minutes"]))
+        expires_at = datetime.now(UTC) + timedelta(seconds=150)
         connection.execute(
             text(
                 """

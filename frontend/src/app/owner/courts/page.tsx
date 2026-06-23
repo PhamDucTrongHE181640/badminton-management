@@ -359,7 +359,7 @@ export default function OwnerCourtsPage() {
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="font-heading text-xl font-semibold text-ink">3. Đăng bài mở bán</h2>
-                <p className="mt-1 text-sm text-slate-600">Chọn đúng kiểu bài để người chơi thấy ở Đặt Sân hoặc Xếp đối.</p>
+                <p className="mt-1 text-sm text-slate-600">Chọn đúng kiểu bài để người chơi thấy ở Đặt Sân hoặc Xếp đối vãng lai.</p>
               </div>
               <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1">
                 {[

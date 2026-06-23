@@ -1155,7 +1155,7 @@ export default function PlayerAssessmentPage() {
           <div className="space-y-2">
             <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-emerald-950 border border-emerald-500/40 text-emerald-400 text-xl font-bold">✓</div>
             <h2 className="font-heading text-xl font-extrabold">Đã tìm thấy phòng phù hợp!</h2>
-            <p className="text-xs text-slate-400">Hệ thống đang chuyển bạn đến danh sách Xếp đối để ghép trận đấu phù hợp.</p>
+            <p className="text-xs text-slate-400">Hệ thống đang chuyển bạn đến danh sách Xếp đối vãng lai để ghép trận đấu phù hợp.</p>
           </div>
 
           {/* Glowing matching metrics */}

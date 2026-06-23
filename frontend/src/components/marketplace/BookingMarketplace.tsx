@@ -409,7 +409,7 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
       setError(
         errorMessage(
           caught,
-          isBookingMode ? "Không tải được danh sách sân cho thuê nguyên sân" : "Không tải được danh sách xếp đối",
+          isBookingMode ? "Không tải được danh sách sân cho thuê nguyên sân" : "Không tải được danh sách xếp đối vãng lai",
         ),
       );
       setMessage("Chưa tải được dữ liệu sân.");

@@ -70,7 +70,7 @@ def _build_vnpay_payment_url(
     if now.tzinfo is None:
         now = now.replace(tzinfo=VNPAY_TIMEZONE)
     expire_value = (
-        expires_at.astimezone(VNPAY_TIMEZONE) if expires_at else now + timedelta(minutes=15)
+        expires_at.astimezone(VNPAY_TIMEZONE) if expires_at else now + timedelta(seconds=150)
     )
 
     params = {
@@ -281,6 +281,50 @@ def _sync_booking_status_from_payments(connection: Any, *, booking_id: str) -> s
             ),
             {"status": next_status, "booking_id": booking_id},
         )
+
+        # Nếu chuyển từ awaiting_deposit sang trạng thái thanh toán thành công
+        if str(booking.status) == "awaiting_deposit" and next_status in {"deposit_paid", "confirmed"}:
+            b_info = connection.execute(
+                text(
+                    """
+                    SELECT session_id, seats_booked
+                    FROM public.bookings
+                    WHERE id = :booking_id
+                    """
+                ),
+                {"booking_id": booking_id},
+            ).first()
+            if b_info:
+                s_info = connection.execute(
+                    text(
+                        """
+                        SELECT id, open_slots
+                        FROM public.sessions
+                        WHERE id = :session_id
+                        FOR UPDATE
+                        """
+                    ),
+                    {"session_id": str(b_info.session_id)},
+                ).first()
+                if s_info:
+                    next_open_slots = max(0, int(s_info.open_slots) - int(b_info.seats_booked))
+                    connection.execute(
+                        text(
+                            """
+                            UPDATE public.sessions
+                            SET open_slots = :next_open_slots,
+                                status = CASE
+                                  WHEN :next_open_slots = 0 THEN CAST('locked' AS public.session_status)
+                                  ELSE status
+                                END
+                            WHERE id = :session_id
+                            """
+                        ),
+                        {
+                            "next_open_slots": next_open_slots,
+                            "session_id": str(s_info.id),
+                        },
+                    )
     return next_status
 
 
@@ -330,26 +374,27 @@ def _expire_booking_and_release_slot(
         {"booking_id": booking_id, "reason": reason},
     )
 
-    next_open_slots = min(int(row.max_slots), int(row.open_slots) + int(row.seats_booked))
-    if str(row.session_status) == "locked" and next_open_slots > 0:
-        next_session_status = "scheduled"
-    else:
-        next_session_status = str(row.session_status)
-    connection.execute(
-        text(
-            """
-            UPDATE public.sessions
-            SET open_slots = :open_slots,
-                status = CAST(:status AS public.session_status)
-            WHERE id = :session_id
-            """
-        ),
-        {
-            "open_slots": next_open_slots,
-            "status": next_session_status,
-            "session_id": str(row.session_id),
-        },
-    )
+    if row.booking_status in {"deposit_paid", "confirmed"}:
+        next_open_slots = min(int(row.max_slots), int(row.open_slots) + int(row.seats_booked))
+        if str(row.session_status) == "locked" and next_open_slots > 0:
+            next_session_status = "scheduled"
+        else:
+            next_session_status = str(row.session_status)
+        connection.execute(
+            text(
+                """
+                UPDATE public.sessions
+                SET open_slots = :open_slots,
+                    status = CAST(:status AS public.session_status)
+                WHERE id = :session_id
+                """
+            ),
+            {
+                "open_slots": next_open_slots,
+                "status": next_session_status,
+                "session_id": str(row.session_id),
+            },
+        )
     return "expired"
 
 
@@ -371,7 +416,7 @@ def create_deposit_payment_intent(
         deposit_tx = _require_deposit_tx(connection, booking_id=booking_id)
         external_ref = _payment_reference("DEP", str(booking.booking_code))
         if deposit_tx.status != "paid":
-            expires_at = datetime.now(UTC) + timedelta(minutes=15)
+            expires_at = datetime.now(UTC) + timedelta(seconds=150)
             connection.execute(
                 text(
                     """
