@@ -47,6 +47,15 @@ export default function PlayerProfilePage() {
   const [city, setCity] = useState("");
   const [district, setDistrict] = useState("");
 
+  // Avatar error flags for fallback initials
+  const [profileAvatarError, setProfileAvatarError] = useState(false);
+  const [formAvatarError, setFormAvatarError] = useState(false);
+
+  useEffect(() => {
+    setProfileAvatarError(false);
+    setFormAvatarError(false);
+  }, [profile?.avatar_url, avatarUrl]);
+
   function syncForm(next: PlayerProfile) {
     setFullName(next.full_name);
     setAvatarUrl(next.avatar_url ?? "");
@@ -109,10 +118,15 @@ export default function PlayerProfilePage() {
         description={message}
         aside={
           <div className="flex items-center gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
-            {profile?.avatar_url ? (
-              <img src={profile.avatar_url} alt={profile.full_name} className="h-16 w-16 rounded-full object-cover" />
+            {profile?.avatar_url && !profileAvatarError ? (
+              <img 
+                src={profile.avatar_url} 
+                alt={profile.full_name} 
+                className="h-16 w-16 rounded-full object-cover" 
+                onError={() => setProfileAvatarError(true)}
+              />
             ) : (
-              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-red-100 text-xl font-black text-red-800">
+              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-red-100 text-xl font-black text-red-800 animate-fade-in">
                 {initial(profile?.full_name ?? fullName)}
               </span>
             )}
@@ -165,17 +179,15 @@ export default function PlayerProfilePage() {
           <Field label="Ảnh đại diện URL">
             <div className="space-y-3">
               <div className="flex items-center gap-3">
-                {avatarUrl ? (
+                {avatarUrl && !formAvatarError ? (
                   <img
                     src={avatarUrl}
                     alt="Preview Avatar"
                     className="h-14 w-14 rounded-full object-cover ring-2 ring-slate-100"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = "https://api.dicebear.com/7.x/adventurer/svg?seed=fallback";
-                    }}
+                    onError={() => setFormAvatarError(true)}
                   />
                 ) : (
-                  <span className="flex h-14 w-14 items-center justify-center rounded-full bg-red-100 text-lg font-black text-red-800">
+                  <span className="flex h-14 w-14 items-center justify-center rounded-full bg-red-100 text-lg font-black text-red-800 animate-fade-in">
                     {initial(fullName)}
                   </span>
                 )}
@@ -187,12 +199,12 @@ export default function PlayerProfilePage() {
                 />
               </div>
 
-              {/* Dicebear Avatar presets */}
+              {/* Local Avatar presets */}
               <div className="space-y-1 mt-1.5">
-                <p className="text-[10px] font-bold text-slate-505 uppercase tracking-wider">Chọn nhanh avatar ngộ nghĩnh</p>
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Chọn nhanh avatar ngộ nghĩnh</p>
                 <div className="flex flex-wrap gap-2 py-1">
                   {["Felix", "Aneka", "Jack", "Kim", "Buster", "Luna", "Oliver", "Milo"].map((seed) => {
-                    const url = `https://api.dicebear.com/7.x/adventurer/svg?seed=${seed}`;
+                    const url = `/avatars/${seed.toLowerCase()}.svg`;
                     const isSelected = avatarUrl === url;
                     return (
                       <button

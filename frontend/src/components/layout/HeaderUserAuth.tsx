@@ -28,6 +28,16 @@ export function HeaderUserAuth({ user, logout, isLoggingOut }: HeaderUserAuthPro
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // Avatar error states to toggle fallback initials
+  const [avatarError, setAvatarError] = useState(false);
+  const [dropdownAvatarError, setDropdownAvatarError] = useState(false);
+
+  // Reset errors on user profile change
+  useEffect(() => {
+    setAvatarError(false);
+    setDropdownAvatarError(false);
+  }, [user?.avatar_url]);
+
   const initials = useMemo(() => {
     if (!user?.full_name) return "U";
     return user.full_name
@@ -60,10 +70,15 @@ export function HeaderUserAuth({ user, logout, isLoggingOut }: HeaderUserAuthPro
           className="p-[2.5px] bg-gradient-to-tr from-amber-500 via-rose-500 to-violet-600 rounded-full hover:scale-105 transition duration-200 focus:outline-none cursor-pointer shadow-sm active:scale-95"
         >
           <div className="bg-white rounded-full p-[1.5px]">
-            {user.avatar_url ? (
-              <img src={user.avatar_url} alt={user.full_name} className="h-8.5 w-8.5 rounded-full object-cover" />
+            {user.avatar_url && !avatarError ? (
+              <img 
+                src={user.avatar_url} 
+                alt={user.full_name} 
+                className="h-8.5 w-8.5 rounded-full object-cover" 
+                onError={() => setAvatarError(true)}
+              />
             ) : (
-              <span className="flex h-8.5 w-8.5 items-center justify-center rounded-full bg-red-100 text-xs font-bold text-red-800">
+              <span className="flex h-8.5 w-8.5 items-center justify-center rounded-full bg-red-100 text-xs font-bold text-red-800 animate-fade-in">
                 {initials}
               </span>
             )}
@@ -81,10 +96,15 @@ export function HeaderUserAuth({ user, logout, isLoggingOut }: HeaderUserAuthPro
               </div>
               <div className="p-[2px] bg-gradient-to-tr from-amber-500 via-rose-500 to-violet-600 rounded-full shrink-0 shadow-xs">
                 <div className="bg-white rounded-full p-[1px]">
-                  {user.avatar_url ? (
-                    <img src={user.avatar_url} alt={user.full_name} className="h-10.5 w-10.5 rounded-full object-cover" />
+                  {user.avatar_url && !dropdownAvatarError ? (
+                    <img 
+                      src={user.avatar_url} 
+                      alt={user.full_name} 
+                      className="h-10.5 w-10.5 rounded-full object-cover" 
+                      onError={() => setDropdownAvatarError(true)}
+                    />
                   ) : (
-                    <span className="flex h-10.5 w-10.5 items-center justify-center rounded-full bg-red-100 text-sm font-bold text-red-800">
+                    <span className="flex h-10.5 w-10.5 items-center justify-center rounded-full bg-red-100 text-sm font-bold text-red-800 animate-fade-in">
                       {initials}
                     </span>
                   )}
@@ -282,7 +302,3 @@ export function HeaderUserAuth({ user, logout, isLoggingOut }: HeaderUserAuthPro
     </a>
   );
 }
-
-
-
-
