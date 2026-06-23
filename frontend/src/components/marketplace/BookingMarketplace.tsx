@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 
@@ -348,6 +348,10 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [selectedPlayerProfile, setSelectedPlayerProfile] = useState<JoinedPlayerProfile | null>(null);
 
+  // Popup nhắc đánh giá trình độ khi vào xếp đối vãng lai
+  const [showAssessmentPrompt, setShowAssessmentPrompt] = useState(false);
+  const assessmentPromptShownRef = useRef(false);
+
   const effectivePostType: PostTypeFilter = isMatchmaking ? "pool" : isBookingMode ? "rental" : postType;
 
   const query = useMemo(() => {
@@ -421,6 +425,15 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
   useEffect(() => {
     void loadDiscovery();
   }, [query]);
+
+  // Hiện popup gợi ý đánh giá khi lần đầu vào mode matchmaking mà chưa có assessment
+  useEffect(() => {
+    if (isMatchmaking && skillTier !== null && !skillTier.has_assessment && !assessmentPromptShownRef.current) {
+      assessmentPromptShownRef.current = true;
+      setShowAssessmentPrompt(true);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMatchmaking, skillTier]);
 
   function onFilterSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -633,6 +646,73 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
   if (isMatchmaking) {
     return (
       <div className="space-y-6">
+
+        {/* ====== POPUP: Gợi ý đánh giá trình độ ====== */}
+        {showAssessmentPrompt && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setShowAssessmentPrompt(false)}>
+            {/* Backdrop */}
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+
+            {/* Modal */}
+            <div
+              className="relative z-10 w-full max-w-md rounded-3xl bg-white shadow-2xl overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header đỏ */}
+              <div className="bg-[#b00c14] px-6 pt-8 pb-6 text-center">
+                <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-white/20">
+                  <svg viewBox="0 0 24 24" className="h-7 w-7 text-white" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                  </svg>
+                </div>
+                <h2 className="text-xl font-black text-white tracking-tight">AI Skill Assessment</h2>
+                <p className="mt-1.5 text-sm text-white/80 font-medium">
+                  Đánh giá trình độ giúp xếp đối chính xác hơn cho bạn
+                </p>
+              </div>
+
+              {/* Body */}
+              <div className="px-6 py-5 space-y-4">
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
+                    <span className="text-xl">🎯</span>
+                    <div>
+                      <p className="text-sm font-bold text-slate-900">Ghép đối thủ cùng trình độ</p>
+                      <p className="text-xs text-slate-500 mt-0.5">Không lo lệch trình khi tham gia phòng ghép ELO.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
+                    <span className="text-xl">⚡</span>
+                    <div>
+                      <p className="text-sm font-bold text-slate-900">Chỉ mất 2–3 phút</p>
+                      <p className="text-xs text-slate-500 mt-0.5">Trả lời nhanh vài câu hỏi để AI phân tích level của bạn.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-slate-400 text-center">Bạn vẫn có thể xếp đối mà không cần đánh giá ngay bây giờ.</p>
+
+                {/* Buttons */}
+                <div className="flex flex-col gap-2.5 pt-1">
+                  <a
+                    href="/player/assessment"
+                    className="block w-full rounded-2xl bg-[#b00c14] py-3.5 text-center text-sm font-bold text-white transition hover:bg-red-800 shadow-lg"
+                  >
+                    Đánh giá ngay →
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setShowAssessmentPrompt(false)}
+                    className="w-full rounded-2xl border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 cursor-pointer"
+                  >
+                    Bỏ qua, tiếp tục xếp đối
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Main Title Section */}
         <div>
           <h1 className="font-heading text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">

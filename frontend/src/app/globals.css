@@ -18,14 +18,14 @@
   --color-accent: var(--accent);
   --color-mint: var(--mint);
   --color-ember: var(--ember);
-  --font-sans: var(--font-manrope);
-  --font-heading: var(--font-sora);
+  --font-sans: var(--font-montserrat);
+  --font-heading: var(--font-montserrat);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-manrope), sans-serif;
+  font-family: var(--font-montserrat), sans-serif;
 }
 
 button:disabled {
@@ -38,7 +38,7 @@ a {
 }
 
 .font-heading {
-  font-family: var(--font-sora), sans-serif;
+  font-family: var(--font-montserrat), sans-serif;
 }
 
 .bg-noise-grid {

@@ -11,10 +11,6 @@ type UserProfile = {
   roles: string[];
 };
 
-type SkillTierSummary = {
-  has_assessment: boolean;
-};
-
 export default function GoogleCallbackPage() {
   const router = useRouter();
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -31,22 +27,16 @@ export default function GoogleCallbackPage() {
         return;
       }
 
-      const profile = await response.json();
+      const profile = (await response.json()) as UserProfile;
       setUser(profile);
+      setMessage("Đăng nhập thành công! Đang chuyển hướng...");
 
-      const tierResponse = await fetch(`${apiBaseUrl}/api/v1/player/skill-tier`, {
-        credentials: "include",
-      });
-      if (tierResponse.ok) {
-        const tier = (await tierResponse.json()) as SkillTierSummary;
-        if (!tier.has_assessment) {
-          setMessage("Đăng nhập thành công. Đang mở bước thiết lập trình độ ban đầu...");
-          router.replace("/player/assessment?firstLogin=1");
-          return;
-        }
+      // Redirect đúng theo role — KHÔNG redirect đến assessment
+      if (profile.roles.includes("owner")) {
+        router.replace("/owner/dashboard");
+      } else {
+        router.replace("/");
       }
-
-      setMessage("Đăng nhập Google thành công");
     }
 
     loadMe();
