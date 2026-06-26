@@ -82,16 +82,21 @@ services:
     restart: unless-stopped
     environment:
       COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+      NODE_OPTIONS: "${NODE_OPTIONS:---dns-result-order=ipv4first}"
+      NPM_CONFIG_REGISTRY: "${NPM_CONFIG_REGISTRY:-https://registry.npmjs.org/}"
+      PNPM_VERSION: "${PNPM_VERSION:-11.2.2}"
       NEXT_PUBLIC_API_BASE_URL: "${NEXT_PUBLIC_API_BASE_URL:-}"
       NEXT_PUBLIC_NETUP_FACEBOOK_URL: "${NEXT_PUBLIC_NETUP_FACEBOOK_URL:-https://www.facebook.com/netup.vn}"
     volumes:
       - ./frontend:/app
       - frontend-node-modules:/app/node_modules
-    command: >
-      sh -c "corepack enable &&
-      corepack prepare pnpm@11.2.2 --activate &&
-      pnpm install --frozen-lockfile &&
-      tail -f /dev/null"
+    command: ["sh", "/app/docker-entrypoint.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /app/out/index.html"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
 
   nginx:
     build:
@@ -106,7 +111,7 @@ services:
       - ./frontend:/var/www/frontend:ro
     depends_on:
       frontend:
-        condition: service_started
+        condition: service_healthy
       backend-api:
         condition: service_started
 
