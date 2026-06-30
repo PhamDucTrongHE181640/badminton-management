@@ -62,7 +62,6 @@ type AdminUser = {
   roles: string[];
   visible_skill_tier: string;
   elo_value: number;
-  has_google_identity: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -101,7 +100,7 @@ export default function AdminDashboardPage() {
 
   async function loadUsers(search: string) {
     const query = new URLSearchParams();
-    query.set("limit", "80");
+    query.set("limit", "500");
     if (search.trim()) query.set("search", search.trim());
 
     try {
@@ -317,7 +316,6 @@ export default function AdminDashboardPage() {
                 <th className="px-4 py-3">Liên hệ</th>
                 <th className="px-4 py-3">Role</th>
                 <th className="px-4 py-3">Skill</th>
-                <th className="px-4 py-3">Nguồn login</th>
                 <th className="px-4 py-3">Ngày tạo</th>
               </tr>
             </thead>
@@ -362,16 +360,12 @@ export default function AdminDashboardPage() {
                     <p>{item.visible_skill_tier}</p>
                     <p className="mt-1 text-xs text-slate-500">Elo {item.elo_value}</p>
                   </td>
-                  <td className="px-4 py-3">
-                    <Badge tone="success">Google</Badge>
-                    {!item.is_active ? <Badge tone="danger" className="ml-2">inactive</Badge> : null}
-                  </td>
                   <td className="px-4 py-3 text-slate-600">{formatFullDateTime(item.created_at)}</td>
                 </tr>
               ))}
               {users.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-6 text-center text-slate-500" colSpan={6}>
+                  <td className="px-4 py-6 text-center text-slate-500" colSpan={5}>
                     Chưa có user theo điều kiện lọc.
                   </td>
                 </tr>
