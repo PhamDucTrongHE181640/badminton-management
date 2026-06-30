@@ -956,6 +956,12 @@ def create_court(*, owner_user_id: str, data: dict[str, Any]) -> dict[str, Any]:
             entity_id=str(row.id),
             payload={"name": data["name"], "sport": data["sport"]},
         )
+    try:
+        from app.services.cron import generate_daily_sessions
+        generate_daily_sessions(30)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Failed to generate daily sessions: {e}")
     return _court_from_row(row)
 
 

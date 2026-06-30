@@ -1,5 +1,5 @@
 import logging
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -16,7 +16,9 @@ def generate_daily_sessions(days_ahead: int = 30) -> int:
     Skips if a session already exists for that timeslot.
     """
     total_created = 0
-    today = datetime.now().date()
+    vn_tz = ZoneInfo("Asia/Ho_Chi_Minh")
+    # Today in VN timezone
+    today = datetime.now(vn_tz).date()
     end_date = today + timedelta(days=days_ahead)
 
     with get_engine().begin() as connection:
@@ -41,31 +43,32 @@ def generate_daily_sessions(days_ahead: int = 30) -> int:
             open_time = court.open_time or time(5, 0)
             close_time = court.close_time or time(22, 30)
 
-            # 2. Fetch existing sessions to avoid duplicates
-            existing_starts_at = set()
+            # 2. Fetch existing sessions to avoid duplicates and overlaps
+            existing_intervals = []
             rows = connection.execute(
                 text(
                     """
-                    SELECT starts_at
+                    SELECT starts_at, ends_at
                     FROM public.sessions
                     WHERE court_id = :court_id
-                      AND starts_at >= :start_date
+                      AND ends_at > :start_date
                       AND starts_at < :end_date
                     """
                 ),
                 {
                     "court_id": court_id,
-                    "start_date": datetime.combine(today, time(0, 0)).astimezone(),
-                    "end_date": datetime.combine(end_date + timedelta(days=1), time(0, 0)).astimezone(),
+                    "start_date": datetime.combine(today, time(0, 0)).replace(tzinfo=vn_tz),
+                    "end_date": datetime.combine(end_date + timedelta(days=1), time(0, 0)).replace(tzinfo=vn_tz),
                 },
             ).fetchall()
             for row in rows:
-                existing_starts_at.add(row.starts_at)
+                start = row.starts_at.astimezone(timezone.utc) if row.starts_at.tzinfo else row.starts_at.replace(tzinfo=timezone.utc)
+                end = row.ends_at.astimezone(timezone.utc) if row.ends_at.tzinfo else row.ends_at.replace(tzinfo=timezone.utc)
+                existing_intervals.append((start, end))
 
             # 3. Generate new slots
             new_sessions = []
             current_date = today
-            vn_tz = ZoneInfo("Asia/Ho_Chi_Minh")
             
             while current_date <= end_date:
                 # generate times from open_time to close_time with 30-min step
@@ -73,7 +76,17 @@ def generate_daily_sessions(days_ahead: int = 30) -> int:
                 dt_close = datetime.combine(current_date, close_time).replace(tzinfo=vn_tz)
                 
                 while dt_current < dt_close:
-                    if dt_current not in existing_starts_at:
+                    dt_current_utc = dt_current.astimezone(timezone.utc) if dt_current.tzinfo else dt_current.replace(tzinfo=timezone.utc)
+                    dt_next_utc = dt_current_utc + timedelta(minutes=30)
+                    
+                    # Check overlap with any existing intervals
+                    has_overlap = False
+                    for ext_start, ext_end in existing_intervals:
+                        if dt_current_utc < ext_end and dt_next_utc > ext_start:
+                            has_overlap = True
+                            break
+                    
+                    if not has_overlap:
                         # Prepare insert data
                         new_sessions.append(
                             {
