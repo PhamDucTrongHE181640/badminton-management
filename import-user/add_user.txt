@@ -1,0 +1,374 @@
+## example format Email
+# HE180644 Trần Trung Kiên
+# -> kientthe180644@fpt.edu.vn
+
+1	
+
+HA180024	Nguyễn	Thị	Quỳnh
+2	
+
+HA180045	Nguyễn	Thị Hương	Lan
+3	
+
+HA194048	Nguyễn	Thị Thảo	Ngân
+4	
+
+HE151064	Vũ	Hữu	Mạnh
+5	
+
+HE163161	Lê	Duy	Nam
+6	
+
+HE171269	Nguyễn	Nhật	Minh
+7	
+
+HE172704	Nguyễn	Thị Thảo	Vân
+8	
+
+HE173240	Lê	Nam Minh	Quân
+9	
+
+HE173250	Nguyễn	Huyền	Diệu
+10	
+
+HE176277	Nguyễn	Văn	Long
+11	
+
+HE176506	Nguyễn	Hữu	Thắng
+12	
+
+HE176560	Lê	Quang	Minh
+13	
+
+HE180028	Đặng	Huyền Linh	Anh
+14	
+
+HE180101	Lương	Anh	Minh
+15	
+
+HE180166	Nguyễn	Quang	Hùng
+16	
+
+HE180297	Ngô	Văn	Đức
+17	
+
+HE180323	Phạm	Văn	Minh
+18	
+
+HE180644	Trần	Trung	Kiên
+19	
+
+HE180734	Trương	Minh	Hoàng
+20	
+
+HE180950	Hoàng	Đức	Lương
+21	
+
+HE180953	Trần	Trọng	Khôi
+22	
+
+HE180997	Nguyễn	Thế	Nam
+23	
+
+HE181119	Dương	Hữu Thái	Sơn
+24	
+
+HE181147	Nguyễn	Phi	Sơn
+25	
+
+HE181173	Nguyễn	Tiến	Duy
+26	
+
+HE181562	Nguyễn	Doanh	Thành
+27	
+
+HE181657	Chu	Thanh	Tùng
+28	
+
+HE181767	Nguyễn	Phú	Thịnh
+29	
+
+HE181769	Nguyễn	Công	Thành
+30	
+
+HE182175	Đoàn	Trung	Hiếu
+31	
+
+HE182194	Dương	Anh	Dũng
+32	
+
+HE182212	Phạm	Văn	Tuyền
+33	
+
+HE182292	Cao	Văn	Hậu
+34	
+
+HE186053	Đặng	Văn Thái	Anh
+35	
+
+HE186325	Nông	Hoàng	Đức
+36	
+
+HE186414	Hoàng	Mạnh	Hùng
+37	
+
+HE186558	Nguyễn	Thị Mai	Hương
+38	
+
+HE186577	Nguyễn	Lan	Anh
+39	
+
+HE186643	Nguyễn	Hoàng	Hiếu
+40	
+
+HE186665	Nguyễn	Lê Quang	Thắng
+41	
+
+HE186699	Nguyễn	Thị Trà	My
+42	
+
+HE186712	Đới	Duy	Khánh
+43	
+
+HE186800	Vũ	Đức	Lực
+44	
+
+HE186877	Nguyễn	Thế	Vinh
+45	
+
+HE186879	Hà	Hoàng	Mi
+46	
+
+HE187244	Lê	Phương	Thảo
+47	
+
+HE187298	Nguyễn	Trần Lan	Anh
+48	
+
+HE187318	Nguyễn	Thanh	Dương
+49	
+
+HE187346	Ngô	Trung	Long
+
+1	
+
+HA189000	Trần	Nguyễn Ngọc	Nam
+2	
+
+HE171880	Trần	Quốc	Thái
+3	
+
+HE180400	Đinh	Ngọc	Sơn
+4	
+
+HE180644	Trần	Trung	Kiên
+5	
+
+HE181326	Nguyễn	Hoàng	Long
+6	
+
+HE181335	Đỗ	Quang	Đại
+7	
+
+HE181500	Đỗ	Tiến	Đạt
+8	
+
+HE181640	Phạm	Đức	Trọng
+9	
+
+HE181751	Nguyễn	Quốc	Việt
+10	
+
+HE181812	Quách	Thị Thu	Hảo
+11	
+
+HE182024	Tạ		Khang
+12	
+
+HE182327	Nguyễn	Ngọc	Đạt
+13	
+
+HE182335	Nhữ	Đình	Cần
+14	
+
+HE186085	Nguyễn	Phan	Anh
+15	
+
+HE186523	Nguyễn	Đăng	Khang
+16	
+
+HE186666	Ngô	Xuân	Nam
+17	
+
+HE186670	Mai	Sỹ	Tâm
+18	
+
+HE187306	Trịnh	Xuân	Thắng
+
+20	
+
+HS180066	Đỗ	Hải	Yến
+21	
+
+HS180312	Nguyễn	Thuỳ	Chi
+22	
+
+HS180426	Hoàng	Đức	Thọ
+23	
+
+HS180593	Trần	Ngọc	Nhi
+24	
+
+HS180642	Nguyễn	Thị Thuỳ	Trang
+25	
+
+HS186049	Phạm	Thị Thùy	Linh
+26	
+
+HS186212	Nguyễn	Thị Ngọc	Ly
+27	
+
+HS186432	Nguyễn	Minh	Hoàng
+28	
+
+HS186449	Nguyễn	Đắc	Minh
+29	
+
+HS186456	Đỗ	Thu	Trang
+30	
+
+HS186464	Nguyễn	Văn	Quang
+31	
+
+HS189004	Trịnh	Quốc	Khánh
+
+1	
+
+HE160057	Lưu	Anh	Đức
+2	
+
+HE176207	Nguyễn	Trung	Hiếu
+3	
+
+HE180297	Ngô	Văn	Đức
+4	
+
+HE180486	Nguyễn	Trường	An
+5	
+
+HE180644	Trần	Trung	Kiên
+6	
+
+HE180931	Kiều	Đức	Lâm
+7	
+
+HE181066	Phạm	Văn	Khoa
+8	
+
+HE181640	Phạm	Đức	Trọng
+9	
+
+HE181869	Phạm	Quốc	Tuấn
+10	
+
+HE182150	Lê	Minh	Đức
+11	
+
+HE182172	Đỗ	Phạm Ngọc	Linh
+12	
+
+HE186354	Nguyễn	Minh	Phương
+13	
+
+HE186791	Vũ	Minh	Tân
+14	
+
+HE186815	Nguyễn	Đức	Cường
+15	
+
+HE186884	Trần	Minh	Dũng
+16	
+
+HE186902	Nguyễn	Chiến	Thắng
+17	
+
+HE186918	Đặng	Quang	Khải
+18	
+
+HE187167	Lê	Văn	Triệu
+19	
+
+HE187201	Lê	Xuân	Hiếu
+
+1	
+
+HE170149	Lương	Quang	Trung
+2	
+
+HE170516	Vũ	Đoàn Quốc	Việt
+3	
+
+HE171577	Trần	Minh	Ngọc
+4	
+
+HE176177	Đặng	Tấn	Bình
+5	
+
+HE180297	Ngô	Văn	Đức
+6	
+
+HE180420	Bùi	Ngọc	Anh
+7	
+
+HE180486	Nguyễn	Trường	An
+8	
+
+HE180644	Trần	Trung	Kiên
+9	
+
+HE180786	Kiều	Văn	Khoa
+10	
+
+HE180875	Từ	Minh	Đức
+11	
+
+HE180931	Kiều	Đức	Lâm
+12	
+
+HE181066	Phạm	Văn	Khoa
+13	
+
+HE182094	Vũ	Kim	Kỳ
+14	
+
+HE182287	Trương	Minh	Đăng
+15	
+
+HE182346	Phan	Anh	Tú
+16	
+
+HE186791	Vũ	Minh	Tân
+17	
+
+HE186815	Nguyễn	Đức	Cường
+18	
+
+HE186884	Trần	Minh	Dũng
+19	
+
+HE186902	Nguyễn	Chiến	Thắng
+20	
+
+HE186918	Đặng	Quang	Khải
+21	
+
+HE187051	Trần	Trung	Dũng
+22	
+
+HE187167	Lê	Văn	Triệu
+23	
+
+HE187201	Lê	Xuân	Hiếu
+24	
+
+HE187279	Nguyễn	Văn	Dinh

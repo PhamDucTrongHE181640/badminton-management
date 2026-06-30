@@ -51,11 +51,11 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      CORS_ORIGINS: "${CORS_ORIGINS:-http://ec2-13-251-104-233.ap-southeast-1.compute.amazonaws.com,http://13.251.104.233}"
-      FRONTEND_BASE_URL: "${PUBLIC_BASE_URL:-http://ec2-13-251-104-233.ap-southeast-1.compute.amazonaws.com}"
-      BACKEND_BASE_URL: "${PUBLIC_BASE_URL:-http://ec2-13-251-104-233.ap-southeast-1.compute.amazonaws.com}"
-      GOOGLE_REDIRECT_URI: "${PUBLIC_BASE_URL:-http://ec2-13-251-104-233.ap-southeast-1.compute.amazonaws.com}/api/v1/auth/google/callback"
-      VNPAY_RETURN_URL: "${PUBLIC_BASE_URL:-http://ec2-13-251-104-233.ap-southeast-1.compute.amazonaws.com}/api/v1/payments/vnpay/return"
+      CORS_ORIGINS: "${CORS_ORIGINS:-http://netup.io.vn,http://13.251.104.233}"
+      FRONTEND_BASE_URL: "${PUBLIC_BASE_URL:-http://netup.io.vn}"
+      BACKEND_BASE_URL: "${PUBLIC_BASE_URL:-http://netup.io.vn}"
+      GOOGLE_REDIRECT_URI: "${PUBLIC_BASE_URL:-http://netup.io.vn}/api/v1/auth/google/callback"
+      VNPAY_RETURN_URL: "${PUBLIC_BASE_URL:-http://netup.io.vn}/api/v1/payments/vnpay/return"
     ports:
       - "${BACKEND_HOST_BIND:-127.0.0.1}:${BACKEND_HOST_PORT:-8000}:8000"
     volumes:
@@ -66,6 +66,8 @@ services:
       alembic upgrade head &&
       echo 'Seeding development admin if enabled...' &&
       python -m app.scripts.seed_admin &&
+      echo 'Importing bulk users if enabled...' &&
+      python -m app.scripts.import_users &&
       echo 'Starting NetUp API...' &&
       exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
       "

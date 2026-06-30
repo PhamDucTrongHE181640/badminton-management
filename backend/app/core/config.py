@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     admin_seed_email: str = "admin@netup.local"
     admin_seed_username: str = "admin"
     admin_seed_password: str = "admin12345"
+    user_import_enabled: bool = False
+    user_import_sql_path: str = "/app/database/import_users.sql"
     google_client_id: str = ""
     google_client_secret: str = ""
     google_redirect_uri: str = "http://localhost:8000/api/v1/auth/google/callback"
