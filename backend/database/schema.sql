@@ -272,6 +272,8 @@ CREATE TABLE IF NOT EXISTS public.courts (
   min_rental_duration_minutes integer NOT NULL DEFAULT 60 CHECK (
     min_rental_duration_minutes IN (30, 60, 90, 120, 150, 180, 210, 240, 270, 300)
   ),
+  open_time time NOT NULL DEFAULT '05:00:00',
+  close_time time NOT NULL DEFAULT '22:30:00',
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE (complex_id, sub_court_name)

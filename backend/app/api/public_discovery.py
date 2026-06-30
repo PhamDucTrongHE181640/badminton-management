@@ -20,7 +20,7 @@ def get_public_discovery_sessions(
     district: Annotated[str | None, Query(min_length=1, max_length=120)] = None,
     starts_from: Annotated[datetime | None, Query()] = None,
     starts_to: Annotated[datetime | None, Query()] = None,
-    has_open_slots: Annotated[bool | None, Query()] = True,
+    has_open_slots: Annotated[bool | None, Query()] = None,
     post_type: Annotated[SessionPostType | None, Query()] = None,
 ) -> list[dict[str, object]]:
     return list_discovery_sessions(

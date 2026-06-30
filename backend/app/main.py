@@ -32,6 +32,34 @@ from app.core.config import get_settings
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
 from app.core.middleware import RequestIdMiddleware
+from app.services.cron import generate_daily_sessions
+
+import asyncio
+import logging
+from contextlib import asynccontextmanager
+
+logger = logging.getLogger(__name__)
+
+async def background_cron_task():
+    while True:
+        try:
+            logger.info("Running daily session generation cron task...")
+            # Run in a threadpool to avoid blocking event loop
+            count = await asyncio.to_thread(generate_daily_sessions, 30)
+            logger.info(f"Daily session generation completed. Created {count} sessions.")
+        except Exception as e:
+            logger.error(f"Error in background_cron_task: {e}")
+        
+        # Sleep for 24 hours
+        await asyncio.sleep(86400)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    task = asyncio.create_task(background_cron_task())
+    yield
+    # Shutdown
+    task.cancel()
 
 
 def create_app() -> FastAPI:
@@ -44,6 +72,7 @@ def create_app() -> FastAPI:
         docs_url="/api/docs",
         redoc_url="/api/redoc",
         openapi_url="/api/openapi.json",
+        lifespan=lifespan,
     )
 
     app.add_middleware(RequestIdMiddleware)

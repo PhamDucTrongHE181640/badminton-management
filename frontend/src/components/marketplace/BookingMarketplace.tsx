@@ -209,14 +209,18 @@ function shortTimeRange(startsAt: string, durationMinutes: number) {
   const start = new Date(startsAt);
   if (Number.isNaN(start.getTime())) return "Chưa có giờ";
   const end = new Date(start.getTime() + durationMinutes * 60_000);
-  const format = (value: Date) => value.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+  const format = (value: Date) => value.toLocaleTimeString("vi-VN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Ho_Chi_Minh",
+  });
   return `${format(start)} - ${format(end)}`;
 }
 
 function shortDateLabel(startsAt: string) {
   const date = new Date(startsAt);
   if (Number.isNaN(date.getTime())) return "Chưa có ngày";
-  return date.toLocaleDateString("vi-VN", { weekday: "short", day: "2-digit", month: "2-digit" });
+  return date.toLocaleDateString("vi-VN", { weekday: "short", day: "2-digit", month: "2-digit", timeZone: "Asia/Ho_Chi_Minh" });
 }
 
 function timeBucketMatches(startsAt: string, bucket: string) {
@@ -225,7 +229,12 @@ function timeBucketMatches(startsAt: string, bucket: string) {
   const endHour = Number(bucket.slice(8, 10));
   const date = new Date(startsAt);
   if (Number.isNaN(date.getTime()) || Number.isNaN(startHour) || Number.isNaN(endHour)) return true;
-  const hour = date.getHours();
+  const hourStr = new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    hour12: false,
+    timeZone: "Asia/Ho_Chi_Minh"
+  }).format(date);
+  const hour = Number(hourStr);
   return hour >= startHour && hour < endHour;
 }
 
@@ -305,6 +314,7 @@ type GroupedCourt = {
     timeLabel: string;
     startsAt: string;
     openSlots: number;
+    status: string;
   }>;
 };
 
@@ -320,6 +330,20 @@ const getPinCoords = (index: number) => {
   ];
   return predefinedCoords[index % predefinedCoords.length];
 };
+
+function generateDateOptions(days: number) {
+  const options = [];
+  const today = new Date();
+  for (let i = 0; i < days; i++) {
+    const d = new Date(today.getTime() + i * 86400000);
+    const offset = d.getTimezoneOffset();
+    const localDate = new Date(d.getTime() - (offset * 60 * 1000));
+    const value = localDate.toISOString().split("T")[0]; // YYYY-MM-DD
+    const label = shortDateLabel(d.toISOString());
+    options.push({ value, label });
+  }
+  return options;
+}
 
 export function BookingMarketplace({ variant }: { variant: Variant }) {
   const searchParams = useSearchParams();
@@ -344,7 +368,12 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
   const [playAll, setPlayAll] = useState(false);
 
   const [location, setLocation] = useState("Tất cả khu vực");
-  const [matchDate, setMatchDate] = useState("Tất cả ngày");
+  const [matchDate, setMatchDate] = useState(() => {
+    const today = new Date();
+    const offset = today.getTimezoneOffset();
+    const localToday = new Date(today.getTime() - (offset * 60 * 1000));
+    return localToday.toISOString().split("T")[0];
+  });
   const [matchTime, setMatchTime] = useState("Tất cả khung giờ");
   const [courtType, setCourtType] = useState("Tất cả sân");
   const [activeFilterDropdown, setActiveFilterDropdown] = useState<string | null>(null);
@@ -363,8 +392,13 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
     if (district.trim()) params.set("district", district.trim());
     if (effectivePostType) params.set("post_type", effectivePostType);
     if (openOnly && !isBookingMode) params.set("has_open_slots", "true");
+    
+    if (matchDate) {
+      params.set("starts_from", `${matchDate}T00:00:00+07:00`);
+      params.set("starts_to", `${matchDate}T23:59:59+07:00`);
+    }
     return params.toString();
-  }, [district, effectivePostType, openOnly, sport]);
+  }, [district, effectivePostType, openOnly, sport, matchDate]);
 
   async function loadDiscovery() {
     setIsLoading(true);
@@ -478,11 +512,8 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
   }, [sessions]);
 
   const dateOptions = useMemo(() => {
-    const labels = Array.from(new Set(sessions.map((item) => shortDateLabel(item.starts_at)))).filter(
-      (item) => item !== "Chưa có ngày",
-    );
-    return ["Tất cả ngày", ...labels];
-  }, [sessions]);
+    return generateDateOptions(30);
+  }, []);
 
   const timeOptions = ["Tất cả khung giờ", "06:00 - 10:00", "10:00 - 14:00", "14:00 - 18:00", "18:00 - 22:00"];
 
@@ -496,10 +527,6 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
         item.address.toLowerCase().includes(selectedLocWord) ||
         item.complexName.toLowerCase().includes(selectedLocWord)
       );
-    }
-
-    if (matchDate !== "Tất cả ngày") {
-      items = items.filter((item) => item.dateLabel === matchDate);
     }
 
     if (matchTime !== "Tất cả khung giờ") {
@@ -572,9 +599,6 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
         item.complex_name.toLowerCase().includes(selectedLocWord)
       );
     }
-    if (matchDate !== "Tất cả ngày") {
-      items = items.filter((item) => shortDateLabel(item.starts_at) === matchDate);
-    }
     if (matchTime !== "Tất cả khung giờ") {
       items = items.filter((item) => timeBucketMatches(item.starts_at, matchTime));
     }
@@ -591,7 +615,11 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
     const map: Record<string, GroupedCourt> = {};
     visibleRentalSessions.forEach((session, index) => {
       const key = `${session.complex_name}-${session.sub_court_name}`;
-      const timeLabel = new Date(session.starts_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
+      const timeLabel = new Date(session.starts_at).toLocaleTimeString("vi-VN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: "Asia/Ho_Chi_Minh",
+      });
       
       if (!map[key]) {
         map[key] = {
@@ -619,7 +647,8 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
         sessionId: session.id,
         timeLabel,
         startsAt: session.starts_at,
-        openSlots: session.open_slots
+        openSlots: session.open_slots,
+        status: session.status
       });
     });
     
@@ -789,7 +818,7 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
               </svg>
               <div className="text-left leading-tight">
                 <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Ngày</p>
-                <p className="text-slate-800 text-xs">{matchDate}</p>
+                <p className="text-slate-800 text-xs">{dateOptions.find(d => d.value === matchDate)?.label || matchDate}</p>
               </div>
               <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 text-slate-400 shrink-0 ml-1" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
@@ -801,17 +830,17 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
                 <div className="absolute left-0 mt-2 z-40 w-[200px] rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg">
                   {dateOptions.map((d) => (
                     <button
-                      key={d}
+                      key={d.value}
                       type="button"
                       onClick={() => {
-                        setMatchDate(d);
+                        setMatchDate(d.value);
                         setActiveFilterDropdown(null);
                       }}
                       className={`w-full block rounded-lg px-3 py-2 text-left text-xs transition cursor-pointer ${
-                        matchDate === d ? "bg-red-50 text-red-800 font-semibold" : "text-slate-700 hover:bg-slate-50"
+                        matchDate === d.value ? "bg-red-50 text-red-800 font-semibold" : "text-slate-700 hover:bg-slate-50"
                       }`}
                     >
-                      {d}
+                      {d.label}
                     </button>
                   ))}
                 </div>
@@ -1727,7 +1756,7 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
                 onChange={(e) => setMatchDate(e.target.value)}
               >
                 {dateOptions.map((d) => (
-                  <option key={d} value={d}>{d}</option>
+                  <option key={d.value} value={d.value}>{d.label}</option>
                 ))}
               </select>
             </div>
@@ -1942,15 +1971,17 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
                             <div className="flex flex-wrap gap-1.5">
                               {(selectedCourtKey === courtKey ? court.slots : court.slots.slice(0, 5)).map((slot) => {
                                 const isSelected = selectedSessionIdsForCourt.includes(slot.sessionId);
-                                const isBooked = slot.openSlots === 0;
+                                const isBooked = slot.openSlots === 0 || slot.status === "cancelled";
+                                const isPast = new Date(slot.startsAt).getTime() < Date.now();
+                                const isDisabled = isBooked || isPast;
                                 return (
                                   <button
                                     key={slot.sessionId}
                                     type="button"
-                                    title={isBooked ? "Đã có người đặt trước" : ""}
+                                    title={isDisabled ? (isPast ? "Đã qua giờ" : slot.status === "cancelled" ? "Đã khóa" : "Đã có người đặt trước") : ""}
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      if (isBooked) return;
+                                      if (isDisabled) return;
                                       
                                       if (selectedCourtKey !== courtKey) {
                                         setSelectedCourtKey(courtKey);
@@ -1976,7 +2007,7 @@ export function BookingMarketplace({ variant }: { variant: Variant }) {
                                       });
                                     }}
                                     className={`px-3 py-1.5 text-xs font-bold rounded-lg transition border ${
-                                      isBooked
+                                      isDisabled
                                         ? "bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed opacity-60"
                                         : isSelected
                                         ? "bg-red-50 text-[#b00c14] border-red-200 shadow-3xs cursor-pointer"

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, time, date
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, Response, status
@@ -76,6 +76,8 @@ class CourtCreate(InventoryModel):
     base_price_vnd: int = Field(ge=0)
     max_rental_duration_minutes: int = Field(ge=30, le=300)
     min_rental_duration_minutes: int = Field(default=60, ge=30, le=300)
+    open_time: time = Field(default=time(5, 0))
+    close_time: time = Field(default=time(22, 30))
 
 
 class CourtUpdate(InventoryModel):
@@ -89,6 +91,8 @@ class CourtUpdate(InventoryModel):
     base_price_vnd: int | None = Field(default=None, ge=0)
     max_rental_duration_minutes: int | None = Field(default=None, ge=30, le=300)
     min_rental_duration_minutes: int | None = Field(default=None, ge=30, le=300)
+    open_time: time | None = None
+    close_time: time | None = None
 
 
 class CourtResponse(BaseModel):
@@ -105,6 +109,8 @@ class CourtResponse(BaseModel):
     base_price_vnd: int
     max_rental_duration_minutes: int
     min_rental_duration_minutes: int
+    open_time: time
+    close_time: time
     created_at: datetime
     updated_at: datetime
     complex_name: str | None = None
@@ -274,8 +280,9 @@ def get_post_quota(
 def get_sessions(
     owner: Annotated[UserPrincipal, Depends(require_owner)],
     court_id: Annotated[str | None, Query()] = None,
+    target_date: Annotated[date | None, Query()] = None,
 ) -> list[dict[str, object]]:
-    return list_sessions(owner_user_id=owner.id, court_id=court_id)
+    return list_sessions(owner_user_id=owner.id, court_id=court_id, target_date=target_date)
 
 
 @router.post("/sessions", response_model=SessionResponse, status_code=201)

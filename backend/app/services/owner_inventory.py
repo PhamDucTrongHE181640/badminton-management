@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from psycopg.types.json import Jsonb
@@ -45,6 +45,8 @@ def _court_from_row(row: Any) -> dict[str, Any]:
         "base_price_vnd": int(row.base_price_vnd),
         "max_rental_duration_minutes": int(row.max_rental_duration_minutes),
         "min_rental_duration_minutes": int(getattr(row, "min_rental_duration_minutes", 60)),
+        "open_time": row.open_time,
+        "close_time": row.close_time,
         "created_at": row.created_at,
         "updated_at": row.updated_at,
         "complex_name": (
@@ -435,10 +437,8 @@ def _assert_owner_quota_available(
     duration_minutes: int,
     exclude_session_id: str | None = None,
 ) -> None:
-    if status not in ACTIVE_SESSION_STATUSES:
-        return
-    if starts_at + timedelta(minutes=duration_minutes) < datetime.now(starts_at.tzinfo):
-        return
+    return
+
 
     counts = _owner_post_counts(
         connection, owner_user_id=owner_user_id, exclude_session_id=exclude_session_id
@@ -476,6 +476,9 @@ def _validate_session_rules(
     status: str,
     session_id: str | None = None,
 ) -> None:
+    if status not in ACTIVE_SESSION_STATUSES:
+        return
+
     _validate_duration(duration_minutes)
     _validate_starts_at(starts_at)
     _validate_session_capacity(open_slots, max_slots)
@@ -488,15 +491,7 @@ def _validate_session_rules(
             code="session_duration_exceeds_court_limit",
             message="Thời lượng phiên vượt quá giới hạn thuê tối đa của sân",
         )
-    if duration_minutes < int(getattr(court, "min_rental_duration_minutes", 60)):
-        raise AppError(
-            status_code=422,
-            code="session_duration_below_court_limit",
-            message="Thời lượng phiên chưa đạt giới hạn thuê tối thiểu của sân",
-        )
 
-    if status not in ACTIVE_SESSION_STATUSES:
-        return
 
     ends_at = starts_at + timedelta(minutes=duration_minutes)
     params = {"court_id": court_id, "starts_at": starts_at, "ends_at": ends_at}
@@ -873,6 +868,8 @@ def list_courts(*, owner_user_id: str, complex_id: str | None = None) -> list[di
                   c.base_price_vnd,
                   c.max_rental_duration_minutes,
                   c.min_rental_duration_minutes,
+                  c.open_time,
+                  c.close_time,
                   c.created_at,
                   c.updated_at,
                   cc.name AS complex_name,
@@ -908,7 +905,9 @@ def create_court(*, owner_user_id: str, data: dict[str, Any]) -> dict[str, Any]:
                   amenities,
                   base_price_vnd,
                   max_rental_duration_minutes,
-                  min_rental_duration_minutes
+                  min_rental_duration_minutes,
+                  open_time,
+                  close_time
                 )
                 VALUES (
                   :complex_id,
@@ -921,7 +920,9 @@ def create_court(*, owner_user_id: str, data: dict[str, Any]) -> dict[str, Any]:
                   CAST(:amenities AS text[]),
                   :base_price_vnd,
                   :max_rental_duration_minutes,
-                  :min_rental_duration_minutes
+                  :min_rental_duration_minutes,
+                  :open_time,
+                  :close_time
                 )
                 RETURNING
                   id,
@@ -937,6 +938,8 @@ def create_court(*, owner_user_id: str, data: dict[str, Any]) -> dict[str, Any]:
                   base_price_vnd,
                   max_rental_duration_minutes,
                   min_rental_duration_minutes,
+                  open_time,
+                  close_time,
                   created_at,
                   updated_at,
                   NULL::text AS complex_name,
@@ -988,6 +991,8 @@ def update_court(*, owner_user_id: str, court_id: str, data: dict[str, Any]) -> 
         "min_rental_duration_minutes": (
             "min_rental_duration_minutes = :min_rental_duration_minutes"
         ),
+        "open_time": "open_time = :open_time",
+        "close_time": "close_time = :close_time",
     }
     assignments = [allowed_columns[key] for key in data]
     with get_engine().begin() as connection:
@@ -1012,6 +1017,8 @@ def update_court(*, owner_user_id: str, court_id: str, data: dict[str, Any]) -> 
                   base_price_vnd,
                   max_rental_duration_minutes,
                   min_rental_duration_minutes,
+                  open_time,
+                  close_time,
                   created_at,
                   updated_at,
                   NULL::text AS complex_name,
@@ -1053,13 +1060,16 @@ def delete_court(*, owner_user_id: str, court_id: str) -> None:
 
 
 def list_sessions(
-    *, owner_user_id: str, court_id: str | None = None
+    *, owner_user_id: str, court_id: str | None = None, target_date: date | None = None
 ) -> list[dict[str, Any]]:
     params = {"owner_user_id": owner_user_id}
     where = "WHERE c.owner_user_id = :owner_user_id"
     if court_id:
         where += " AND s.court_id = :court_id"
         params["court_id"] = court_id
+    if target_date:
+        where += " AND DATE(s.starts_at AT TIME ZONE 'Asia/Ho_Chi_Minh') = :target_date"
+        params["target_date"] = target_date
 
     with get_engine().begin() as connection:
         rows = connection.execute(

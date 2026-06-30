@@ -473,13 +473,15 @@ def list_discovery_sessions(
     params: dict[str, Any] = {
         "status_scheduled": "scheduled",
         "status_locked": "locked",
+        "status_cancelled": "cancelled",
         "starts_from": starts_from or now,
     }
     where_parts = [
         (
             "s.status IN ("
             "CAST(:status_scheduled AS public.session_status), "
-            "CAST(:status_locked AS public.session_status)"
+            "CAST(:status_locked AS public.session_status), "
+            "CAST(:status_cancelled AS public.session_status)"
             ")"
         ),
         "s.starts_at >= :starts_from",
@@ -502,7 +504,7 @@ def list_discovery_sessions(
         where_parts.append("s.post_type = CAST(:post_type AS public.session_post_type)")
         params["post_type"] = post_type
 
-    where_clause = f"WHERE {' AND '.join(where_parts)} ORDER BY s.starts_at ASC LIMIT 200"
+    where_clause = f"WHERE {' AND '.join(where_parts)} ORDER BY s.starts_at ASC LIMIT 1000"
     query = _session_select_sql(where_clause)
     with get_engine().begin() as connection:
         _expire_all_overdue_deposit_bookings(connection)

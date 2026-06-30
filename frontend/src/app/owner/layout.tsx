@@ -8,6 +8,7 @@ export default function OwnerLayout({ children }: { children: React.ReactNode })
         links={[
           { href: "/owner/dashboard", label: "Tổng quan" },
           { href: "/owner/courts", label: "Quản lý sân" },
+          { href: "/owner/schedule", label: "Quản lý lịch" },
           { href: "/owner/check-in", label: "Check-in" },
         ]}
       />

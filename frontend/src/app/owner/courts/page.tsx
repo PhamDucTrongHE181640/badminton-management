@@ -91,6 +91,10 @@ export default function OwnerCourtsPage() {
   const [courts, setCourts] = useState<Court[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [quota, setQuota] = useState<OwnerPostQuota | null>(null);
+
+  const today = new Date().toISOString().split("T")[0];
+  const [targetDate, setTargetDate] = useState<string>(today);
+
   const [message, setMessage] = useState("Đang tải dữ liệu sân...");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -108,6 +112,8 @@ export default function OwnerCourtsPage() {
   const [basePrice, setBasePrice] = useState("120000");
   const [maxRentalDuration, setMaxRentalDuration] = useState("120");
   const [minRentalDuration, setMinRentalDuration] = useState("60");
+  const [openTime, setOpenTime] = useState("05:00");
+  const [closeTime, setCloseTime] = useState("22:30");
 
   const [postKind, setPostKind] = useState<PostKind>("rental");
   const [sessionCourtId, setSessionCourtId] = useState("");
@@ -146,15 +152,13 @@ export default function OwnerCourtsPage() {
   async function loadInventory() {
     setError("");
     try {
-      const [nextComplexes, nextCourts, nextSessions, nextQuota] = await Promise.all([
+      const [nextComplexes, nextCourts, nextQuota] = await Promise.all([
         apiFetch<CourtComplex[]>("/api/v1/owner/court-complexes", { credentials: "include" }),
         apiFetch<Court[]>("/api/v1/owner/courts", { credentials: "include" }),
-        apiFetch<Session[]>("/api/v1/owner/sessions", { credentials: "include" }),
         apiFetch<OwnerPostQuota>("/api/v1/owner/post-quota", { credentials: "include" }),
       ]);
       setComplexes(nextComplexes);
       setCourts(nextCourts);
-      setSessions(nextSessions);
       setQuota(nextQuota);
       setCourtComplexId((previous) => previous || nextComplexes[0]?.id || "");
       setSessionCourtId((previous) => previous || nextCourts[0]?.id || "");
@@ -165,9 +169,22 @@ export default function OwnerCourtsPage() {
     }
   }
 
+  async function loadSessions() {
+    try {
+      const nextSessions = await apiFetch<Session[]>(`/api/v1/owner/sessions?target_date=${targetDate}`, { credentials: "include" });
+      setSessions(nextSessions);
+    } catch (caught) {
+      setError(errorMessage(caught, "Không tải được lịch"));
+    }
+  }
+
   useEffect(() => {
     void loadInventory();
   }, []);
+
+  useEffect(() => {
+    void loadSessions();
+  }, [targetDate]);
 
   async function createComplex(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -209,6 +226,8 @@ export default function OwnerCourtsPage() {
           base_price_vnd: Number(basePrice),
           max_rental_duration_minutes: Number(maxRentalDuration),
           min_rental_duration_minutes: Number(minRentalDuration),
+          open_time: openTime + ":00",
+          close_time: closeTime + ":00",
         }),
       });
       setCourtName("");
@@ -267,8 +286,23 @@ export default function OwnerCourtsPage() {
     try {
       await apiFetch(path, { method: "DELETE", credentials: "include" }, { allowNoContent: true });
       await loadInventory();
+      await loadSessions();
     } catch (caught) {
       setError(errorMessage(caught, "Không xóa được dữ liệu"));
+    }
+  }
+
+  async function toggleLockSession(sessionId: string, currentStatus: string) {
+    const newStatus = currentStatus === "locked" ? "scheduled" : "locked";
+    try {
+      await apiFetch(`/api/v1/owner/sessions/${sessionId}`, {
+        method: "PATCH",
+        credentials: "include",
+        body: JSON.stringify({ status: newStatus }),
+      });
+      await loadSessions();
+    } catch (caught) {
+      setError(errorMessage(caught, "Không cập nhật được trạng thái"));
     }
   }
 
@@ -366,6 +400,14 @@ export default function OwnerCourtsPage() {
             <Field label="Giá cơ bản">
               <input className={inputClassName} value={basePrice} onChange={(event) => setBasePrice(event.target.value)} inputMode="numeric" required />
             </Field>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Giờ mở cửa">
+                <input className={inputClassName} type="time" value={openTime} onChange={(event) => setOpenTime(event.target.value)} required />
+              </Field>
+              <Field label="Giờ đóng cửa">
+                <input className={inputClassName} type="time" value={closeTime} onChange={(event) => setCloseTime(event.target.value)} required />
+              </Field>
+            </div>
             <Button className="w-full" disabled={isSubmitting || complexes.length === 0}>
               Lưu sân
             </Button>
@@ -486,11 +528,19 @@ export default function OwnerCourtsPage() {
 
           <Card className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="font-heading text-lg font-semibold text-ink">Bài đăng đang có</h2>
-              <Badge>{sessions.length} bài</Badge>
+              <h2 className="font-heading text-lg font-semibold text-ink">Quản lý lịch đặt</h2>
+              <div className="flex items-center gap-3">
+                <input
+                  type="date"
+                  className={inputClassName}
+                  value={targetDate}
+                  onChange={(e) => setTargetDate(e.target.value)}
+                />
+                <Badge>{sessions.length} slot</Badge>
+              </div>
             </div>
             {sessions.length === 0 ? (
-              <p className="text-sm text-slate-600">Chưa có bài đăng.</p>
+              <p className="text-sm text-slate-600">Không có lịch cho ngày này.</p>
             ) : (
               <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
                 {Object.entries(groupedSessions).map(([courtName, courtSessions]) => {
@@ -526,12 +576,26 @@ export default function OwnerCourtsPage() {
                                   </div>
                                   <p className="mt-1 text-xs text-slate-600 font-medium">🕒 {formatTimeRange(item.starts_at, item.duration_minutes)}</p>
                                   <p className="mt-1 text-xs text-slate-600">
-                                    {item.open_slots}/{item.max_slots} slot · {item.post_type === "rental" ? formatVnd(item.full_court_price_vnd) : `${formatVnd(item.slot_price_vnd)}/slot`}
+                                    {item.status === "locked" ? (
+                                      <span className="text-red-600 font-bold">Đã khóa</span>
+                                    ) : (
+                                      <span className="text-green-600 font-bold">Sẵn sàng</span>
+                                    )} · {item.post_type === "rental" ? formatVnd(item.full_court_price_vnd) : `${formatVnd(item.slot_price_vnd)}/slot`}
                                   </p>
                                 </div>
-                                <Button className="mt-2 text-xs h-7 py-0" variant="danger" size="sm" onClick={() => remove(`/api/v1/owner/sessions/${item.id}`)}>
-                                  Xóa bài
-                                </Button>
+                                <div className="flex flex-col gap-2 mt-2">
+                                  <Button 
+                                    className="text-xs h-7 py-0" 
+                                    variant={item.status === "locked" ? "primary" : "secondary"} 
+                                    size="sm" 
+                                    onClick={() => toggleLockSession(item.id, item.status)}
+                                  >
+                                    {item.status === "locked" ? "Mở khóa" : "Khóa sân"}
+                                  </Button>
+                                  <Button className="text-xs h-7 py-0" variant="danger" size="sm" onClick={() => remove(`/api/v1/owner/sessions/${item.id}`)}>
+                                    Xóa
+                                  </Button>
+                                </div>
                               </div>
                             </article>
                           ))}

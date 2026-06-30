@@ -32,13 +32,13 @@ services:
       retries: 10
 
   adminer:
-    image: adminer:latest
+    image: adminer:4
     container_name: netup-adminer
     restart: unless-stopped
     environment:
       ADMINER_DEFAULT_SERVER: postgres
     ports:
-      - "${ADMINER_HOST_BIND:-127.0.0.1}:${ADMINER_HOST_PORT:-8080}:8080"
+      - "${ADMINER_HOST_BIND:-127.0.0.1}:${ADMINER_HOST_PORT:-8081}:8080"
     depends_on:
       postgres:
         condition: service_healthy
