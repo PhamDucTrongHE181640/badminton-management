@@ -76,8 +76,8 @@ class DiscoverySessionResponse(BaseModel):
     sport: str
     amenities: list[str]
     base_price_vnd: int
-    min_rental_duration_minutes: int
-    max_rental_duration_minutes: int
+    min_rental_duration_minutes: int = 60
+    max_rental_duration_minutes: int = 120
     complex_id: str
     complex_name: str
     district: str
@@ -208,4 +208,3 @@ def unpublish_pool_post(
     from app.services.player_booking import unpublish_booking_as_pool
     unpublish_booking_as_pool(player_user_id=user.id, booking_id=booking_id)
     return {"status": "ok"}
-

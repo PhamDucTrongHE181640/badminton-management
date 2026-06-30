@@ -217,6 +217,8 @@ def _require_court(connection: Any, *, owner_user_id: str, court_id: str) -> Any
               c.base_price_vnd,
               c.max_rental_duration_minutes,
               c.min_rental_duration_minutes,
+              c.open_time,
+              c.close_time,
               c.created_at,
               c.updated_at,
               cc.name AS complex_name,
@@ -393,6 +395,7 @@ def _owner_post_counts(
                 CAST('locked' AS public.session_status),
                 CAST('in_progress' AS public.session_status)
               )
+              AND COALESCE(s.description, '') <> 'Tự động tạo bởi hệ thống'
               AND s.ends_at >= now()
               {exclude_clause}
             """
@@ -567,6 +570,7 @@ def list_owner_post_quotas_for_admin() -> list[dict[str, Any]]:
                     CAST('locked' AS public.session_status),
                     CAST('in_progress' AS public.session_status)
                   )
+                    AND COALESCE(s.description, '') <> 'Tự động tạo bởi hệ thống'
                     AND s.ends_at >= now()
                   GROUP BY c.owner_user_id
                 )
@@ -888,6 +892,18 @@ def list_courts(*, owner_user_id: str, complex_id: str | None = None) -> list[di
 def create_court(*, owner_user_id: str, data: dict[str, Any]) -> dict[str, Any]:
     _validate_duration(int(data["max_rental_duration_minutes"]))
     _validate_duration(int(data.get("min_rental_duration_minutes", 60)))
+    if int(data.get("min_rental_duration_minutes", 60)) > int(data["max_rental_duration_minutes"]):
+        raise AppError(
+            status_code=422,
+            code="court_rental_duration_range_invalid",
+            message="Thời lượng thuê tối thiểu không được lớn hơn tối đa",
+        )
+    if data.get("open_time") and data.get("close_time") and data["open_time"] >= data["close_time"]:
+        raise AppError(
+            status_code=422,
+            code="court_operating_hours_invalid",
+            message="Giờ mở cửa phải nhỏ hơn giờ đóng cửa",
+        )
     data = {**data, "image_url": _clean_optional_text(data.get("image_url"))}
     with get_engine().begin() as connection:
         _require_complex(connection, owner_user_id=owner_user_id, complex_id=data["complex_id"])
@@ -1002,7 +1018,28 @@ def update_court(*, owner_user_id: str, court_id: str, data: dict[str, Any]) -> 
     }
     assignments = [allowed_columns[key] for key in data]
     with get_engine().begin() as connection:
-        _require_court(connection, owner_user_id=owner_user_id, court_id=court_id)
+        current = _require_court(connection, owner_user_id=owner_user_id, court_id=court_id)
+        next_min_duration = int(
+            data.get("min_rental_duration_minutes", current.min_rental_duration_minutes)
+        )
+        next_max_duration = int(
+            data.get("max_rental_duration_minutes", current.max_rental_duration_minutes)
+        )
+        if next_min_duration > next_max_duration:
+            raise AppError(
+                status_code=422,
+                code="court_rental_duration_range_invalid",
+                message="Thời lượng thuê tối thiểu không được lớn hơn tối đa",
+            )
+
+        next_open_time = data.get("open_time", current.open_time)
+        next_close_time = data.get("close_time", current.close_time)
+        if next_open_time >= next_close_time:
+            raise AppError(
+                status_code=422,
+                code="court_operating_hours_invalid",
+                message="Giờ mở cửa phải nhỏ hơn giờ đóng cửa",
+            )
         row = connection.execute(
             text(
                 f"""

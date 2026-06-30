@@ -108,9 +108,9 @@ class CourtResponse(BaseModel):
     amenities: list[str]
     base_price_vnd: int
     max_rental_duration_minutes: int
-    min_rental_duration_minutes: int
-    open_time: time
-    close_time: time
+    min_rental_duration_minutes: int = 60
+    open_time: time = Field(default=time(5, 0))
+    close_time: time = Field(default=time(22, 30))
     created_at: datetime
     updated_at: datetime
     complex_name: str | None = None

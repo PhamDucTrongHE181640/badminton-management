@@ -289,7 +289,7 @@ export default function AdminDashboardPage() {
           <div>
             <h2 className="font-heading text-xl font-semibold text-ink">Danh sách người dùng</h2>
             <p className="mt-1 text-sm text-slate-600">
-              Theo dõi user đã import, user đăng nhập Google và role hiện tại.
+              Theo dõi user, thông tin liên hệ và role hiện tại.
             </p>
           </div>
           <Badge tone="info">{users.length} user</Badge>
@@ -363,9 +363,7 @@ export default function AdminDashboardPage() {
                     <p className="mt-1 text-xs text-slate-500">Elo {item.elo_value}</p>
                   </td>
                   <td className="px-4 py-3">
-                    <Badge tone={item.has_google_identity ? "success" : "neutral"}>
-                      {item.has_google_identity ? "Google" : "Import"}
-                    </Badge>
+                    <Badge tone="success">Google</Badge>
                     {!item.is_active ? <Badge tone="danger" className="ml-2">inactive</Badge> : null}
                   </td>
                   <td className="px-4 py-3 text-slate-600">{formatFullDateTime(item.created_at)}</td>

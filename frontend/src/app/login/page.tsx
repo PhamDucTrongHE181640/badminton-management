@@ -12,9 +12,32 @@ function googleLoginUrl() {
   return `${API_BASE_URL}/api/v1/auth/google/start`;
 }
 
+function GoogleMark() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5">
+      <path
+        fill="#4285F4"
+        d="M22.6 12.2c0-.8-.1-1.6-.2-2.3H12v4.4h5.9c-.3 1.4-1 2.5-2.1 3.2v2.7h3.4c2-1.8 3.4-4.5 3.4-8z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 23c3 0 5.5-1 7.3-2.7l-3.4-2.7c-1 .6-2.2 1-3.8 1-2.9 0-5.3-1.9-6.2-4.5H2.3v2.8C4.1 20.5 7.8 23 12 23z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M5.8 14.1c-.2-.7-.4-1.4-.4-2.1s.1-1.5.4-2.1V7.1H2.3C1.5 8.6 1.1 10.2 1.1 12s.4 3.4 1.2 4.9l3.5-2.8z"
+      />
+      <path
+        fill="#EA4335"
+        d="M12 5.4c1.6 0 3.1.6 4.2 1.7l3.1-3.1C17.5 2.1 15 1 12 1 7.8 1 4.1 3.5 2.3 7.1l3.5 2.8C6.7 7.3 9.1 5.4 12 5.4z"
+      />
+    </svg>
+  );
+}
+
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState("admin");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -33,7 +56,7 @@ export default function LoginPage() {
       const payload = await response.json();
 
       if (!response.ok) {
-        setError(payload?.error?.message ?? "Đăng nhập admin không thành công");
+        setError(payload?.error?.message ?? "Đăng nhập không thành công");
         return;
       }
 
@@ -41,7 +64,7 @@ export default function LoginPage() {
       window.localStorage.setItem("netup_admin_refresh_token", payload.refresh_token);
       router.push("/_internal/netup-admin/dashboard");
     } catch {
-      setError("Không kết nối được API admin");
+      setError("Không kết nối được API đăng nhập");
     } finally {
       setIsSubmitting(false);
     }
@@ -59,33 +82,17 @@ export default function LoginPage() {
         >
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-red-100">NetUp</p>
           <h1 className="mt-4 max-w-xl font-heading text-4xl font-semibold leading-tight">
-            Đăng nhập để đặt sân, tham gia giải đấu hoặc quản trị hệ thống.
+            Đăng nhập để đặt sân và tham gia các hoạt động trên NetUp.
           </h1>
         </div>
 
         <div className="space-y-5 p-5 sm:p-7">
-          <Card className="space-y-4 border-red-100 bg-red-50/40">
-            <div>
-              <h2 className="font-heading text-xl font-semibold text-ink">Người chơi / Chủ sân</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-600">
-                Sử dụng tài khoản Google để đồng bộ hồ sơ và đăng ký dịch vụ.
-              </p>
-            </div>
-            <a
-              href={googleLoginUrl()}
-              className="inline-flex w-full items-center justify-center rounded-lg bg-red-800 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-900"
-            >
-              Tiếp tục với Google
-            </a>
-          </Card>
-
           <form onSubmit={submitAdmin} className="space-y-4 rounded-lg border border-slate-200 p-5">
             <div>
-              <h2 className="font-heading text-xl font-semibold text-ink">Admin</h2>
-              <p className="mt-1 text-sm text-slate-600">Tài khoản demo: admin / admin12345</p>
+              <h2 className="font-heading text-xl font-semibold text-ink">Đăng nhập</h2>
             </div>
 
-            <Field label="Tài khoản">
+            <Field label="Username">
               <input
                 className={inputClassName}
                 value={username}
@@ -107,9 +114,22 @@ export default function LoginPage() {
             {error ? <Notice tone="danger">{error}</Notice> : null}
 
             <Button className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? "Đang đăng nhập..." : "Đăng nhập admin"}
+              {isSubmitting ? "Đang đăng nhập..." : "Đăng nhập"}
             </Button>
           </form>
+
+          <Card className="space-y-3 border-slate-200">
+            <p className="text-center text-sm font-medium text-slate-600">
+              Bạn muốn đăng nhập bằng Google?
+            </p>
+            <a
+              href={googleLoginUrl()}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+            >
+              <GoogleMark />
+              Google
+            </a>
+          </Card>
         </div>
       </section>
     </main>
