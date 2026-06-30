@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui";
-import { API_BASE_URL } from "@/lib/http";
 
 export type UserProfile = {
   email: string;
@@ -14,7 +13,7 @@ export type UserProfile = {
 };
 
 function loginUrl() {
-  return `${API_BASE_URL}/api/v1/auth/google/start`;
+  return "/login/";
 }
 
 type HeaderUserAuthProps = {

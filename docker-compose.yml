@@ -38,7 +38,7 @@ services:
     environment:
       ADMINER_DEFAULT_SERVER: postgres
     ports:
-      - "${ADMINER_HOST_BIND:-127.0.0.1}:${ADMINER_HOST_PORT:-8081}:8080"
+      - "${ADMINER_HOST_BIND:-0.0.0.0}:${ADMINER_HOST_PORT:-8081}:8080"
     depends_on:
       postgres:
         condition: service_healthy

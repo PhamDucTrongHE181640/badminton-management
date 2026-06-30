@@ -23,7 +23,7 @@ export default function AdminPanelLayout({ children }: { children: React.ReactNo
         const profile = await adminFetch<AdminProfile>("/api/v1/admin/auth/me");
         setAdmin(profile);
       } catch {
-        router.push("/_internal/netup-admin/login");
+        router.push("/login");
       } finally {
         setIsChecking(false);
       }

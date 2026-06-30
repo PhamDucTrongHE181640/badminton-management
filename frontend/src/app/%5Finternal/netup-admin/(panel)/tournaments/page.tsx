@@ -166,7 +166,7 @@ export default function AdminTournamentsPage() {
     } catch (caught) {
       const nextError = errorMessage(caught, "Không tải được dữ liệu giải đấu");
       if (nextError === "admin_unauthorized") {
-        router.push("/_internal/netup-admin/login");
+        router.push("/login");
         return;
       }
       setError(nextError);

@@ -466,6 +466,83 @@ def get_admin_dashboard_metrics() -> dict[str, Any]:
     }
 
 
+def list_admin_users(*, limit: int = 100, search: str | None = None) -> list[dict[str, Any]]:
+    capped_limit = max(1, min(limit, 500))
+    where_clause = ""
+    params: dict[str, Any] = {"limit": capped_limit}
+    if search:
+        where_clause = """
+        WHERE u.email::text ILIKE :search
+           OR u.full_name ILIKE :search
+           OR COALESCE(u.phone, '') ILIKE :search
+        """
+        params["search"] = f"%{search.strip()}%"
+
+    with get_engine().begin() as connection:
+        rows = connection.execute(
+            text(
+                f"""
+                SELECT
+                  u.id,
+                  u.email,
+                  u.full_name,
+                  u.avatar_url,
+                  u.phone,
+                  u.city,
+                  u.district,
+                  u.is_active,
+                  u.created_at,
+                  u.updated_at,
+                  COALESCE(
+                    array_agg(DISTINCT ura.role::text)
+                      FILTER (WHERE ura.role IS NOT NULL AND ura.revoked_at IS NULL),
+                    ARRAY[]::text[]
+                  ) AS roles,
+                  er.visible_skill_tier::text AS visible_skill_tier,
+                  er.elo_value,
+                  EXISTS (
+                    SELECT 1
+                    FROM public.oauth_identities oi
+                    WHERE oi.user_id = u.id AND oi.provider = 'google'
+                  ) AS has_google_identity
+                FROM public.users u
+                LEFT JOIN public.user_role_assignments ura ON ura.user_id = u.id
+                LEFT JOIN public.elo_ratings er ON er.player_user_id = u.id
+                {where_clause}
+                GROUP BY
+                  u.id,
+                  er.visible_skill_tier,
+                  er.elo_value
+                ORDER BY u.created_at DESC, u.full_name ASC
+                LIMIT :limit
+                """
+            ),
+            params,
+        ).all()
+
+    return [
+        {
+            "id": str(row.id),
+            "email": str(row.email),
+            "full_name": str(row.full_name),
+            "avatar_url": str(row.avatar_url) if row.avatar_url else None,
+            "phone": str(row.phone) if row.phone else None,
+            "city": str(row.city) if row.city else None,
+            "district": str(row.district) if row.district else None,
+            "is_active": bool(row.is_active),
+            "roles": list(row.roles or []),
+            "visible_skill_tier": str(row.visible_skill_tier)
+            if row.visible_skill_tier
+            else "Beginner",
+            "elo_value": int(row.elo_value) if row.elo_value is not None else 1000,
+            "has_google_identity": bool(row.has_google_identity),
+            "created_at": row.created_at,
+            "updated_at": row.updated_at,
+        }
+        for row in rows
+    ]
+
+
 def list_admin_audit_logs(
     *,
     limit: int = 50,

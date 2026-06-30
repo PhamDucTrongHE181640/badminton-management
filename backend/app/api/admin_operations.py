@@ -11,6 +11,7 @@ from app.services.admin_auth import AdminPrincipal
 from app.services.admin_operations import (
     get_admin_config,
     get_admin_dashboard_metrics,
+    list_admin_users,
     list_admin_audit_logs,
     update_admin_config,
 )
@@ -93,6 +94,23 @@ class AdminAuditLogResponse(BaseModel):
     created_at: datetime
 
 
+class AdminUserResponse(BaseModel):
+    id: str
+    email: str
+    full_name: str
+    avatar_url: str | None
+    phone: str | None
+    city: str | None
+    district: str | None
+    is_active: bool
+    roles: list[str]
+    visible_skill_tier: str
+    elo_value: int
+    has_google_identity: bool
+    created_at: datetime
+    updated_at: datetime
+
+
 @router.get("/config", response_model=AdminConfigResponse)
 def get_config(
     _admin: Annotated[AdminPrincipal, Depends(require_admin)],
@@ -113,6 +131,15 @@ def get_dashboard_metrics(
     _admin: Annotated[AdminPrincipal, Depends(require_admin)],
 ) -> dict[str, Any]:
     return get_admin_dashboard_metrics()
+
+
+@router.get("/users", response_model=list[AdminUserResponse])
+def get_users(
+    _admin: Annotated[AdminPrincipal, Depends(require_admin)],
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    search: Annotated[str | None, Query(min_length=1, max_length=120)] = None,
+) -> list[dict[str, Any]]:
+    return list_admin_users(limit=limit, search=search)
 
 
 @router.get("/audit-logs", response_model=list[AdminAuditLogResponse])

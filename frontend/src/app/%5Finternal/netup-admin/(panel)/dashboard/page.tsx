@@ -50,11 +50,30 @@ type AuditLog = {
   created_at: string;
 };
 
+type AdminUser = {
+  id: string;
+  email: string;
+  full_name: string;
+  avatar_url: string | null;
+  phone: string | null;
+  city: string | null;
+  district: string | null;
+  is_active: boolean;
+  roles: string[];
+  visible_skill_tier: string;
+  elo_value: number;
+  has_google_identity: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
 export default function AdminDashboardPage() {
   const router = useRouter();
   const [admin, setAdmin] = useState<AdminProfile | null>(null);
   const [metrics, setMetrics] = useState<AdminDashboardMetrics | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [userSearch, setUserSearch] = useState("");
   const [eventTypeFilter, setEventTypeFilter] = useState("");
   const [entityTypeFilter, setEntityTypeFilter] = useState("");
   const [message, setMessage] = useState("Đang tải số liệu vận hành...");
@@ -72,11 +91,30 @@ export default function AdminDashboardPage() {
     } catch (caught) {
       const nextError = caught instanceof Error ? caught.message : "Không tải được audit logs";
       if (nextError === "admin_unauthorized") {
-        router.push("/_internal/netup-admin/login");
+        router.push("/login");
         return;
       }
       setError(nextError);
       setAuditLogs([]);
+    }
+  }
+
+  async function loadUsers(search: string) {
+    const query = new URLSearchParams();
+    query.set("limit", "80");
+    if (search.trim()) query.set("search", search.trim());
+
+    try {
+      const payload = await adminFetch<AdminUser[]>(`/api/v1/admin/users?${query.toString()}`);
+      setUsers(payload);
+    } catch (caught) {
+      const nextError = caught instanceof Error ? caught.message : "Không tải được danh sách user";
+      if (nextError === "admin_unauthorized") {
+        router.push("/login");
+        return;
+      }
+      setError(nextError);
+      setUsers([]);
     }
   }
 
@@ -90,11 +128,14 @@ export default function AdminDashboardPage() {
       setAdmin(profile);
       setMetrics(dashboardMetrics);
       setMessage("Dashboard đã đồng bộ số liệu vận hành.");
-      await loadAuditLogs(eventTypeFilter, entityTypeFilter);
+      await Promise.all([
+        loadAuditLogs(eventTypeFilter, entityTypeFilter),
+        loadUsers(userSearch),
+      ]);
     } catch (caught) {
       const nextError = caught instanceof Error ? caught.message : "Không tải được dashboard";
       if (nextError === "admin_unauthorized") {
-        router.push("/_internal/netup-admin/login");
+        router.push("/login");
         return;
       }
       setError(nextError);
@@ -102,6 +143,7 @@ export default function AdminDashboardPage() {
       setAdmin(null);
       setMetrics(null);
       setAuditLogs([]);
+      setUsers([]);
     }
   }
 
@@ -111,7 +153,7 @@ export default function AdminDashboardPage() {
 
   async function logout() {
     await adminLogout();
-    router.push("/_internal/netup-admin/login");
+    router.push("/login");
   }
 
   return (
@@ -241,6 +283,105 @@ export default function AdminDashboardPage() {
           </div>
         </Card>
       </section>
+
+      <Card className="space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="font-heading text-xl font-semibold text-ink">Danh sách người dùng</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Theo dõi user đã import, user đăng nhập Google và role hiện tại.
+            </p>
+          </div>
+          <Badge tone="info">{users.length} user</Badge>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+          <Field label="Tìm user">
+            <input
+              className={inputClassName}
+              value={userSearch}
+              onChange={(event) => setUserSearch(event.target.value)}
+              placeholder="Tên, email hoặc số điện thoại"
+            />
+          </Field>
+          <div className="flex items-end">
+            <Button onClick={() => void loadUsers(userSearch)}>Tìm</Button>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto rounded-lg border border-slate-200">
+          <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">
+              <tr>
+                <th className="px-4 py-3">User</th>
+                <th className="px-4 py-3">Liên hệ</th>
+                <th className="px-4 py-3">Role</th>
+                <th className="px-4 py-3">Skill</th>
+                <th className="px-4 py-3">Nguồn login</th>
+                <th className="px-4 py-3">Ngày tạo</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 bg-white">
+              {users.map((item) => (
+                <tr key={item.id} className="align-top">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      {item.avatar_url ? (
+                        <img
+                          src={item.avatar_url}
+                          alt={item.full_name}
+                          className="h-10 w-10 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">
+                          {item.full_name.slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                      <div>
+                        <p className="font-semibold text-slate-950">{item.full_name}</p>
+                        <p className="mt-0.5 text-xs text-slate-500">{item.email}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-slate-700">
+                    <p>{item.phone ?? "chưa có SĐT"}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {[item.district, item.city].filter(Boolean).join(", ") || "chưa có địa chỉ"}
+                    </p>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1.5">
+                      {item.roles.length ? (
+                        item.roles.map((role) => <Badge key={role}>{role}</Badge>)
+                      ) : (
+                        <Badge tone="warning">no-role</Badge>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-slate-700">
+                    <p>{item.visible_skill_tier}</p>
+                    <p className="mt-1 text-xs text-slate-500">Elo {item.elo_value}</p>
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge tone={item.has_google_identity ? "success" : "neutral"}>
+                      {item.has_google_identity ? "Google" : "Import"}
+                    </Badge>
+                    {!item.is_active ? <Badge tone="danger" className="ml-2">inactive</Badge> : null}
+                  </td>
+                  <td className="px-4 py-3 text-slate-600">{formatFullDateTime(item.created_at)}</td>
+                </tr>
+              ))}
+              {users.length === 0 ? (
+                <tr>
+                  <td className="px-4 py-6 text-center text-slate-500" colSpan={6}>
+                    Chưa có user theo điều kiện lọc.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </Card>
     </div>
   );
 }
