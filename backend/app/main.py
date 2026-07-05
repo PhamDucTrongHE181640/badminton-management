@@ -18,6 +18,7 @@ from app.api.owner_inventory import router as owner_inventory_router
 from app.api.owner_requests import router as owner_requests_router
 from app.api.player_assessment import router as player_assessment_router
 from app.api.player_booking import router as player_booking_router
+from app.api.player_expenses import router as player_expenses_router
 from app.api.player_chat import router as player_chat_router
 from app.api.player_chat import ws_router as player_chat_ws_router
 from app.api.player_matches import router as player_matches_router
@@ -70,6 +71,7 @@ def create_app() -> FastAPI:
     app.include_router(owner_inventory_router, prefix="/api/v1")
     app.include_router(owner_checkins_router, prefix="/api/v1")
     app.include_router(player_booking_router, prefix="/api/v1")
+    app.include_router(player_expenses_router, prefix="/api/v1")
     app.include_router(player_assessment_router, prefix="/api/v1")
     app.include_router(player_matches_router, prefix="/api/v1")
     app.include_router(player_chat_router, prefix="/api/v1")

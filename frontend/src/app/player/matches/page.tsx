@@ -127,6 +127,14 @@ function BookingCard({ booking, variant }: { booking: BookingMatch; variant: "up
           {booking.cancel_reason ? <p>Lý do: {booking.cancel_reason}</p> : null}
         </div>
       ) : null}
+
+      {(booking.status === "checked_in" || booking.status === "completed") ? (
+        <div className="border-t border-slate-100 pt-3 flex justify-end">
+          <ButtonLink href={`/player/expenses/session/?id=${booking.session_id}`} variant="outline" size="sm">
+            💸 Ghi chú & Chia tiền
+          </ButtonLink>
+        </div>
+      ) : null}
     </Card>
   );
 }

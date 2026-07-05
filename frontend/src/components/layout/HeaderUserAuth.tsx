@@ -197,6 +197,52 @@ export function HeaderUserAuth({ user, logout, isLoggingOut }: HeaderUserAuthPro
                 <span>Lịch thi đấu của tôi</span>
               </Link>
 
+              {/* Lịch sử chia tiền Link */}
+              <Link
+                href="/player/expenses/"
+                onClick={() => setIsDropdownOpen(false)}
+                className="flex items-center gap-3 rounded-[12px] px-3.5 py-2.5 hover:bg-slate-50 transition duration-150 text-slate-700 hover:text-slate-900 font-semibold text-[13px]"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4.5 w-4.5 text-slate-500 shrink-0">
+                  <line x1="12" x2="12" y1="1" y2="23" />
+                  <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                </svg>
+                <span>Chia sẻ chi phí</span>
+              </Link>
+
+              {/* Công nợ tích lũy Link */}
+              <Link
+                href="/player/debts/"
+                onClick={() => setIsDropdownOpen(false)}
+                className="flex items-center gap-3 rounded-[12px] px-3.5 py-2.5 hover:bg-slate-50 transition duration-150 text-slate-700 hover:text-slate-900 font-semibold text-[13px]"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4.5 w-4.5 text-slate-500 shrink-0">
+                  <path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18 14h-8" />
+                  <path d="M15 11h-5" />
+                  <path d="M12 8H8" />
+                  <circle cx="18" cy="5" r="3" />
+                </svg>
+                <span>Công nợ tích lũy</span>
+              </Link>
+
+              {/* Tính chia tiền nhanh Link */}
+              <Link
+                href="/player/expenses/new/"
+                onClick={() => setIsDropdownOpen(false)}
+                className="flex items-center gap-3 rounded-[12px] px-3.5 py-2.5 hover:bg-slate-50 transition duration-150 text-slate-700 hover:text-slate-900 font-semibold text-[13px]"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-4.5 w-4.5 text-slate-500 shrink-0">
+                  <rect width="18" height="18" x="3" y="3" rx="2" />
+                  <path d="M9 21V9h12" />
+                  <path d="M14 14h2" />
+                  <path d="M14 16h2" />
+                  <path d="M10 14h2" />
+                  <path d="M10 16h2" />
+                </svg>
+                <span>Tính chia tiền nhanh</span>
+              </Link>
+
               {/* Đánh giá kĩ năng AI Link */}
               <Link
                 href="/player/assessment/"
