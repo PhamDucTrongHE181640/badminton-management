@@ -140,7 +140,18 @@ export default function PlayerDebtsPage() {
     });
   }
 
-  const partnersList = Object.values(nettingPartners).filter((x) => x.oweDetails.length > 0 || x.receiveDetails.length > 0);
+  const partnersList = Object.values(nettingPartners)
+    .filter((x) => x.oweDetails.length > 0 || x.receiveDetails.length > 0)
+    .sort((a, b) => {
+      // 1. Đẩy người đã hòa nợ (netBalance === 0) xuống cuối
+      const aIsZero = a.netBalance === 0;
+      const bIsZero = b.netBalance === 0;
+      if (aIsZero && !bIsZero) return 1;
+      if (!aIsZero && bIsZero) return -1;
+      
+      // 2. Sắp xếp cố định theo tên A-Z (sử dụng locale tiếng Việt)
+      return a.partnerName.localeCompare(b.partnerName, "vi");
+    });
 
   return (
     <div className="space-y-6 animate-fade-in">
