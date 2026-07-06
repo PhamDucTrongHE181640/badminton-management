@@ -49,6 +49,17 @@ const expenseNavLinks = [
       </svg>
     ),
   },
+  {
+    href: "/player/scorekeeper",
+    label: "Trọng tài & Thống kê",
+    desc: "Đếm điểm trực tiếp chuẩn BWF và xem tỷ lệ thắng",
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 shrink-0 text-red-700">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+        <polyline points="22 4 12 14.01 9 11.01" />
+      </svg>
+    ),
+  },
 ];
 
 function splitHref(href: string) {
@@ -134,7 +145,7 @@ export function MainHeader() {
   }
 
   function isExpenseActive() {
-    return ["/player/expenses", "/player/debts"].some(
+    return ["/player/expenses", "/player/debts", "/player/scorekeeper"].some(
       (p) => pathname === p || pathname.startsWith(`${p}/`)
     );
   }
@@ -187,7 +198,7 @@ export function MainHeader() {
                     isExpenseActive() ? "text-red-800" : "text-slate-700 hover:text-red-800"
                   }`}
                 >
-                  Chi phí
+                  Chi phí & Trọng tài
                   <svg viewBox="0 0 24 24" className={`h-3.5 w-3.5 transition-transform duration-200 ${isExpenseMenuOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth="2.5">
                     <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
@@ -345,7 +356,7 @@ export function MainHeader() {
             {user && (
               <>
                 <div className="border-t border-slate-100 pt-2">
-                  <p className="px-4 py-1 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Chi phí</p>
+                  <p className="px-4 py-1 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Chi phí & Trọng tài</p>
                 </div>
                 {expenseNavLinks.map((link) => {
                   const active = isActive(link.href);

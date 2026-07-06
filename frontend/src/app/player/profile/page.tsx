@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { Badge, Button, Card, Field, Notice, PageHero, StatCard, inputClassName } from "@/components/ui";
 import { apiFetch } from "@/lib/http";
 import { errorMessage, formatFullDateTime, formatNumber } from "@/lib/format";
+import Link from "next/link";
 
 type PlayerProfile = {
   id: string;
@@ -40,6 +41,10 @@ export default function PlayerProfilePage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("Đang tải hồ sơ người chơi...");
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Referee stats state
+  const [refereeStats, setRefereeStats] = useState<any | null>(null);
+  const [isLoadingStats, setIsLoadingStats] = useState(false);
 
   const [fullName, setFullName] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
@@ -80,9 +85,27 @@ export default function PlayerProfilePage() {
     }
   }
 
+  async function loadRefereeStats(userId: string) {
+    setIsLoadingStats(true);
+    try {
+      const res = await apiFetch<any>(`/api/v1/player/scorekeeper/player-detail?key=id:${userId}`);
+      setRefereeStats(res);
+    } catch (err) {
+      console.error("Lỗi lấy chỉ số trọng tài của tôi", err);
+    } finally {
+      setIsLoadingStats(false);
+    }
+  }
+
   useEffect(() => {
     void loadProfile();
   }, []);
+
+  useEffect(() => {
+    if (profile?.id) {
+      void loadRefereeStats(profile.id);
+    }
+  }, [profile?.id]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -151,6 +174,44 @@ export default function PlayerProfilePage() {
         <StatCard label="Thắng / thua" value={`${profile?.wins ?? 0}/${profile?.losses ?? 0}`} helper={`${profile?.draws ?? 0} hòa`} tone="success" />
         <StatCard label="Cập nhật" value={profile ? formatFullDateTime(profile.updated_at) : "Chưa có"} helper="Hồ sơ cá nhân" />
       </section>
+
+      {refereeStats && refereeStats.total_played > 0 && (
+        <section className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 border-b border-slate-100 pb-4 mb-4">
+            <div>
+              <h3 className="font-heading text-base font-bold text-slate-900 flex items-center gap-2">
+                <span>🏸 Chỉ số Trọng tài & Thống kê cá nhân</span>
+              </h3>
+              <p className="text-xs text-slate-500">Dữ liệu ghi nhận từ hệ thống trọng tài đếm điểm trực tiếp.</p>
+            </div>
+            <Link
+              href={`/player/scorekeeper/player?key=${encodeURIComponent("id:" + profile?.id)}`}
+              className="text-xs font-bold text-red-800 hover:text-red-950 flex items-center gap-1 hover:underline shrink-0"
+            >
+              Xem chi tiết Lịch sử & Kỳ phùng địch thủ →
+            </Link>
+          </div>
+
+          <div className="grid gap-4 grid-cols-2 sm:grid-cols-4">
+            <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 text-center">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Trận thi đấu</p>
+              <p className="font-heading text-2xl font-black text-slate-950 mt-1">{refereeStats.total_played}</p>
+            </div>
+            <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 text-center">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Trận thắng</p>
+              <p className="font-heading text-2xl font-black text-emerald-600 mt-1">{refereeStats.wins}</p>
+            </div>
+            <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 text-center">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Trận thua</p>
+              <p className="font-heading text-2xl font-black text-rose-600 mt-1">{refereeStats.losses}</p>
+            </div>
+            <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 text-center">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Tỷ lệ thắng</p>
+              <p className="font-heading text-2xl font-black text-indigo-700 mt-1">{refereeStats.win_rate}%</p>
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="grid gap-5 lg:grid-cols-[1fr_360px]">
         <form onSubmit={submit} className="space-y-5 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">

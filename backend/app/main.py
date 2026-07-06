@@ -22,6 +22,7 @@ from app.api.player_expenses import router as player_expenses_router
 from app.api.player_chat import router as player_chat_router
 from app.api.player_chat import ws_router as player_chat_ws_router
 from app.api.player_matches import router as player_matches_router
+from app.api.referee_matches import router as referee_matches_router
 from app.api.player_payments import router as player_payments_router
 from app.api.player_profiles import router as player_profiles_router
 from app.api.player_tournaments import admin_router as admin_tournaments_router
@@ -74,6 +75,7 @@ def create_app() -> FastAPI:
     app.include_router(player_expenses_router, prefix="/api/v1")
     app.include_router(player_assessment_router, prefix="/api/v1")
     app.include_router(player_matches_router, prefix="/api/v1")
+    app.include_router(referee_matches_router, prefix="/api/v1")
     app.include_router(player_chat_router, prefix="/api/v1")
     app.include_router(player_payments_router, prefix="/api/v1")
     app.include_router(player_profiles_router, prefix="/api/v1")
