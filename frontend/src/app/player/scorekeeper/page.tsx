@@ -27,7 +27,7 @@ const numberToVietnamese = (num: number): string => {
 };
 
 export default function ScorekeeperPage() {
-  const [activeTab, setActiveTab] = useState<"live" | "quick" | "history">("live");
+  const [activeTab, setActiveTab] = useState<"live" | "matchmaker" | "quick" | "history" | "players">("live");
   
   // Players configuration state
   const [matchType, setMatchType] = useState<"singles" | "doubles">("doubles");
@@ -78,12 +78,81 @@ export default function ScorekeeperPage() {
   const [matches, setMatches] = useState<any[]>([]);
   const [isLoadingMatches, setIsLoadingMatches] = useState(false);
 
+  // Matchmaker State
+  const [sessionPlayers, setSessionPlayers] = useState<{ key: string; name: string }[]>([]);
+  const [matchmakerPlayersStatus, setMatchmakerPlayersStatus] = useState<any[]>([]);
+  const [suggestedMatchup, setSuggestedMatchup] = useState<any | null>(null);
+  const [matchmakerMatchType, setMatchmakerMatchType] = useState<"singles" | "doubles">("doubles");
+  const [matchmakerError, setMatchmakerError] = useState("");
+  const [isGeneratingMatchup, setIsGeneratingMatchup] = useState(false);
+
+  // Player Management State
+  const [allPlayers, setAllPlayers] = useState<any[]>([]);
+  const [isLoadingAllPlayers, setIsLoadingAllPlayers] = useState(false);
+  const [editingPlayer, setEditingPlayer] = useState<any | null>(null);
+  const [editPlayerName, setEditPlayerName] = useState("");
+  const [editPlayerEmail, setEditPlayerEmail] = useState("");
+  const [editPlayerPhone, setEditPlayerPhone] = useState("");
+  const [editPlayerError, setEditPlayerError] = useState("");
+  const [isSavingPlayerEdit, setIsSavingPlayerEdit] = useState(false);
+
   const [statusMessage, setStatusMessage] = useState("");
   const [statusType, setStatusType] = useState<"success" | "danger" | "warning" | "">("");
+
+  const loadAllPlayers = async () => {
+    setIsLoadingAllPlayers(true);
+    try {
+      const res = await apiFetch<any[]>("/api/v1/player/scorekeeper/all-players");
+      setAllPlayers(res);
+    } catch (err) {
+      console.error("Lỗi lấy danh sách người chơi", err);
+    } finally {
+      setIsLoadingAllPlayers(false);
+    }
+  };
+
+  const handleSavePlayerEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPlayer) return;
+    setEditPlayerError("");
+    const name = editPlayerName.trim();
+    const email = editPlayerEmail.trim().toLowerCase();
+
+    if (!name) {
+      setEditPlayerError("Tên người dùng không được để trống");
+      return;
+    }
+    if (!email || !email.includes("@")) {
+      setEditPlayerError("Email không hợp lệ");
+      return;
+    }
+
+    setIsSavingPlayerEdit(true);
+    try {
+      await apiFetch(`/api/v1/player/scorekeeper/players/${editingPlayer.id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          full_name: name,
+          email: email,
+          phone: editPlayerPhone.trim() || null
+        })
+      });
+      
+      showStatus("Cập nhật thông tin người chơi thành công!", "success");
+      setEditingPlayer(null);
+      void loadAllPlayers();
+    } catch (err: any) {
+      setEditPlayerError(err?.message || "Không thể cập nhật thông tin.");
+    } finally {
+      setIsSavingPlayerEdit(false);
+    }
+  };
 
   useEffect(() => {
     if (activeTab === "history") {
       loadHistory();
+    } else if (activeTab === "players") {
+      void loadAllPlayers();
     }
   }, [activeTab]);
 
@@ -119,7 +188,102 @@ export default function ScorekeeperPage() {
     }
   };
 
+  const loadMatchmakerPlayCounts = async (playersList: { key: string; name: string }[]) => {
+    if (playersList.length === 0) {
+      setMatchmakerPlayersStatus([]);
+      return;
+    }
+    try {
+      const res = await apiFetch<any>("/api/v1/player/matchmaker/suggest", {
+        method: "POST",
+        body: JSON.stringify({
+          active_players: playersList.map((p) => p.key),
+          match_type: matchmakerMatchType,
+        }),
+      });
+      if (res?.players_status) {
+        setMatchmakerPlayersStatus(res.players_status);
+      }
+    } catch (err) {
+      console.error("Lỗi cập nhật lượt đấu hôm nay", err);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "matchmaker" && sessionPlayers.length > 0) {
+      void loadMatchmakerPlayCounts(sessionPlayers);
+    }
+  }, [activeTab, sessionPlayers.length, matchmakerMatchType]);
+
+  const handleGenerateMatchup = async () => {
+    setMatchmakerError("");
+    setSuggestedMatchup(null);
+    const numRequired = matchmakerMatchType === "doubles" ? 4 : 2;
+    if (sessionPlayers.length < numRequired) {
+      setMatchmakerError(`Cần tối thiểu ${numRequired} người chơi hoạt động để chia đội.`);
+      return;
+    }
+    setIsGeneratingMatchup(true);
+    try {
+      const res = await apiFetch<any>("/api/v1/player/matchmaker/suggest", {
+        method: "POST",
+        body: JSON.stringify({
+          active_players: sessionPlayers.map((p) => p.key),
+          match_type: matchmakerMatchType,
+        }),
+      });
+      setSuggestedMatchup(res.suggested);
+      if (res.players_status) {
+        setMatchmakerPlayersStatus(res.players_status);
+      }
+    } catch (err: any) {
+      setMatchmakerError(err?.message || "Không thể đề xuất đội hình.");
+    } finally {
+      setIsGeneratingMatchup(false);
+    }
+  };
+
+  const handleStartSuggestedMatch = () => {
+    if (!suggestedMatchup) return;
+    const teamA = suggestedMatchup.team_a;
+    const teamB = suggestedMatchup.team_b;
+
+    if (matchmakerMatchType === "doubles") {
+      setTaP1({ id: teamA[0].key.startsWith("id:") ? teamA[0].key.split(":")[1] : "", name: teamA[0].name });
+      setTaP2({ id: teamA[1].key.startsWith("id:") ? teamA[1].key.split(":")[1] : "", name: teamA[1].name });
+      setTbP1({ id: teamB[0].key.startsWith("id:") ? teamB[0].key.split(":")[1] : "", name: teamB[0].name });
+      setTbP2({ id: teamB[1].key.startsWith("id:") ? teamB[1].key.split(":")[1] : "", name: teamB[1].name });
+    } else {
+      setTaP1({ id: teamA[0].key.startsWith("id:") ? teamA[0].key.split(":")[1] : "", name: teamA[0].name });
+      setTaP2({ id: "", name: "" });
+      setTbP1({ id: teamB[0].key.startsWith("id:") ? teamB[0].key.split(":")[1] : "", name: teamB[0].name });
+      setTbP2({ id: "", name: "" });
+    }
+
+    setMatchType(matchmakerMatchType);
+    resetLiveMatch();
+    setIsLiveActive(true);
+    setActiveTab("live");
+    speakText("Trận đấu bắt đầu.");
+  };
+
   const handleSelectUser = (user: AutocompleteUser) => {
+    if (activeSearchField === "matchmaker") {
+      const playerKey = user.id ? `id:${user.id}` : `name:${user.full_name}`;
+      if (sessionPlayers.some((p) => p.key === playerKey)) {
+        alert("Người chơi này đã có mặt trong danh sách sân!");
+        return;
+      }
+      const nextPlayers = [...sessionPlayers, { key: playerKey, name: user.full_name }];
+      setSessionPlayers(nextPlayers);
+      void loadMatchmakerPlayCounts(nextPlayers);
+      
+      setActiveSearchField(null);
+      setSearchQuery("");
+      setSearchResults([]);
+      return;
+    }
+
     const isSelected = 
       (activeSearchField !== "taP1" && taP1.id === user.id) ||
       (activeSearchField !== "taP2" && taP2.id === user.id) ||
@@ -145,25 +309,33 @@ export default function ScorekeeperPage() {
     e.preventDefault();
     setGuestError("");
     const name = guestName.trim();
-    const email = guestEmail.trim().toLowerCase();
+    let email = guestEmail.trim().toLowerCase();
     
     if (!name) {
       setGuestError("Họ tên không được để trống");
       return;
     }
-    if (!email || !email.includes("@")) {
+
+    if (!email) {
+      const slug = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const rand = Math.random().toString(36).substring(2, 7);
+      email = `guest_${slug}_${rand}@netup.guest`;
+    } else if (!email.includes("@")) {
       setGuestError("Email không hợp lệ");
       return;
     }
 
     const isDuplicate = 
-      (activeSearchField !== "taP1" && taP1.name.toLowerCase() === name.toLowerCase()) ||
-      (activeSearchField !== "taP2" && taP2.name.toLowerCase() === name.toLowerCase()) ||
-      (activeSearchField !== "tbP1" && tbP1.name.toLowerCase() === name.toLowerCase()) ||
-      (activeSearchField !== "tbP2" && tbP2.name.toLowerCase() === name.toLowerCase());
+      (activeSearchField === "matchmaker" && sessionPlayers.some((p) => p.name.toLowerCase() === name.toLowerCase())) ||
+      (activeSearchField !== "matchmaker" && (
+        (activeSearchField !== "taP1" && taP1.name.toLowerCase() === name.toLowerCase()) ||
+        (activeSearchField !== "taP2" && taP2.name.toLowerCase() === name.toLowerCase()) ||
+        (activeSearchField !== "tbP1" && tbP1.name.toLowerCase() === name.toLowerCase()) ||
+        (activeSearchField !== "tbP2" && tbP2.name.toLowerCase() === name.toLowerCase())
+      ));
       
     if (isDuplicate) {
-      setGuestError("Người chơi này đã được chọn ở vị trí khác!");
+      setGuestError("Người chơi này đã được chọn ở vị trí khác hoặc đã có trong danh sách sân!");
       return;
     }
     
@@ -183,6 +355,12 @@ export default function ScorekeeperPage() {
       if (activeSearchField === "taP2") setTaP2({ id: res.id, name: res.full_name });
       if (activeSearchField === "tbP1") setTbP1({ id: res.id, name: res.full_name });
       if (activeSearchField === "tbP2") setTbP2({ id: res.id, name: res.full_name });
+      if (activeSearchField === "matchmaker") {
+        const playerKey = `id:${res.id}`;
+        const nextPlayers = [...sessionPlayers, { key: playerKey, name: res.full_name }];
+        setSessionPlayers(nextPlayers);
+        void loadMatchmakerPlayCounts(nextPlayers);
+      }
       
       // Reset & Close
       setActiveSearchField(null);
@@ -447,6 +625,12 @@ export default function ScorekeeperPage() {
           🏸 Trọng tài đếm điểm
         </button>
         <button
+          onClick={() => { setActiveTab("matchmaker"); setIsLiveActive(false); }}
+          className={`px-5 py-3 text-sm font-bold border-b-2 transition shrink-0 cursor-pointer ${activeTab === "matchmaker" ? "border-red-800 text-red-800" : "border-transparent text-slate-500 hover:text-slate-900"}`}
+        >
+          🤝 Chia đội thông minh
+        </button>
+        <button
           onClick={() => { setActiveTab("quick"); }}
           className={`px-5 py-3 text-sm font-bold border-b-2 transition shrink-0 cursor-pointer ${activeTab === "quick" ? "border-red-800 text-red-800" : "border-transparent text-slate-500 hover:text-slate-900"}`}
         >
@@ -457,6 +641,12 @@ export default function ScorekeeperPage() {
           className={`px-5 py-3 text-sm font-bold border-b-2 transition shrink-0 cursor-pointer ${activeTab === "history" ? "border-red-800 text-red-800" : "border-transparent text-slate-500 hover:text-slate-900"}`}
         >
           📅 Lịch sử trận đấu
+        </button>
+        <button
+          onClick={() => { setActiveTab("players"); }}
+          className={`px-5 py-3 text-sm font-bold border-b-2 transition shrink-0 cursor-pointer ${activeTab === "players" ? "border-red-800 text-red-800" : "border-transparent text-slate-500 hover:text-slate-900"}`}
+        >
+          👥 Quản lý người chơi
         </button>
         <Link
           href="/player/scorekeeper/stats"
@@ -511,16 +701,18 @@ export default function ScorekeeperPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
-                    Email * (Ưu tiên đúng email để đồng bộ)
+                    Email (Không bắt buộc)
                   </label>
                   <input
                     type="email"
                     className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-red-800"
                     value={guestEmail}
                     onChange={(e) => setGuestEmail(e.target.value)}
-                    placeholder="khach_vang_lai@domain.com"
-                    required
+                    placeholder="khach_vang_lai@domain.com (Nếu muốn)"
                   />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Nếu để trống, hệ thống sẽ tự tạo email ẩn danh để lưu lịch sử đấu và gợi ý lần sau.
+                  </p>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
@@ -600,13 +792,16 @@ export default function ScorekeeperPage() {
                         onClick={() => {
                           const typedName = searchQuery.trim();
                           const isDuplicate = 
-                            (activeSearchField !== "taP1" && taP1.name.toLowerCase() === typedName.toLowerCase()) ||
-                            (activeSearchField !== "taP2" && taP2.name.toLowerCase() === typedName.toLowerCase()) ||
-                            (activeSearchField !== "tbP1" && tbP1.name.toLowerCase() === typedName.toLowerCase()) ||
-                            (activeSearchField !== "tbP2" && tbP2.name.toLowerCase() === typedName.toLowerCase());
+                            (activeSearchField === "matchmaker" && sessionPlayers.some((p) => p.name.toLowerCase() === typedName.toLowerCase())) ||
+                            (activeSearchField !== "matchmaker" && (
+                              (activeSearchField !== "taP1" && taP1.name.toLowerCase() === typedName.toLowerCase()) ||
+                              (activeSearchField !== "taP2" && taP2.name.toLowerCase() === typedName.toLowerCase()) ||
+                              (activeSearchField !== "tbP1" && tbP1.name.toLowerCase() === typedName.toLowerCase()) ||
+                              (activeSearchField !== "tbP2" && tbP2.name.toLowerCase() === typedName.toLowerCase())
+                            ));
                             
                           if (isDuplicate) {
-                            alert("Người chơi này đã được chọn ở vị trí khác!");
+                            alert("Người chơi này đã được chọn hoặc đã có trong danh sách sân!");
                             return;
                           }
 
@@ -614,6 +809,12 @@ export default function ScorekeeperPage() {
                           if (activeSearchField === "taP2") setTaP2({ id: "", name: typedName });
                           if (activeSearchField === "tbP1") setTbP1({ id: "", name: typedName });
                           if (activeSearchField === "tbP2") setTbP2({ id: "", name: typedName });
+                          if (activeSearchField === "matchmaker") {
+                            const playerKey = `name:${typedName}`;
+                            const nextPlayers = [...sessionPlayers, { key: playerKey, name: typedName }];
+                            setSessionPlayers(nextPlayers);
+                            void loadMatchmakerPlayCounts(nextPlayers);
+                          }
                           setActiveSearchField(null);
                           setSearchQuery("");
                         }}
@@ -633,7 +834,7 @@ export default function ScorekeeperPage() {
       )}
 
       {/* Configuration Form (Used for both Quick Record and starting Live Match) */}
-      {(!isLiveActive || activeTab === "quick") && activeTab !== "history" && (
+      {(!isLiveActive || activeTab === "quick") && activeTab !== "history" && activeTab !== "matchmaker" && (
         <Card className="p-6 mb-8 max-w-3xl mx-auto border border-slate-100 shadow-sm rounded-2xl bg-white">
           <h2 className="text-lg font-bold text-slate-900 mb-5 flex items-center gap-2">
             <span>⚙️ Thiết lập đội hình đấu</span>
@@ -858,6 +1059,202 @@ export default function ScorekeeperPage() {
           )}
         </Card>
       )}
+
+      {/* Smart Matchmaker Interface */}
+      {activeTab === "matchmaker" && !isLiveActive && (
+        <Card className="p-6 mb-8 max-w-5xl mx-auto border border-slate-100 shadow-sm rounded-2xl bg-white space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <span>🤝 Chia đội thông minh & Xếp lượt đấu</span>
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">Hệ thống sẽ xếp lượt cho những ai chơi ít trận nhất và chia cặp có trình độ cân bằng nhất.</p>
+            </div>
+            
+            <button
+              onClick={() => { setActiveSearchField("matchmaker"); setSearchQuery(""); }}
+              className="bg-red-800 hover:bg-red-900 text-white px-4 py-2 text-xs font-bold rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+            >
+              ➕ Thêm người chơi vào sân
+            </button>
+          </div>
+
+          {matchmakerError && (
+            <Notice tone="danger">{matchmakerError}</Notice>
+          )}
+
+          <div className="grid gap-6 md:grid-cols-12">
+            {/* Left side: Player Pool */}
+            <div className="md:col-span-5 space-y-4">
+              <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                Thành viên đang chờ trên sân ({sessionPlayers.length})
+              </h3>
+              
+              {sessionPlayers.length === 0 ? (
+                <div className="border border-dashed border-slate-200 rounded-2xl p-8 text-center text-slate-400">
+                  <p className="text-xs">Chưa có người chơi nào.</p>
+                  <p className="text-[10px] mt-1">Bấm nút "Thêm người chơi vào sân" ở trên để tạo danh sách.</p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[380px] overflow-y-auto pr-1">
+                  {sessionPlayers.map((player) => {
+                    const status = matchmakerPlayersStatus.find((s) => s.key === player.key);
+                    const todayPlayed = status?.today_played ?? 0;
+                    const strength = status?.strength ?? 1000;
+                    
+                    return (
+                      <div
+                        key={player.key}
+                        className="flex items-center justify-between p-3 border border-slate-100 rounded-xl bg-slate-50/50 hover:bg-slate-50 transition"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-bold text-slate-900 truncate">{player.name}</p>
+                            <span className={`text-[9px] px-1.5 py-0.2 font-extrabold rounded-sm uppercase tracking-wide shrink-0 ${player.key.startsWith("id:") ? "bg-emerald-50 text-emerald-700 border border-emerald-100" : "bg-orange-50 text-orange-700 border border-orange-100"}`}>
+                              {player.key.startsWith("id:") ? "Thành viên" : "Khách"}
+                            </span>
+                          </div>
+                          
+                          <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-400 mt-1">
+                            <span>Sức mạnh: <strong className="text-slate-600 font-bold">{strength} ELO</strong></span>
+                            <span>Tỷ lệ thắng: <strong className="text-slate-600 font-bold">{status?.win_rate ?? 50}%</strong></span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          {/* Play count badge */}
+                          <span className={`text-xs font-black px-2 py-0.5 rounded-full ${
+                            todayPlayed === 0 
+                              ? "bg-emerald-100 text-emerald-800" 
+                              : todayPlayed <= 2 
+                                ? "bg-amber-100 text-amber-800" 
+                                : "bg-rose-100 text-rose-800"
+                          }`}>
+                            {todayPlayed} trận
+                          </span>
+                          
+                          <button
+                            onClick={() => {
+                              const nextPlayers = sessionPlayers.filter((p) => p.key !== player.key);
+                              setSessionPlayers(nextPlayers);
+                              void loadMatchmakerPlayCounts(nextPlayers);
+                              if (suggestedMatchup) setSuggestedMatchup(null);
+                            }}
+                            className="p-1 hover:bg-slate-200 text-slate-400 hover:text-rose-600 rounded transition cursor-pointer"
+                            title="Xóa người này khỏi sân"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Right side: Suggested matchup / balancing controls */}
+            <div className="md:col-span-7 border-t md:border-t-0 md:border-l border-slate-100 pt-6 md:pt-0 md:pl-6 space-y-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Chế độ chia cặp</label>
+                  <div className="flex gap-2 max-w-xs">
+                    <button
+                      type="button"
+                      onClick={() => { setMatchmakerMatchType("singles"); setSuggestedMatchup(null); }}
+                      className={`flex-1 py-1.5 px-3 rounded-lg border text-xs font-bold transition cursor-pointer ${matchmakerMatchType === "singles" ? "bg-red-50 border-red-200 text-red-800" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"}`}
+                    >
+                      🏸 Đấu Đơn (1 vs 1)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setMatchmakerMatchType("doubles"); setSuggestedMatchup(null); }}
+                      className={`flex-1 py-1.5 px-3 rounded-lg border text-xs font-bold transition cursor-pointer ${matchmakerMatchType === "doubles" ? "bg-red-50 border-red-200 text-red-800" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"}`}
+                    >
+                      👥 Đấu Đôi (2 vs 2)
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleGenerateMatchup}
+                  disabled={isGeneratingMatchup || sessionPlayers.length < (matchmakerMatchType === "doubles" ? 4 : 2)}
+                  className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 px-4 rounded-xl text-xs transition cursor-pointer disabled:opacity-50"
+                >
+                  {isGeneratingMatchup ? "Đang tính toán đội hình..." : "🎲 Cân bằng & Đề xuất cặp đấu"}
+                </button>
+              </div>
+
+              {suggestedMatchup ? (
+                <div className="border border-red-100 bg-red-50/10 rounded-2xl p-5 space-y-4 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Đội hình cân bằng nhất đề xuất:</span>
+                    <span className="text-xs font-black text-emerald-800 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-lg">
+                      Độ lệch: {suggestedMatchup.strength_diff} ELO
+                    </span>
+                  </div>
+
+                  {/* Sân đấu mô phỏng */}
+                  <div className="grid grid-cols-2 gap-4 border border-slate-200 rounded-2xl bg-white p-4 relative overflow-hidden shadow-xs">
+                    <div className="absolute top-0 bottom-0 left-1/2 w-0.5 bg-yellow-400 pointer-events-none" />
+                    
+                    {/* Đội A */}
+                    <div className="space-y-3 text-center">
+                      <p className="text-[10px] font-bold text-emerald-700 uppercase bg-emerald-50 py-0.5 rounded-md">Đội A</p>
+                      <div className="space-y-1.5">
+                        {suggestedMatchup.team_a.map((player: any) => (
+                          <div key={player.key} className="bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-100">
+                            <p className="text-xs font-bold text-slate-800 truncate">{player.name}</p>
+                            <p className="text-[9px] text-slate-400 mt-0.5">{player.strength} ELO ({player.today_played} trận)</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Đội B */}
+                    <div className="space-y-3 text-center">
+                      <p className="text-[10px] font-bold text-indigo-700 uppercase bg-indigo-50 py-0.5 rounded-md">Đội B</p>
+                      <div className="space-y-1.5">
+                        {suggestedMatchup.team_b.map((player: any) => (
+                          <div key={player.key} className="bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-100">
+                            <p className="text-xs font-bold text-slate-800 truncate">{player.name}</p>
+                            <p className="text-[9px] text-slate-400 mt-0.5">{player.strength} ELO ({player.today_played} trận)</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] text-slate-500 leading-relaxed bg-amber-50/40 border border-amber-100/60 p-3 rounded-xl">
+                    ℹ️ <strong>Thuật toán ưu tiên lượt đấu:</strong> Đã ưu tiên những thành viên chưa được chơi hoặc chơi ít trận nhất trong hôm nay lên sân trước, sau đó sắp xếp chéo để đảm bảo chênh lệch trình độ giữa 2 đội là nhỏ nhất.
+                  </div>
+
+                  <button
+                    onClick={handleStartSuggestedMatch}
+                    className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold py-3 px-4 rounded-xl text-sm transition shadow-sm hover:scale-101 flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    🏸 Bắt đầu thi đấu ngay
+                  </button>
+                </div>
+              ) : (
+                !isGeneratingMatchup && (
+                  <div className="border border-dashed border-slate-200 rounded-2xl p-10 text-center text-slate-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5" className="w-10 h-10 mx-auto text-slate-300 mb-3">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+                    </svg>
+                    <p className="text-xs">Chưa có đề xuất nào được tạo.</p>
+                    <p className="text-[10px] mt-1">Chọn tối thiểu {matchmakerMatchType === "doubles" ? "4" : "2"} đấu thủ và bấm "Đề xuất cặp đấu" để bắt đầu.</p>
+                  </div>
+                )
+              )}
+            </div>
+          </div>
+        </Card>
+      )}
+
 
       {/* Live Scoreboard Active Layout */}
       {isLiveActive && activeTab === "live" && (
@@ -1210,6 +1607,168 @@ export default function ScorekeeperPage() {
                   </Card>
                 );
               })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Player Management tab */}
+      {activeTab === "players" && (
+        <div className="space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 className="text-base font-bold text-slate-900">Danh sách & Quản lý người chơi</h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Quản lý hồ sơ thành viên câu lạc bộ và khách chơi. Cập nhật Email để liên kết đồng bộ lịch sử đấu.
+              </p>
+            </div>
+          </div>
+
+          {isLoadingAllPlayers ? (
+            <p className="text-sm text-slate-400 text-center py-10">Đang tải danh sách người chơi...</p>
+          ) : allPlayers.length === 0 ? (
+            <EmptyState
+              title="Chưa có người chơi nào"
+              description="Hãy thêm người chơi mới hoặc tạo khách từ tab Trọng tài."
+            />
+          ) : (
+            <div className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 text-slate-400 text-[10px] font-bold uppercase tracking-wider border-b border-slate-100">
+                      <th className="px-6 py-3">Họ và tên</th>
+                      <th className="px-6 py-3">Email</th>
+                      <th className="px-6 py-3">Số điện thoại</th>
+                      <th className="px-6 py-3">Phân loại</th>
+                      <th className="px-6 py-3 text-right">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-sm text-slate-700">
+                    {allPlayers.map((player) => (
+                      <tr key={player.id} className="hover:bg-slate-50/50 transition">
+                        <td className="px-6 py-4 font-bold text-slate-900">{player.full_name}</td>
+                        <td className="px-6 py-4 font-medium">
+                          {player.is_guest ? (
+                            <span className="text-slate-400 italic">Chưa liên kết (Ẩn danh)</span>
+                          ) : (
+                            <span className="text-slate-600">{player.email}</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-slate-500">{player.phone || "-"}</td>
+                        <td className="px-6 py-4">
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${player.is_guest ? "bg-slate-100 text-slate-500 border border-slate-200" : "bg-emerald-50 text-emerald-800 border border-emerald-200"}`}>
+                            {player.is_guest ? "Khách" : "Thành viên"}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <button
+                            onClick={() => {
+                              setEditingPlayer(player);
+                              setEditPlayerName(player.full_name);
+                              setEditPlayerEmail(player.is_guest ? "" : player.email);
+                              setEditPlayerPhone(player.phone || "");
+                              setEditPlayerError("");
+                            }}
+                            className="bg-red-50 hover:bg-red-100 border border-red-100 text-red-800 text-xs font-bold px-3 py-1 rounded-xl transition cursor-pointer"
+                          >
+                            ✏️ Sửa
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Edit Player Modal Overlay */}
+          {editingPlayer && (
+            <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-xs flex items-center justify-center p-4 z-[110]">
+              <div className="bg-white rounded-2xl p-5 w-full max-w-md shadow-2xl border border-slate-100">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="font-bold text-slate-900">
+                    Chỉnh sửa hồ sơ: {editingPlayer.full_name}
+                  </h3>
+                  <button
+                    onClick={() => { setEditingPlayer(null); setEditPlayerError(""); }}
+                    className="text-slate-400 hover:text-slate-700 text-sm cursor-pointer"
+                  >
+                    Hủy
+                  </button>
+                </div>
+
+                <form onSubmit={handleSavePlayerEdit} className="space-y-4">
+                  {editPlayerError && (
+                    <p className="text-xs text-rose-600 font-bold bg-rose-50 border border-rose-100 rounded-lg p-2">
+                      {editPlayerError}
+                    </p>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                      Họ tên *
+                    </label>
+                    <input
+                      type="text"
+                      className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-red-800"
+                      value={editPlayerName}
+                      onChange={(e) => setEditPlayerName(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                      Email liên kết *
+                    </label>
+                    <input
+                      type="email"
+                      className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-red-800"
+                      value={editPlayerEmail}
+                      onChange={(e) => setEditPlayerEmail(e.target.value)}
+                      placeholder="nvdung@gmail.com"
+                      required
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      {editingPlayer.is_guest 
+                        ? "Điền Email thật (Gmail) của họ để nâng cấp tài khoản Khách này thành Thành viên chính thức, giúp đồng bộ hóa lịch sử đấu khi họ đăng nhập."
+                        : "Email dùng để đăng nhập và đồng bộ lịch sử đấu."}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
+                      Số điện thoại
+                    </label>
+                    <input
+                      type="tel"
+                      className="w-full border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-red-800"
+                      value={editPlayerPhone}
+                      onChange={(e) => setEditPlayerPhone(e.target.value)}
+                      placeholder="Ví dụ: 0912345678"
+                    />
+                  </div>
+
+                  <div className="flex gap-2 justify-end pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditingPlayer(null)}
+                      className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 rounded-xl cursor-pointer"
+                    >
+                      Đóng
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSavingPlayerEdit}
+                      className="px-4 py-2 text-xs font-bold text-white bg-red-800 hover:bg-red-900 rounded-xl disabled:opacity-50 cursor-pointer"
+                    >
+                      {isSavingPlayerEdit ? "Đang lưu..." : "Lưu thay đổi"}
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
           )}
         </div>

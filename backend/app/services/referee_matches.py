@@ -463,3 +463,72 @@ def quick_register_user(*, full_name: str, email: str, phone: str | None = None)
             "email": str(new_row.email),
             "phone": str(new_row.phone) if new_row.phone else None,
         }
+
+def list_all_players_management() -> list[dict[str, Any]]:
+    """
+    Trả về danh sách tất cả người chơi bao gồm ID, Họ tên, Email, Số điện thoại và xem họ là thành viên thật hay khách vãng lai.
+    """
+    with get_engine().begin() as connection:
+        rows = connection.execute(
+            text(
+                """
+                SELECT id, full_name, email, phone, is_active, created_at
+                FROM public.users
+                ORDER BY is_active DESC, full_name ASC
+                """
+            )
+        ).all()
+        
+    players = []
+    for r in rows:
+        email_str = str(r.email)
+        is_guest = email_str.endswith("@netup.guest")
+        players.append({
+            "id": str(r.id),
+            "full_name": str(r.full_name),
+            "email": email_str,
+            "phone": str(r.phone) if r.phone else None,
+            "is_active": bool(r.is_active),
+            "is_guest": is_guest,
+            "created_at": r.created_at.isoformat() if r.created_at else None
+        })
+    return players
+
+def update_player_profile(*, player_id: str, full_name: str, email: str, phone: str | None = None) -> dict[str, Any]:
+    """
+    Cập nhật thông tin hồ sơ của người chơi.
+    """
+    cleaned_name = full_name.strip()
+    cleaned_email = email.strip().lower()
+    cleaned_phone = phone.strip() if phone else None
+    
+    if not cleaned_name:
+        raise AppError(status_code=422, code="name_required", message="Tên người dùng không được để trống")
+    if not cleaned_email or "@" not in cleaned_email:
+        raise AppError(status_code=422, code="email_invalid", message="Email không hợp lệ")
+
+    with get_engine().begin() as connection:
+        existing = connection.execute(
+            text("SELECT id FROM public.users WHERE email = :email AND id != :player_id"),
+            {"email": cleaned_email, "player_id": player_id}
+        ).first()
+        if existing:
+            raise AppError(status_code=400, code="email_exists", message="Email này đã được sử dụng bởi thành viên khác")
+            
+        connection.execute(
+            text(
+                """
+                UPDATE public.users
+                SET full_name = :full_name, email = :email, phone = :phone
+                WHERE id = :player_id
+                """
+            ),
+            {"full_name": cleaned_name, "email": cleaned_email, "phone": cleaned_phone, "player_id": player_id}
+        )
+        
+        return {
+            "id": player_id,
+            "full_name": cleaned_name,
+            "email": cleaned_email,
+            "phone": cleaned_phone
+        }

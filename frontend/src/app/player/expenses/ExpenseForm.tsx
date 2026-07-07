@@ -214,6 +214,80 @@ export default function ExpenseForm({
     setNewParticipantName("");
   }
 
+  const handleImportFromRefereeMatches = async () => {
+    setError("");
+    setNotice("");
+    if (!expenseDate) {
+      setError("Vui lòng chọn Ngày chơi trước khi nhập danh sách.");
+      return;
+    }
+    
+    try {
+      const allMatches = await apiFetch<any[]>("/api/v1/player/scorekeeper/matches");
+      
+      const targetDate = expenseDate;
+      const dailyMatches = allMatches.filter((m) => {
+        if (!m.played_at) return false;
+        return m.played_at.startsWith(targetDate);
+      });
+      
+      if (dailyMatches.length === 0) {
+        setError(`Không tìm thấy trận đấu trọng tài nào diễn ra trong ngày ${targetDate}.`);
+        return;
+      }
+      
+      const uniquePlayersMap = new Map<string, { id: string | null; name: string }>();
+      
+      dailyMatches.forEach((m) => {
+        if (m.team_a_player1_name) {
+          const key = m.team_a_player1_id ? `id:${m.team_a_player1_id}` : `name:${m.team_a_player1_name.toLowerCase()}`;
+          uniquePlayersMap.set(key, { id: m.team_a_player1_id, name: m.team_a_player1_name });
+        }
+        if (m.team_a_player2_name) {
+          const key = m.team_a_player2_id ? `id:${m.team_a_player2_id}` : `name:${m.team_a_player2_name.toLowerCase()}`;
+          uniquePlayersMap.set(key, { id: m.team_a_player2_id, name: m.team_a_player2_name });
+        }
+        if (m.team_b_player1_name) {
+          const key = m.team_b_player1_id ? `id:${m.team_b_player1_id}` : `name:${m.team_b_player1_name.toLowerCase()}`;
+          uniquePlayersMap.set(key, { id: m.team_b_player1_id, name: m.team_b_player1_name });
+        }
+        if (m.team_b_player2_name) {
+          const key = m.team_b_player2_id ? `id:${m.team_b_player2_id}` : `name:${m.team_b_player2_name.toLowerCase()}`;
+          uniquePlayersMap.set(key, { id: m.team_b_player2_id, name: m.team_b_player2_name });
+        }
+      });
+      
+      const addedList: Participant[] = [];
+      uniquePlayersMap.forEach((val, key) => {
+        const exists = participants.some(
+          (p) => p.display_name.toLowerCase() === val.name.toLowerCase() || (p.user_id && p.user_id === val.id)
+        );
+        
+        if (!exists) {
+          addedList.push({
+            id: val.id ? `p-u-${val.id}` : `p-g-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+            user_id: val.id,
+            display_name: val.name,
+            is_guest: !val.id,
+            amount_paid_vnd: 0,
+            amount_owed_vnd: 0,
+            balance_vnd: 0
+          });
+        }
+      });
+      
+      if (addedList.length === 0) {
+        setNotice("Tất cả người chơi thi đấu hôm nay đều đã có mặt trong danh sách.");
+        return;
+      }
+      
+      setParticipants([...participants, ...addedList]);
+      setNotice(`Đã thêm thành công ${addedList.length} người chơi từ ${dailyMatches.length} trận đấu của ngày ${targetDate}!`);
+    } catch (err) {
+      setError(errorMessage(err, "Không thể tải danh sách trận đấu"));
+    }
+  };
+
   // Handler: Xóa người chơi
   function handleRemoveParticipant(id: string) {
     setError("");
@@ -599,7 +673,17 @@ export default function ExpenseForm({
           {/* Cấu hình người chơi tham gia */}
           <div className="space-y-6">
             <Card>
-              <h2 className="text-base font-bold text-slate-800 mb-4">2. Ai chơi hôm nay? (Đang có {participants.length} người)</h2>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                <h2 className="text-base font-bold text-slate-800">2. Ai chơi hôm nay? ({participants.length} người)</h2>
+                <button
+                  type="button"
+                  onClick={handleImportFromRefereeMatches}
+                  className="bg-red-800 hover:bg-red-900 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition cursor-pointer shadow-2xs"
+                  title="Tự động lấy danh sách những người đã thi đấu từ hệ thống trọng tài"
+                >
+                  ⚡ Nhập từ trận đấu trọng tài
+                </button>
+              </div>
               <div className="mb-4 space-y-2 max-h-[300px] overflow-y-auto pr-1">
                 {participants.map((p) => (
                   <div key={p.id} className="flex items-center justify-between rounded-lg border border-slate-200 p-2.5 text-sm bg-white">

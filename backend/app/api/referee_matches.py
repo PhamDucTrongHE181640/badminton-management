@@ -15,6 +15,8 @@ from app.services.referee_matches import (
     get_h2h_stats,
     get_player_or_pair_detail,
     quick_register_user,
+    list_all_players_management,
+    update_player_profile,
 )
 
 router = APIRouter(prefix="/player/scorekeeper", tags=["referee-matches"])
@@ -96,3 +98,27 @@ def get_detail(
     key: str = Query(min_length=1),
 ) -> dict[str, Any]:
     return get_player_or_pair_detail(key=key)
+
+class UpdatePlayerProfileRequest(BaseModel):
+    full_name: str = Field(min_length=1, max_length=150)
+    email: str = Field(min_length=3, max_length=150)
+    phone: str | None = None
+
+@router.get("/all-players")
+def get_all_players(
+    user: Annotated[UserPrincipal, Depends(require_player)],
+) -> list[dict[str, Any]]:
+    return list_all_players_management()
+
+@router.put("/players/{player_id}")
+def put_update_player(
+    player_id: str,
+    payload: UpdatePlayerProfileRequest,
+    user: Annotated[UserPrincipal, Depends(require_player)],
+) -> dict[str, Any]:
+    return update_player_profile(
+        player_id=player_id,
+        full_name=payload.full_name,
+        email=payload.email,
+        phone=payload.phone,
+    )
