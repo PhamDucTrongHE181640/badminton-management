@@ -15,6 +15,11 @@ type AutocompleteUser = {
 type SetScore = {
   team_a: number;
   team_b: number;
+  score_history?: [number, number][];
+  duration_seconds?: number;
+  longest_run_a?: number;
+  longest_run_b?: number;
+  undo_count?: number;
 };
 
 const numberToVietnamese = (num: number): string => {
@@ -64,6 +69,11 @@ export default function ScorekeeperPage() {
   const [redoHistory, setRedoHistory] = useState<{ a: number; b: number }[]>([]);
   const [intervalAnnounced, setIntervalAnnounced] = useState(false);
 
+  // Set detailed analytics tracking states
+  const [setStartTime, setSetStartTime] = useState<number>(0);
+  const [undoCount, setUndoCount] = useState<number>(0);
+  const [scoreHistoryList, setScoreHistoryList] = useState<[number, number][]>([]);
+
   // Quick Record State
   const [quickPlayedAt, setQuickPlayedAt] = useState("");
   const [quickSet1A, setQuickSet1A] = useState("0");
@@ -77,6 +87,7 @@ export default function ScorekeeperPage() {
   // Matches list state
   const [matches, setMatches] = useState<any[]>([]);
   const [isLoadingMatches, setIsLoadingMatches] = useState(false);
+  const [offlineMatches, setOfflineMatches] = useState<any[]>([]);
 
   // Matchmaker State
   const [sessionPlayers, setSessionPlayers] = useState<{ key: string; name: string }[]>([]);
@@ -99,9 +110,28 @@ export default function ScorekeeperPage() {
   const [quickSetCount, setQuickSetCount] = useState<number>(2);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isDualView, setIsDualView] = useState(false);
+  const [expandedMatchId, setExpandedMatchId] = useState<string | null>(null);
 
   const [statusMessage, setStatusMessage] = useState("");
   const [statusType, setStatusType] = useState<"success" | "danger" | "warning" | "">("");
+
+  // Set Point / Match Point Alert Evaluation
+  const getTargetScore = (scoreA: number, scoreB: number) => {
+    if (scoreA < 20 || scoreB < 20) return 21;
+    const maxScore = Math.max(scoreA, scoreB);
+    if (maxScore >= 29) return 30;
+    const diff = Math.abs(scoreA - scoreB);
+    if (diff >= 2) return maxScore;
+    return maxScore + 1;
+  };
+
+  const currentTargetScore = getTargetScore(currentA, currentB);
+
+  const isSetPointLiveA = currentA >= 20 && currentA > currentB && currentA === currentTargetScore - 1;
+  const isSetPointLiveB = currentB >= 20 && currentB > currentA && currentB === currentTargetScore - 1;
+
+  const isMatchPointLiveA = isSetPointLiveA && (setsWonA === 1 || setScores.length === 2);
+  const isMatchPointLiveB = isSetPointLiveB && (setsWonB === 1 || setScores.length === 2);
 
   const loadAllPlayers = async () => {
     setIsLoadingAllPlayers(true);
@@ -155,6 +185,7 @@ export default function ScorekeeperPage() {
   useEffect(() => {
     if (activeTab === "history") {
       loadHistory();
+      loadOfflineMatches();
     } else if (activeTab === "players") {
       void loadAllPlayers();
     }
@@ -201,6 +232,36 @@ export default function ScorekeeperPage() {
     };
   }, [isLiveActive, swapped, activeSearchField, currentA, currentB, scoreHistory, setsWonA, setsWonB, setScores, intervalAnnounced]);
 
+  // Helper để tính toán chuỗi điểm liên tiếp dài nhất từ lịch sử điểm số
+  const calculateLongestRuns = (historyList: [number, number][]) => {
+    let longestRunA = 0;
+    let longestRunB = 0;
+    let currentRunA = 0;
+    let currentRunB = 0;
+
+    for (let i = 0; i < historyList.length; i++) {
+      const prev = i === 0 ? [0, 0] : historyList[i - 1];
+      const curr = historyList[i];
+
+      if (curr[0] > prev[0]) {
+        // Đội A ghi điểm
+        currentRunA++;
+        currentRunB = 0;
+        if (currentRunA > longestRunA) {
+          longestRunA = currentRunA;
+        }
+      } else if (curr[1] > prev[1]) {
+        // Đội B ghi điểm
+        currentRunB++;
+        currentRunA = 0;
+        if (currentRunB > longestRunB) {
+          longestRunB = currentRunB;
+        }
+      }
+    }
+    return { longestRunA, longestRunB };
+  };
+
   // Phục hồi trạng thái trận đấu từ localStorage khi tải trang
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -222,6 +283,11 @@ export default function ScorekeeperPage() {
           setRedoHistory(parsed.redoHistory || []);
           setSwapped(parsed.swapped || false);
           setIntervalAnnounced(parsed.intervalAnnounced || false);
+          
+          setSetStartTime(parsed.setStartTime || 0);
+          setUndoCount(parsed.undoCount || 0);
+          setScoreHistoryList(parsed.scoreHistoryList || []);
+
           setIsLiveActive(true);
           setActiveTab("live");
         } catch (e) {
@@ -249,7 +315,10 @@ export default function ScorekeeperPage() {
           scoreHistory,
           redoHistory,
           swapped,
-          intervalAnnounced
+          intervalAnnounced,
+          setStartTime,
+          undoCount,
+          scoreHistoryList
         };
         localStorage.setItem("netup_live_match_state", JSON.stringify(matchState));
       }
@@ -269,8 +338,32 @@ export default function ScorekeeperPage() {
     scoreHistory,
     redoHistory,
     swapped,
-    intervalAnnounced
+    intervalAnnounced,
+    setStartTime,
+    undoCount,
+    scoreHistoryList
   ]);
+
+  // Hook tự động quản lý thời điểm bắt đầu trận đấu và bắt đầu hiệp đấu mới
+  useEffect(() => {
+    if (isLiveActive) {
+      if (setStartTime === 0) {
+        setSetStartTime(Date.now());
+      }
+    } else {
+      setSetStartTime(0);
+      setUndoCount(0);
+      setScoreHistoryList([]);
+    }
+  }, [isLiveActive]);
+
+  useEffect(() => {
+    if (isLiveActive && setScores.length > 0) {
+      setSetStartTime(Date.now());
+      setUndoCount(0);
+      setScoreHistoryList([]);
+    }
+  }, [setScores.length]);
 
   // Cơ chế tự động đăng xuất khi treo máy (Idle Timeout) 10 phút
   useEffect(() => {
@@ -343,13 +436,148 @@ export default function ScorekeeperPage() {
     return () => clearTimeout(timer);
   }, [searchQuery, activeSearchField]);
 
+  const loadOfflineMatches = () => {
+    if (typeof window === "undefined") return;
+    const savedQueue = localStorage.getItem("netup_offline_matches_queue");
+    if (savedQueue) {
+      try {
+        setOfflineMatches(JSON.parse(savedQueue));
+      } catch (e) {
+        console.error("Lỗi đọc hàng đợi ngoại tuyến:", e);
+        setOfflineMatches([]);
+      }
+    } else {
+      setOfflineMatches([]);
+    }
+  };
+
+  const saveMatchOffline = (payload: any) => {
+    try {
+      const savedQueue = localStorage.getItem("netup_offline_matches_queue");
+      const queue = savedQueue ? JSON.parse(savedQueue) : [];
+      
+      const offlineMatchData = {
+        id: `offline_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        match_type: payload.match_type,
+        team_a: {
+          player1: { id: payload.team_a_player1_id, name: payload.team_a_player1_name },
+          player2: payload.team_a_player2_name ? { id: payload.team_a_player2_id, name: payload.team_a_player2_name } : null,
+          score: payload.team_a_score
+        },
+        team_b: {
+          player1: { id: payload.team_b_player1_id, name: payload.team_b_player1_name },
+          player2: payload.team_b_player2_name ? { id: payload.team_b_player2_id, name: payload.team_b_player2_name } : null,
+          score: payload.team_b_score
+        },
+        sets: payload.sets,
+        winner_team: payload.team_a_score > payload.team_b_score ? "A" : "B",
+        played_at: payload.played_at || new Date().toISOString(),
+        recorder: "Bạn (Ngoại tuyến)",
+        isOfflinePending: true,
+        payload: payload
+      };
+
+      queue.push(offlineMatchData);
+      localStorage.setItem("netup_offline_matches_queue", JSON.stringify(queue));
+      
+      resetLiveMatch();
+      setIsLiveActive(false);
+      localStorage.removeItem("netup_live_match_state");
+      
+      showStatus("Mất mạng. Đã lưu tạm trận đấu vào thiết bị!", "warning");
+      alert("Thiết bị hiện tại đang ngoại tuyến.\n\nTrận đấu đã được lưu tạm vào bộ nhớ trình duyệt của bạn. Hệ thống sẽ tự động đồng bộ lên máy chủ ngay khi phát hiện có mạng kết nối trở lại!");
+      
+      loadOfflineMatches();
+      setActiveTab("history");
+    } catch (e) {
+      console.error("Lỗi lưu ngoại tuyến:", e);
+      showStatus("Không thể lưu trận đấu ngoại tuyến!", "danger");
+    }
+  };
+
+  const syncOfflineMatches = async () => {
+    if (typeof window === "undefined" || !navigator.onLine) return;
+    const savedQueue = localStorage.getItem("netup_offline_matches_queue");
+    if (!savedQueue) return;
+
+    try {
+      const queue = JSON.parse(savedQueue);
+      if (queue.length === 0) return;
+
+      console.log(`Đang đồng bộ ${queue.length} trận đấu ngoại tuyến...`);
+      const remainingQueue = [];
+      let successCount = 0;
+
+      for (const match of queue) {
+        try {
+          const payloadToSend = match.payload || {
+            match_type: match.match_type,
+            team_a_player1_id: match.team_a.player1.id || null,
+            team_a_player1_name: match.team_a.player1.name,
+            team_a_player2_id: match.team_a.player2?.id || null,
+            team_a_player2_name: match.team_a.player2?.name || null,
+            team_b_player1_id: match.team_b.player1.id || null,
+            team_b_player1_name: match.team_b.player1.name,
+            team_b_player2_id: match.team_b.player2?.id || null,
+            team_b_player2_name: match.team_b.player2?.name || null,
+            sets: match.sets,
+            team_a_score: match.team_a.score,
+            team_b_score: match.team_b.score,
+            played_at: match.played_at
+          };
+
+          await apiFetch("/api/v1/player/scorekeeper/matches", {
+            method: "POST",
+            body: JSON.stringify(payloadToSend)
+          });
+          successCount++;
+        } catch (err) {
+          console.error("Lỗi đồng bộ một trận đấu ngoại tuyến:", err);
+          remainingQueue.push(match);
+        }
+      }
+
+      if (successCount > 0) {
+        showStatus(`Đồng bộ thành công ${successCount} trận đấu ngoại tuyến lên hệ thống!`, "success");
+        void loadHistory();
+      }
+
+      if (remainingQueue.length > 0) {
+        localStorage.setItem("netup_offline_matches_queue", JSON.stringify(remainingQueue));
+      } else {
+        localStorage.removeItem("netup_offline_matches_queue");
+      }
+      loadOfflineMatches();
+    } catch (e) {
+      console.error("Lỗi xử lý hàng đợi ngoại tuyến:", e);
+    }
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleOnline = () => {
+      void syncOfflineMatches();
+    };
+
+    window.addEventListener("online", handleOnline);
+    
+    if (navigator.onLine) {
+      void syncOfflineMatches();
+    }
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+    };
+  }, []);
+
   const loadHistory = async () => {
     setIsLoadingMatches(true);
     try {
       const res = await apiFetch<any[]>("/api/v1/player/scorekeeper/matches");
       setMatches(res);
     } catch (err) {
-      console.error(err);
+      console.error("Lỗi tải lịch sử đấu:", err);
     } finally {
       setIsLoadingMatches(false);
     }
@@ -569,6 +797,9 @@ export default function ScorekeeperPage() {
       setCurrentB(nextB);
     }
 
+    const newHistory = [...scoreHistoryList, [nextA, nextB] as [number, number]];
+    setScoreHistoryList(newHistory);
+
     // Voice announcement
     // Let's swap the announce names based on visual position if swapped
     const nameA = taP1.name || "Đội A";
@@ -588,7 +819,19 @@ export default function ScorekeeperPage() {
         speakText(`Hiệp đấu kết thúc. ${winnerName} thắng hiệp này, tỷ số ${numberToVietnamese(nextB)} ${numberToVietnamese(nextA)}`);
       }
       
-      const newSets = [...setScores, { team_a: nextA, team_b: nextB }];
+      const { longestRunA, longestRunB } = calculateLongestRuns(newHistory);
+      const newSets = [
+        ...setScores, 
+        { 
+          team_a: nextA, 
+          team_b: nextB,
+          score_history: newHistory,
+          duration_seconds: setStartTime > 0 ? Math.floor((Date.now() - setStartTime) / 1000) : 0,
+          longest_run_a: longestRunA,
+          longest_run_b: longestRunB,
+          undo_count: undoCount
+        }
+      ];
       setSetScores(newSets);
 
       const newSetsWonA = isWinnerA ? setsWonA + 1 : setsWonA;
@@ -652,6 +895,9 @@ export default function ScorekeeperPage() {
     setCurrentB(last.b);
     setScoreHistory(scoreHistory.slice(0, -1));
 
+    setScoreHistoryList(scoreHistoryList.slice(0, -1));
+    setUndoCount(prev => prev + 1);
+
     if (last.a < 11 && last.b < 11) {
       setIntervalAnnounced(false);
     }
@@ -664,6 +910,8 @@ export default function ScorekeeperPage() {
     setCurrentA(next.a);
     setCurrentB(next.b);
     setRedoHistory(redoHistory.slice(0, -1));
+
+    setScoreHistoryList([...scoreHistoryList, [next.a, next.b] as [number, number]]);
   };
 
   const adjustScore = (team: "A" | "B", delta: number) => {
@@ -685,7 +933,16 @@ export default function ScorekeeperPage() {
     let finalWonA = setsWonA;
     let finalWonB = setsWonB;
     if (currentA > 0 || currentB > 0) {
-      finalSets.push({ team_a: currentA, team_b: currentB });
+      const { longestRunA, longestRunB } = calculateLongestRuns(scoreHistoryList);
+      finalSets.push({
+        team_a: currentA,
+        team_b: currentB,
+        score_history: scoreHistoryList,
+        duration_seconds: setStartTime > 0 ? Math.floor((Date.now() - setStartTime) / 1000) : 0,
+        longest_run_a: longestRunA,
+        longest_run_b: longestRunB,
+        undo_count: undoCount
+      });
       if (currentA > currentB) {
         finalWonA += 1;
       } else if (currentB > currentA) {
@@ -709,6 +966,12 @@ export default function ScorekeeperPage() {
       played_at: new Date().toISOString()
     };
 
+    const isOffline = typeof window !== "undefined" && !navigator.onLine;
+    if (isOffline) {
+      saveMatchOffline(payload);
+      return;
+    }
+
     setIsSavingMatch(true);
     try {
       await apiFetch("/api/v1/player/scorekeeper/matches", {
@@ -718,6 +981,7 @@ export default function ScorekeeperPage() {
       showStatus("Lưu kết quả trận đấu thành công!", "success");
       resetLiveMatch();
       setIsLiveActive(false);
+      localStorage.removeItem("netup_live_match_state"); // Xóa trạng thái lưu trữ live
       setActiveTab("history");
     } catch (err: any) {
       console.error("Lỗi khi lưu trận đấu trực tiếp:", err);
@@ -725,8 +989,8 @@ export default function ScorekeeperPage() {
         alert("Phiên làm việc đã hết hạn!\n\nHệ thống sẽ mở một tab mới để bạn đăng nhập lại. Sau khi đăng nhập thành công, hãy quay lại đây và nhấn 'Lưu' để lưu điểm số.");
         window.open("/api/v1/auth/google/start", "_blank");
       } else {
-        alert(errorMessage(err, "Lưu kết quả trận đấu thất bại. Vui lòng kiểm tra lại kết nối."));
-        showStatus(errorMessage(err, "Lưu kết quả trận đấu thất bại"), "danger");
+        console.log("Gặp lỗi mạng hoặc kết nối. Đang chuyển đổi sang lưu trữ ngoại tuyến...");
+        saveMatchOffline(payload);
       }
     } finally {
       setIsSavingMatch(false);
@@ -742,6 +1006,9 @@ export default function ScorekeeperPage() {
     setScoreHistory([]);
     setRedoHistory([]);
     setIntervalAnnounced(false);
+    setSetStartTime(0);
+    setUndoCount(0);
+    setScoreHistoryList([]);
     if (!keepPlayers) {
       setTaP1({ id: "", name: "" });
       setTaP2({ id: "", name: "" });
@@ -830,6 +1097,186 @@ export default function ScorekeeperPage() {
       setStatusMessage("");
       setStatusType("");
     }, 5000);
+  };
+
+  const formatDuration = (seconds?: number) => {
+    if (seconds === undefined || seconds === null) return "-";
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    if (mins > 0) {
+      return `${mins} phút ${secs} giây`;
+    }
+    return `${secs} giây`;
+  };
+
+  const renderMomentumChart = (sets: any[], teamAName: string, teamBName: string) => {
+    return (
+      <div className="space-y-6 pt-4 border-t border-slate-100">
+        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+          <span>📈 Biểu đồ diễn biến điểm số (Momentum)</span>
+        </h4>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {sets.map((set, setIdx) => {
+            const history = set.score_history;
+            if (!history || !Array.isArray(history) || history.length === 0) {
+              return (
+                <div key={setIdx} className="text-xs text-slate-400 italic bg-slate-50 border border-slate-100 rounded-2xl p-4 text-center flex flex-col items-center justify-center min-h-[120px]">
+                  <span>Hiệp {setIdx + 1} ({set.team_a} - {set.team_b})</span>
+                  <span className="text-[10px] mt-1 text-slate-300">Không có dữ liệu tiến trình điểm</span>
+                </div>
+              );
+            }
+
+            // SVG dimensions
+            const width = 500;
+            const height = 220;
+            const padding = 35;
+            const chartWidth = width - padding * 2;
+            const chartHeight = height - padding * 2;
+
+            const xMax = history.length;
+            const yMax = Math.max(set.team_a, set.team_b, 21);
+
+            const pointsA: [number, number][] = [[0, 0]];
+            const pointsB: [number, number][] = [[0, 0]];
+            history.forEach((pts, idx) => {
+              if (Array.isArray(pts) && pts.length === 2) {
+                pointsA.push([idx + 1, pts[0]]);
+                pointsB.push([idx + 1, pts[1]]);
+              }
+            });
+
+            const getX = (x: number) => padding + (x / xMax) * chartWidth;
+            const getY = (y: number) => padding + chartHeight - (y / yMax) * chartHeight;
+
+            let pathA = "";
+            let pathB = "";
+            pointsA.forEach((p, idx) => {
+              const x = getX(p[0]);
+              const y = getY(p[1]);
+              if (idx === 0) pathA += `M ${x} ${y}`;
+              else pathA += ` L ${x} ${y}`;
+            });
+            pointsB.forEach((p, idx) => {
+              const x = getX(p[0]);
+              const y = getY(p[1]);
+              if (idx === 0) pathB += `M ${x} ${y}`;
+              else pathB += ` L ${x} ${y}`;
+            });
+
+            return (
+              <div key={setIdx} className="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-white space-y-3 shadow-inner">
+                <p className="text-xs font-black text-slate-350 flex justify-between">
+                  <span>Hiệp {setIdx + 1}</span>
+                  <span className="text-slate-400 font-bold bg-slate-800 px-2 py-0.5 rounded text-[10px]">{set.team_a} - {set.team_b}</span>
+                </p>
+                <div className="relative">
+                  <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
+                    {/* Grid lines */}
+                    {Array.from({ length: 5 }).map((_, i) => {
+                      const yVal = Math.round((yMax / 4) * i);
+                      const y = getY(yVal);
+                      return (
+                        <g key={i}>
+                          <line x1={padding} y1={y} x2={width - padding} y2={y} stroke="#1e293b" strokeDasharray="3" />
+                          <text x={padding - 10} y={y + 3} fill="#475569" className="text-[10px] font-black" textAnchor="end">{yVal}</text>
+                        </g>
+                      );
+                    })}
+                    {/* X axis labels */}
+                    <text x={getX(0)} y={height - padding + 15} fill="#475569" className="text-[10px] font-black" textAnchor="middle">0</text>
+                    <text x={getX(Math.round(xMax / 2))} y={height - padding + 15} fill="#475569" className="text-[10px] font-black" textAnchor="middle">Giữa hiệp</text>
+                    <text x={getX(xMax)} y={height - padding + 15} fill="#475569" className="text-[10px] font-black" textAnchor="middle">Chung cuộc</text>
+
+                    {/* Line paths */}
+                    <path d={pathA} fill="none" stroke="#10b981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d={pathB} fill="none" stroke="#6366f1" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+
+                    {/* Dots at the end */}
+                    <circle cx={getX(xMax)} cy={getY(set.team_a)} r="5" fill="#10b981" stroke="#ffffff" strokeWidth="1" />
+                    <circle cx={getX(xMax)} cy={getY(set.team_b)} r="5" fill="#6366f1" stroke="#ffffff" strokeWidth="1" />
+                  </svg>
+                </div>
+                <div className="flex gap-4 justify-center text-[10px] pt-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-1 bg-emerald-500 rounded-full" />
+                    <span className="text-slate-400 font-bold max-w-[100px] truncate">{teamAName}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-1 bg-indigo-500 rounded-full" />
+                    <span className="text-slate-400 font-bold max-w-[100px] truncate">{teamBName}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const renderPerformanceTable = (sets: any[], teamAName: string, teamBName: string) => {
+    const hasStats = sets.some(s => s.duration_seconds !== undefined || s.longest_run_a !== undefined);
+    if (!hasStats) return null;
+
+    return (
+      <div className="space-y-3 pt-4 border-t border-slate-100">
+        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">📊 So sánh hiệu suất theo hiệp</h4>
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/50 shadow-3xs">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="bg-slate-100 text-slate-600 font-black border-b border-slate-200">
+                <th className="px-4 py-2.5">Chỉ số thống kê</th>
+                {sets.map((_, idx) => (
+                  <th key={idx} className="px-4 py-2.5 text-center">Hiệp {idx + 1}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 text-slate-700 font-medium">
+              <tr className="hover:bg-slate-100/30 transition">
+                <td className="px-4 py-2.5 font-bold text-slate-800">Tỷ số hiệp</td>
+                {sets.map((s, idx) => (
+                  <td key={idx} className="px-4 py-2.5 text-center font-black">
+                    <span className="text-emerald-700">{s.team_a}</span> - <span className="text-indigo-700">{s.team_b}</span>
+                  </td>
+                ))}
+              </tr>
+              <tr className="hover:bg-slate-100/30 transition">
+                <td className="px-4 py-2.5 font-bold text-slate-800">Thời lượng đấu</td>
+                {sets.map((s, idx) => (
+                  <td key={idx} className="px-4 py-2.5 text-center text-slate-500">
+                    {formatDuration(s.duration_seconds)}
+                  </td>
+                ))}
+              </tr>
+              <tr className="hover:bg-slate-100/30 transition">
+                <td className="px-4 py-2.5 font-bold text-slate-800">Chuỗi ăn điểm dài nhất</td>
+                {sets.map((s, idx) => (
+                  <td key={idx} className="px-4 py-2.5 text-center">
+                    <div className="flex justify-center items-center gap-1">
+                      <span className="text-emerald-700 font-extrabold">{s.longest_run_a ?? "-"}</span>
+                      <span className="text-slate-300">/</span>
+                      <span className="text-indigo-700 font-extrabold">{s.longest_run_b ?? "-"}</span>
+                    </div>
+                  </td>
+                ))}
+              </tr>
+              <tr className="hover:bg-slate-100/30 transition">
+                <td className="px-4 py-2.5 font-bold text-slate-800">Sửa điểm (Undo)</td>
+                {sets.map((s, idx) => (
+                  <td key={idx} className="px-4 py-2.5 text-center text-slate-500">
+                    {s.undo_count ?? 0} lần
+                  </td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p className="text-[10px] text-slate-400 italic">
+          * Chuỗi điểm hiển thị: <span className="text-emerald-700 font-bold">{teamAName}</span> / <span className="text-indigo-700 font-bold">{teamBName}</span>.
+        </p>
+      </div>
+    );
   };
 
   // Determine serve side
@@ -1626,8 +2073,28 @@ export default function ScorekeeperPage() {
                       e.preventDefault();
                       adjustScore(swapped ? "B" : "A", -1);
                     }}
-                    className={`flex flex-col justify-center items-center rounded-xl p-6 transition cursor-pointer select-none ${swapped ? "bg-emerald-950/40 text-emerald-200 hover:bg-emerald-900/30" : "bg-indigo-950/40 text-indigo-200 hover:bg-indigo-900/30"}`}
+                    className={`flex flex-col justify-center items-center rounded-xl p-6 transition cursor-pointer select-none ${
+                      swapped 
+                        ? "bg-emerald-950/40 text-emerald-200 hover:bg-emerald-900/30" 
+                        : "bg-indigo-950/40 text-indigo-200 hover:bg-indigo-900/30"
+                    } ${
+                      (swapped ? isMatchPointLiveA : isMatchPointLiveB)
+                        ? "ring-4 ring-red-500 bg-red-950/20 animate-pulse"
+                        : (swapped ? isSetPointLiveA : isSetPointLiveB)
+                          ? "ring-4 ring-amber-500 bg-amber-950/20 animate-pulse"
+                          : ""
+                    }`}
                   >
+                    {(swapped ? isMatchPointLiveA : isMatchPointLiveB) && (
+                      <span className="px-2.5 py-0.5 bg-red-600 text-white text-[10px] font-black rounded-md animate-bounce mb-2 uppercase tracking-wider shadow-sm">
+                        Match Point
+                      </span>
+                    )}
+                    {(swapped ? isSetPointLiveA : isSetPointLiveB) && !(swapped ? isMatchPointLiveA : isMatchPointLiveB) && (
+                      <span className="px-2.5 py-0.5 bg-amber-500 text-slate-900 text-[10px] font-black rounded-md animate-bounce mb-2 uppercase tracking-wider shadow-sm">
+                        Set Point
+                      </span>
+                    )}
                     <span className="text-sm uppercase font-black opacity-60 tracking-widest mb-4">
                       {swapped ? "Đội A" : "Đội B"}
                     </span>
@@ -1646,8 +2113,28 @@ export default function ScorekeeperPage() {
                       e.preventDefault();
                       adjustScore(swapped ? "A" : "B", -1);
                     }}
-                    className={`flex flex-col justify-center items-center rounded-xl p-6 transition cursor-pointer select-none ${swapped ? "bg-indigo-950/40 text-indigo-200 hover:bg-indigo-900/30" : "bg-emerald-950/40 text-emerald-200 hover:bg-emerald-900/30"}`}
+                    className={`flex flex-col justify-center items-center rounded-xl p-6 transition cursor-pointer select-none ${
+                      swapped 
+                        ? "bg-indigo-950/40 text-indigo-200 hover:bg-indigo-900/30" 
+                        : "bg-emerald-950/40 text-emerald-200 hover:bg-emerald-900/30"
+                    } ${
+                      (swapped ? isMatchPointLiveB : isMatchPointLiveA)
+                        ? "ring-4 ring-red-500 bg-red-950/20 animate-pulse"
+                        : (swapped ? isSetPointLiveB : isSetPointLiveA)
+                          ? "ring-4 ring-amber-500 bg-amber-950/20 animate-pulse"
+                          : ""
+                    }`}
                   >
+                    {(swapped ? isMatchPointLiveB : isMatchPointLiveA) && (
+                      <span className="px-2.5 py-0.5 bg-red-600 text-white text-[10px] font-black rounded-md animate-bounce mb-2 uppercase tracking-wider shadow-sm">
+                        Match Point
+                      </span>
+                    )}
+                    {(swapped ? isSetPointLiveB : isSetPointLiveA) && !(swapped ? isMatchPointLiveB : isMatchPointLiveA) && (
+                      <span className="px-2.5 py-0.5 bg-amber-500 text-slate-900 text-[10px] font-black rounded-md animate-bounce mb-2 uppercase tracking-wider shadow-sm">
+                        Set Point
+                      </span>
+                    )}
                     <span className="text-sm uppercase font-black opacity-60 tracking-widest mb-4">
                       {swapped ? "Đội B" : "Đội A"}
                     </span>
@@ -1677,6 +2164,12 @@ export default function ScorekeeperPage() {
                     swapped 
                       ? "bg-gradient-to-br from-indigo-900 to-indigo-950 hover:from-indigo-800 hover:to-indigo-900 text-indigo-100" 
                       : "bg-gradient-to-br from-emerald-900 to-emerald-950 hover:from-emerald-800 hover:to-emerald-900 text-emerald-100"
+                  } ${
+                    (swapped ? isMatchPointLiveB : isMatchPointLiveA)
+                      ? "ring-4 ring-red-500 animate-pulse"
+                      : (swapped ? isSetPointLiveB : isSetPointLiveA)
+                        ? "ring-4 ring-amber-500 animate-pulse"
+                        : ""
                   }`}
                 >
                   {/* Corner Tag */}
@@ -1702,6 +2195,16 @@ export default function ScorekeeperPage() {
 
                   {/* Huge Counter */}
                   <div className="text-center my-6 flex flex-col justify-center items-center">
+                    {(swapped ? isMatchPointLiveB : isMatchPointLiveA) && (
+                      <span className="px-2.5 py-0.5 bg-red-600 text-white text-[10px] font-black rounded-md animate-bounce mb-2 uppercase tracking-wider shadow-sm">
+                        Match Point
+                      </span>
+                    )}
+                    {(swapped ? isSetPointLiveB : isSetPointLiveA) && !(swapped ? isMatchPointLiveB : isMatchPointLiveA) && (
+                      <span className="px-2.5 py-0.5 bg-amber-500 text-slate-900 text-[10px] font-black rounded-md animate-bounce mb-2 uppercase tracking-wider shadow-sm">
+                        Set Point
+                      </span>
+                    )}
                     <span className="text-[120px] md:text-[180px] lg:text-[240px] font-black tracking-tight leading-none drop-shadow-md">
                       {swapped ? currentB : currentA}
                     </span>
@@ -1768,6 +2271,12 @@ export default function ScorekeeperPage() {
                     swapped 
                       ? "bg-gradient-to-br from-emerald-900 to-emerald-950 hover:from-emerald-800 hover:to-emerald-900 text-emerald-100" 
                       : "bg-gradient-to-br from-indigo-900 to-indigo-950 hover:from-indigo-800 hover:to-indigo-900 text-indigo-100"
+                  } ${
+                    (swapped ? isMatchPointLiveA : isMatchPointLiveB)
+                      ? "ring-4 ring-red-500 animate-pulse"
+                      : (swapped ? isSetPointLiveA : isSetPointLiveB)
+                        ? "ring-4 ring-amber-500 animate-pulse"
+                        : ""
                   }`}
                 >
                   {/* Corner Tag */}
@@ -1793,6 +2302,16 @@ export default function ScorekeeperPage() {
 
                   {/* Huge Counter */}
                   <div className="text-center my-6 flex flex-col justify-center items-center">
+                    {(swapped ? isMatchPointLiveA : isMatchPointLiveB) && (
+                      <span className="px-2.5 py-0.5 bg-red-600 text-white text-[10px] font-black rounded-md animate-bounce mb-2 uppercase tracking-wider shadow-sm">
+                        Match Point
+                      </span>
+                    )}
+                    {(swapped ? isSetPointLiveA : isSetPointLiveB) && !(swapped ? isMatchPointLiveA : isMatchPointLiveB) && (
+                      <span className="px-2.5 py-0.5 bg-amber-500 text-slate-900 text-[10px] font-black rounded-md animate-bounce mb-2 uppercase tracking-wider shadow-sm">
+                        Set Point
+                      </span>
+                    )}
                     <span className="text-[120px] md:text-[180px] lg:text-[240px] font-black tracking-tight leading-none drop-shadow-md">
                       {swapped ? currentA : currentB}
                     </span>
@@ -2040,14 +2559,14 @@ export default function ScorekeeperPage() {
           <h2 className="text-base font-bold text-slate-900">Lịch sử các trận đấu đã ghi nhận</h2>
           {isLoadingMatches ? (
             <p className="text-sm text-slate-400 text-center py-10">Đang tải lịch sử trận đấu...</p>
-          ) : matches.length === 0 ? (
+          ) : (matches.length + offlineMatches.length) === 0 ? (
             <EmptyState
               title="Chưa có trận đấu nào được lưu"
               description="Hãy bắt đầu đếm điểm trực tiếp hoặc ghi kết quả nhanh ở các tab phía trên."
             />
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
-              {matches.map((m) => {
+              {[...offlineMatches, ...matches].map((m) => {
                 const isSingles = m.match_type === "singles";
                 const isWonA = m.winner_team === "A";
                 const formattedDate = new Date(m.played_at).toLocaleString("vi-VN", {
@@ -2055,29 +2574,60 @@ export default function ScorekeeperPage() {
                 });
 
                 return (
-                  <Card key={m.id} className="p-5 border border-slate-200/60 shadow-xs rounded-2xl bg-white space-y-4 hover:border-slate-300 transition">
+                  <div 
+                    key={m.id} 
+                    className={`rounded-2xl border p-5 shadow-xs space-y-4 hover:border-slate-300 transition cursor-pointer select-none bg-white ${
+                      expandedMatchId === m.id ? "border-slate-400 ring-2 ring-slate-100" : "border-slate-200/60"
+                    }`}
+                    onClick={() => setExpandedMatchId(expandedMatchId === m.id ? null : m.id)}
+                  >
                     <div className="flex justify-between items-start border-b border-slate-100 pb-3">
                       <div>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${isSingles ? "bg-amber-50 text-amber-800 border border-amber-200" : "bg-red-50 text-red-800 border border-red-200"}`}>
-                          {isSingles ? "Đấu Đơn" : "Đấu Đôi"}
-                        </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${isSingles ? "bg-amber-50 text-amber-800 border border-amber-200" : "bg-red-50 text-red-800 border border-red-200"}`}>
+                            {isSingles ? "Đấu Đơn" : "Đấu Đôi"}
+                          </span>
+                          {m.isOfflinePending && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-orange-50 text-orange-700 border border-orange-200 animate-pulse">
+                              ⏳ Ngoại tuyến
+                            </span>
+                          )}
+                        </div>
                         <p className="text-[10px] text-slate-400 mt-1.5 font-medium">Thời gian: {formattedDate}</p>
                       </div>
-                      <span className="text-[10px] text-slate-400 italic">
-                        Ghi bởi: <span className="font-bold text-slate-600">{m.recorder}</span>
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-slate-400 italic">
+                          Ghi bởi: <span className="font-bold text-slate-600">{m.recorder}</span>
+                        </span>
+                        <span className="text-slate-300">|</span>
+                        <span className="text-xs font-bold text-red-800 flex items-center gap-1">
+                          {expandedMatchId === m.id ? "▲ Thu gọn" : "📊 Chi tiết"}
+                        </span>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4 items-center">
                       {/* Đội A */}
                       <div className={`space-y-1.5 ${isWonA ? "font-bold text-slate-900" : "text-slate-500"}`}>
-                        <div className="flex items-center gap-1.5">
-                          <span className={`w-2 h-2 rounded-full ${isWonA ? "bg-yellow-400" : "bg-slate-300"}`} />
-                          <span className="truncate block max-w-[130px]">{m.team_a.player1.name}</span>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${isWonA ? "bg-yellow-400" : "bg-slate-300"}`} />
+                          <Link
+                            href={`/player/scorekeeper/player?key=${encodeURIComponent(m.team_a.player1.id ? `id:${m.team_a.player1.id}` : `name:${m.team_a.player1.name}`)}`}
+                            className="truncate block max-w-[130px] hover:text-red-800 hover:underline text-xs"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {m.team_a.player1.name}
+                          </Link>
                         </div>
                         {!isSingles && m.team_a.player2 && (
-                          <div className="flex items-center gap-1.5 pl-3.5 text-xs">
-                            <span className="truncate block max-w-[130px]">{m.team_a.player2.name}</span>
+                          <div className="flex items-center gap-1.5 pl-3.5 min-w-0">
+                            <Link
+                              href={`/player/scorekeeper/player?key=${encodeURIComponent(m.team_a.player2.id ? `id:${m.team_a.player2.id}` : `name:${m.team_a.player2.name}`)}`}
+                              className="truncate block max-w-[130px] hover:text-red-800 hover:underline text-[10px] text-slate-400"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {m.team_a.player2.name}
+                            </Link>
                           </div>
                         )}
                         <p className="text-xl font-black mt-2 text-emerald-700 pl-3.5">{m.team_a.score} <span className="text-xs font-normal text-slate-400">hiệp thắng</span></p>
@@ -2085,13 +2635,25 @@ export default function ScorekeeperPage() {
 
                       {/* Đội B */}
                       <div className={`space-y-1.5 ${!isWonA ? "font-bold text-slate-900" : "text-slate-500"}`}>
-                        <div className="flex items-center gap-1.5">
-                          <span className={`w-2 h-2 rounded-full ${!isWonA ? "bg-yellow-400" : "bg-slate-300"}`} />
-                          <span className="truncate block max-w-[130px]">{m.team_b.player1.name}</span>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${!isWonA ? "bg-yellow-400" : "bg-slate-300"}`} />
+                          <Link
+                            href={`/player/scorekeeper/player?key=${encodeURIComponent(m.team_b.player1.id ? `id:${m.team_b.player1.id}` : `name:${m.team_b.player1.name}`)}`}
+                            className="truncate block max-w-[130px] hover:text-red-800 hover:underline text-xs"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {m.team_b.player1.name}
+                          </Link>
                         </div>
                         {!isSingles && m.team_b.player2 && (
-                          <div className="flex items-center gap-1.5 pl-3.5 text-xs">
-                            <span className="truncate block max-w-[130px]">{m.team_b.player2.name}</span>
+                          <div className="flex items-center gap-1.5 pl-3.5 min-w-0">
+                            <Link
+                              href={`/player/scorekeeper/player?key=${encodeURIComponent(m.team_b.player2.id ? `id:${m.team_b.player2.id}` : `name:${m.team_b.player2.name}`)}`}
+                              className="truncate block max-w-[130px] hover:text-red-800 hover:underline text-[10px] text-slate-400"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {m.team_b.player2.name}
+                            </Link>
                           </div>
                         )}
                         <p className="text-xl font-black mt-2 text-indigo-700 pl-3.5">{m.team_b.score} <span className="text-xs font-normal text-slate-400">hiệp thắng</span></p>
@@ -2107,7 +2669,15 @@ export default function ScorekeeperPage() {
                         </span>
                       ))}
                     </div>
-                  </Card>
+
+                    {/* Chi tiết phân tích nâng cao (Vẽ biểu đồ & Bảng so sánh hiệu suất) */}
+                    {expandedMatchId === m.id && (
+                      <div className="space-y-4 pt-3 border-t border-slate-100" onClick={(e) => e.stopPropagation()}>
+                        {renderPerformanceTable(m.sets, m.team_a.player1.name, m.team_b.player1.name)}
+                        {renderMomentumChart(m.sets, m.team_a.player1.name, m.team_b.player1.name)}
+                      </div>
+                    )}
+                  </div>
                 );
               })}
             </div>
@@ -2164,7 +2734,13 @@ export default function ScorekeeperPage() {
                             {player.is_guest ? "Khách" : "Thành viên"}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-right">
+                        <td className="px-6 py-4 text-right flex justify-end gap-2">
+                          <Link
+                            href={`/player/scorekeeper/player?key=${encodeURIComponent(player.is_guest ? `name:${player.full_name}` : `id:${player.id}`)}`}
+                            className="bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-xs font-bold px-3 py-1 rounded-xl transition cursor-pointer flex items-center justify-center"
+                          >
+                            📊 Lịch sử
+                          </Link>
                           <button
                             onClick={() => {
                               setEditingPlayer(player);

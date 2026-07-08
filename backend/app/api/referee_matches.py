@@ -24,6 +24,11 @@ router = APIRouter(prefix="/player/scorekeeper", tags=["referee-matches"])
 class SetScore(BaseModel):
     team_a: int = Field(ge=0, le=35)
     team_b: int = Field(ge=0, le=35)
+    score_history: list[list[int]] | None = None
+    duration_seconds: int | None = None
+    longest_run_a: int | None = None
+    longest_run_b: int | None = None
+    undo_count: int | None = None
 
 class RefereeMatchCreateRequest(BaseModel):
     match_type: str = Field(pattern="^(singles|doubles)$")
