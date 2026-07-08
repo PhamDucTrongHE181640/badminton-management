@@ -95,6 +95,8 @@ export default function ScorekeeperPage() {
   const [editPlayerPhone, setEditPlayerPhone] = useState("");
   const [editPlayerError, setEditPlayerError] = useState("");
   const [isSavingPlayerEdit, setIsSavingPlayerEdit] = useState(false);
+  const [isSavingMatch, setIsSavingMatch] = useState(false);
+  const [quickSetCount, setQuickSetCount] = useState<number>(2);
 
   const [statusMessage, setStatusMessage] = useState("");
   const [statusType, setStatusType] = useState<"success" | "danger" | "warning" | "">("");
@@ -155,6 +157,119 @@ export default function ScorekeeperPage() {
       void loadAllPlayers();
     }
   }, [activeTab]);
+
+  // Phục hồi trạng thái trận đấu từ localStorage khi tải trang
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("netup_live_match_state");
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          setMatchType(parsed.matchType || "doubles");
+          setTaP1(parsed.taP1 || { id: "", name: "" });
+          setTaP2(parsed.taP2 || { id: "", name: "" });
+          setTbP1(parsed.tbP1 || { id: "", name: "" });
+          setTbP2(parsed.tbP2 || { id: "", name: "" });
+          setCurrentA(parsed.currentA || 0);
+          setCurrentB(parsed.currentB || 0);
+          setSetsWonA(parsed.setsWonA || 0);
+          setSetsWonB(parsed.setsWonB || 0);
+          setSetScores(parsed.setScores || []);
+          setScoreHistory(parsed.scoreHistory || []);
+          setRedoHistory(parsed.redoHistory || []);
+          setSwapped(parsed.swapped || false);
+          setIntervalAnnounced(parsed.intervalAnnounced || false);
+          setIsLiveActive(true);
+          setActiveTab("live");
+        } catch (e) {
+          console.error("Lỗi phục hồi điểm số từ localStorage:", e);
+        }
+      }
+    }
+  }, []);
+
+  // Lưu trạng thái trận đấu vào localStorage khi có bất kỳ thay đổi nào
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      if (isLiveActive) {
+        const matchState = {
+          matchType,
+          taP1,
+          taP2,
+          tbP1,
+          tbP2,
+          currentA,
+          currentB,
+          setsWonA,
+          setsWonB,
+          setScores,
+          scoreHistory,
+          redoHistory,
+          swapped,
+          intervalAnnounced
+        };
+        localStorage.setItem("netup_live_match_state", JSON.stringify(matchState));
+      }
+    }
+  }, [
+    isLiveActive,
+    matchType,
+    taP1,
+    taP2,
+    tbP1,
+    tbP2,
+    currentA,
+    currentB,
+    setsWonA,
+    setsWonB,
+    setScores,
+    scoreHistory,
+    redoHistory,
+    swapped,
+    intervalAnnounced
+  ]);
+
+  // Cơ chế tự động đăng xuất khi treo máy (Idle Timeout) 10 phút
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    let timeoutId: NodeJS.Timeout;
+
+    const resetIdleTimer = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      
+      // Chỉ tự động đăng xuất nếu không có trận đấu trực tiếp nào đang diễn ra
+      timeoutId = setTimeout(async () => {
+        if (!isLiveActive) {
+          console.log("Không có hoạt động trong 10 phút. Tự động đăng xuất.");
+          try {
+            await apiFetch("/api/v1/auth/logout", {
+              method: "POST",
+              body: JSON.stringify({ refresh_token: null }),
+            });
+          } catch (err) {
+            console.error("Lỗi tự động đăng xuất:", err);
+          } finally {
+            window.location.href = "/";
+          }
+        }
+      }, 10 * 60 * 1000);
+    };
+
+    const events = ["mousemove", "keydown", "click", "scroll", "touchstart"];
+    events.forEach((event) => {
+      window.addEventListener(event, resetIdleTimer);
+    });
+
+    resetIdleTimer();
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      events.forEach((event) => {
+        window.removeEventListener(event, resetIdleTimer);
+      });
+    };
+  }, [isLiveActive]);
 
   // Autocomplete fetcher
   useEffect(() => {
@@ -495,6 +610,19 @@ export default function ScorekeeperPage() {
     const nameA2 = matchType === "doubles" ? (taP2.name.trim() || "Người chơi A2") : null;
     const nameB2 = matchType === "doubles" ? (tbP2.name.trim() || "Người chơi B2") : null;
 
+    // Tự động gộp hiệp đấu dở dang vào danh sách gửi đi và tính điểm hiệp thắng
+    const finalSets = [...setScores];
+    let finalWonA = setsWonA;
+    let finalWonB = setsWonB;
+    if (currentA > 0 || currentB > 0) {
+      finalSets.push({ team_a: currentA, team_b: currentB });
+      if (currentA > currentB) {
+        finalWonA += 1;
+      } else if (currentB > currentA) {
+        finalWonB += 1;
+      }
+    }
+
     const payload = {
       match_type: matchType,
       team_a_player1_id: taP1.id || null,
@@ -505,12 +633,13 @@ export default function ScorekeeperPage() {
       team_b_player1_name: nameB1,
       team_b_player2_id: tbP2.id || null,
       team_b_player2_name: nameB2,
-      sets: setScores,
-      team_a_score: setsWonA,
-      team_b_score: setsWonB,
+      sets: finalSets,
+      team_a_score: finalWonA,
+      team_b_score: finalWonB,
       played_at: new Date().toISOString()
     };
 
+    setIsSavingMatch(true);
     try {
       await apiFetch("/api/v1/player/scorekeeper/matches", {
         method: "POST",
@@ -520,8 +649,17 @@ export default function ScorekeeperPage() {
       resetLiveMatch();
       setIsLiveActive(false);
       setActiveTab("history");
-    } catch (err) {
-      showStatus(errorMessage(err, "Lưu kết quả trận đấu thất bại"), "danger");
+    } catch (err: any) {
+      console.error("Lỗi khi lưu trận đấu trực tiếp:", err);
+      if (err?.status === 401) {
+        alert("Phiên làm việc đã hết hạn!\n\nHệ thống sẽ mở một tab mới để bạn đăng nhập lại. Sau khi đăng nhập thành công, hãy quay lại đây và nhấn 'Lưu' để lưu điểm số.");
+        window.open("/api/v1/auth/google/start", "_blank");
+      } else {
+        alert(errorMessage(err, "Lưu kết quả trận đấu thất bại. Vui lòng kiểm tra lại kết nối."));
+        showStatus(errorMessage(err, "Lưu kết quả trận đấu thất bại"), "danger");
+      }
+    } finally {
+      setIsSavingMatch(false);
     }
   };
 
@@ -534,6 +672,9 @@ export default function ScorekeeperPage() {
     setScoreHistory([]);
     setRedoHistory([]);
     setIntervalAnnounced(false);
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("netup_live_match_state");
+    }
   };
 
   const handleSaveQuickMatch = async (e: React.FormEvent) => {
@@ -543,12 +684,14 @@ export default function ScorekeeperPage() {
     const nameA2 = matchType === "doubles" ? (taP2.name.trim() || "Người chơi A2") : null;
     const nameB2 = matchType === "doubles" ? (tbP2.name.trim() || "Người chơi B2") : null;
 
-    const setsToSave: SetScore[] = [
-      { team_a: parseInt(quickSet1A), team_b: parseInt(quickSet1B) },
-      { team_a: parseInt(quickSet2A), team_b: parseInt(quickSet2B) }
-    ];
-    if (quickUseSet3) {
-      setsToSave.push({ team_a: parseInt(quickSet3A), team_b: parseInt(quickSet3B) });
+    const setsToSave: SetScore[] = [];
+    setsToSave.push({ team_a: parseInt(quickSet1A) || 0, team_b: parseInt(quickSet1B) || 0 });
+    
+    if (quickSetCount >= 2) {
+      setsToSave.push({ team_a: parseInt(quickSet2A) || 0, team_b: parseInt(quickSet2B) || 0 });
+    }
+    if (quickSetCount === 3) {
+      setsToSave.push({ team_a: parseInt(quickSet3A) || 0, team_b: parseInt(quickSet3B) || 0 });
     }
 
     // Calculate sets won
@@ -556,7 +699,7 @@ export default function ScorekeeperPage() {
     let quickWonB = 0;
     setsToSave.forEach((s) => {
       if (s.team_a > s.team_b) quickWonA++;
-      else quickWonB++;
+      else if (s.team_b > s.team_a) quickWonB++;
     });
 
     const payload = {
@@ -575,15 +718,32 @@ export default function ScorekeeperPage() {
       played_at: quickPlayedAt ? new Date(quickPlayedAt).toISOString() : new Date().toISOString()
     };
 
+    setIsSavingMatch(true);
     try {
       await apiFetch("/api/v1/player/scorekeeper/matches", {
         method: "POST",
         body: JSON.stringify(payload)
       });
       showStatus("Lưu kết quả trận đấu nhanh thành công!", "success");
+      setQuickSet1A("0");
+      setQuickSet1B("0");
+      setQuickSet2A("0");
+      setQuickSet2B("0");
+      setQuickSet3A("0");
+      setQuickSet3B("0");
+      setQuickSetCount(2);
       setActiveTab("history");
-    } catch (err) {
-      showStatus(errorMessage(err, "Lưu kết quả nhanh thất bại"), "danger");
+    } catch (err: any) {
+      console.error("Lỗi khi lưu trận đấu nhanh:", err);
+      if (err?.status === 401) {
+        alert("Phiên làm việc đã hết hạn!\n\nHệ thống sẽ mở một tab mới để bạn đăng nhập lại. Sau khi đăng nhập thành công, hãy quay lại đây và nhấn 'Lưu' để lưu điểm số.");
+        window.open("/api/v1/auth/google/start", "_blank");
+      } else {
+        alert(errorMessage(err, "Lưu kết quả nhanh thất bại. Vui lòng kiểm tra lại kết nối."));
+        showStatus(errorMessage(err, "Lưu kết quả nhanh thất bại"), "danger");
+      }
+    } finally {
+      setIsSavingMatch(false);
     }
   };
 
@@ -963,6 +1123,29 @@ export default function ScorekeeperPage() {
             <form onSubmit={handleSaveQuickMatch} className="mt-6 border-t border-slate-100 pt-6">
               <h3 className="font-bold text-slate-900 text-sm mb-4">Nhập điểm số các hiệp</h3>
               <div className="space-y-4">
+                {/* Chọn số hiệp thi đấu */}
+                <div className="mb-4">
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                    Số hiệp thi đấu
+                  </label>
+                  <div className="flex gap-2">
+                    {[1, 2, 3].map((num) => (
+                      <button
+                        key={num}
+                        type="button"
+                        onClick={() => setQuickSetCount(num)}
+                        className={`px-4 py-2 text-xs font-bold rounded-xl border transition cursor-pointer ${
+                          quickSetCount === num
+                            ? "bg-red-800 border-red-800 text-white shadow-sm"
+                            : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                        }`}
+                      >
+                        {num} Hiệp
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Set 1 */}
                 <div className="flex gap-4 items-center max-w-sm">
                   <span className="text-xs font-bold text-slate-500 w-16 uppercase">Hiệp 1:</span>
@@ -986,43 +1169,31 @@ export default function ScorekeeperPage() {
                 </div>
 
                 {/* Set 2 */}
-                <div className="flex gap-4 items-center max-w-sm">
-                  <span className="text-xs font-bold text-slate-500 w-16 uppercase">Hiệp 2:</span>
-                  <input
-                    type="number"
-                    min="0"
-                    max="30"
-                    value={quickSet2A}
-                    onChange={(e) => setQuickSet2A(e.target.value)}
-                    className="w-20 text-center border border-slate-200 rounded-lg px-2 py-1 text-sm bg-emerald-50/20 font-bold text-emerald-800"
-                  />
-                  <span className="text-slate-400">-</span>
-                  <input
-                    type="number"
-                    min="0"
-                    max="30"
-                    value={quickSet2B}
-                    onChange={(e) => setQuickSet2B(e.target.value)}
-                    className="w-20 text-center border border-slate-200 rounded-lg px-2 py-1 text-sm bg-indigo-50/20 font-bold text-indigo-800"
-                  />
-                </div>
-
-                {/* Toggle Set 3 */}
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="useSet3"
-                    checked={quickUseSet3}
-                    onChange={(e) => setQuickUseSet3(e.target.checked)}
-                    className="rounded border-slate-300 text-red-800 focus:ring-red-800 cursor-pointer"
-                  />
-                  <label htmlFor="useSet3" className="text-xs font-bold text-slate-600 cursor-pointer select-none">
-                    Có chơi Hiệp 3 (Quyết định)
-                  </label>
-                </div>
+                {quickSetCount >= 2 && (
+                  <div className="flex gap-4 items-center max-w-sm animate-in slide-in-from-top-2 duration-150">
+                    <span className="text-xs font-bold text-slate-500 w-16 uppercase">Hiệp 2:</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="30"
+                      value={quickSet2A}
+                      onChange={(e) => setQuickSet2A(e.target.value)}
+                      className="w-20 text-center border border-slate-200 rounded-lg px-2 py-1 text-sm bg-emerald-50/20 font-bold text-emerald-800"
+                    />
+                    <span className="text-slate-400">-</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="30"
+                      value={quickSet2B}
+                      onChange={(e) => setQuickSet2B(e.target.value)}
+                      className="w-20 text-center border border-slate-200 rounded-lg px-2 py-1 text-sm bg-indigo-50/20 font-bold text-indigo-800"
+                    />
+                  </div>
+                )}
 
                 {/* Set 3 */}
-                {quickUseSet3 && (
+                {quickSetCount === 3 && (
                   <div className="flex gap-4 items-center max-w-sm animate-in slide-in-from-top-2 duration-150">
                     <span className="text-xs font-bold text-slate-500 w-16 uppercase">Hiệp 3:</span>
                     <input
@@ -1049,10 +1220,10 @@ export default function ScorekeeperPage() {
               <div className="mt-6 flex justify-end">
                 <button
                   type="submit"
-                  disabled={!taP1.name || !tbP1.name || (matchType === "doubles" && (!taP2.name || !tbP2.name))}
-                  className="bg-red-800 hover:bg-red-950 text-white font-bold px-6 py-3 rounded-xl shadow-xs transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={isSavingMatch || !taP1.name || !tbP1.name || (matchType === "doubles" && (!taP2.name || !tbP2.name))}
+                  className="bg-red-800 hover:bg-red-950 text-white font-bold px-6 py-3 rounded-xl shadow-xs transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed animate-in"
                 >
-                  💾 Lưu kết quả thi đấu
+                  {isSavingMatch ? "Đang lưu..." : "💾 Lưu kết quả thi đấu"}
                 </button>
               </div>
             </form>
@@ -1522,10 +1693,10 @@ export default function ScorekeeperPage() {
             </button>
             <button
               onClick={handleSaveLiveMatch}
-              disabled={setsWonA < 2 && setsWonB < 2}
+              disabled={isSavingMatch || (setScores.length === 0 && currentA === 0 && currentB === 0)}
               className="bg-red-800 hover:bg-red-950 text-white font-bold px-6 py-2.5 rounded-xl shadow-xs hover:scale-102 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              💾 Xác nhận & Lưu trận đấu
+              {isSavingMatch ? "Đang lưu..." : "💾 Xác nhận & Lưu trận đấu"}
             </button>
           </div>
         </div>

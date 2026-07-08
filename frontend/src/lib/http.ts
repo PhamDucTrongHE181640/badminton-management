@@ -58,6 +58,21 @@ export async function apiFetch<T>(
   const payload = response.status === 204 ? null : await response.json().catch(() => null);
 
   if (!response.ok) {
+    if (response.status === 401 && !path.includes("/auth/refresh")) {
+      try {
+        // Gọi API refresh token chạy ngầm. Gửi kèm credentials để tự động đính kèm cookie.
+        await apiFetch("/api/v1/auth/refresh", {
+          method: "POST",
+          body: JSON.stringify({ refresh_token: null }),
+          credentials: "include",
+        });
+        // Gọi lại yêu cầu ban đầu sau khi gia hạn phiên thành công
+        return await apiFetch<T>(path, init, options);
+      } catch (refreshErr) {
+        console.error("Gia hạn phiên làm việc tự động thất bại:", refreshErr);
+      }
+    }
+
     throw new ApiError({
       status: response.status,
       code: payload?.error?.code ?? "api_error",
