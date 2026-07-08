@@ -97,6 +97,8 @@ export default function ScorekeeperPage() {
   const [isSavingPlayerEdit, setIsSavingPlayerEdit] = useState(false);
   const [isSavingMatch, setIsSavingMatch] = useState(false);
   const [quickSetCount, setQuickSetCount] = useState<number>(2);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isDualView, setIsDualView] = useState(false);
 
   const [statusMessage, setStatusMessage] = useState("");
   const [statusType, setStatusType] = useState<"success" | "danger" | "warning" | "">("");
@@ -157,6 +159,47 @@ export default function ScorekeeperPage() {
       void loadAllPlayers();
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, []);
+
+  // Lắng nghe phím mũi tên để tăng điểm số bên trái và bên phải
+  useEffect(() => {
+    if (!isLiveActive) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target?.tagName === "INPUT" ||
+        target?.tagName === "TEXTAREA" ||
+        target?.isContentEditable ||
+        activeSearchField
+      ) {
+        return;
+      }
+
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        addPoint(swapped ? "B" : "A");
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        addPoint(swapped ? "A" : "B");
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isLiveActive, swapped, activeSearchField, currentA, currentB, scoreHistory, setsWonA, setsWonB, setScores, intervalAnnounced]);
 
   // Phục hồi trạng thái trận đấu từ localStorage khi tải trang
   useEffect(() => {
@@ -271,25 +314,34 @@ export default function ScorekeeperPage() {
     };
   }, [isLiveActive]);
 
-  // Autocomplete fetcher
-  useEffect(() => {
-    if (!searchQuery.trim()) {
-      setSearchResults([]);
-      return;
+  const fetchAutocomplete = async (queryStr: string) => {
+    setIsSearching(true);
+    try {
+      const res = await apiFetch<AutocompleteUser[]>(`/api/v1/player/scorekeeper/players?q=${encodeURIComponent(queryStr)}`);
+      setSearchResults(res);
+    } catch (err) {
+      console.error("Lỗi tìm kiếm người chơi:", err);
+    } finally {
+      setIsSearching(false);
     }
-    const timer = setTimeout(async () => {
-      setIsSearching(true);
-      try {
-        const res = await apiFetch<AutocompleteUser[]>(`/api/v1/player/scorekeeper/players?q=${encodeURIComponent(searchQuery)}`);
-        setSearchResults(res);
-      } catch (err) {
-        console.error("Lỗi tìm kiếm người chơi", err);
-      } finally {
-        setIsSearching(false);
-      }
+  };
+
+  // Tự động tải danh sách người chơi mặc định ngay khi mở Modal chọn người chơi
+  useEffect(() => {
+    if (activeSearchField) {
+      setSearchQuery("");
+      void fetchAutocomplete("");
+    }
+  }, [activeSearchField]);
+
+  // Tìm kiếm có debounce khi người dùng nhập từ khóa
+  useEffect(() => {
+    if (!activeSearchField) return;
+    const timer = setTimeout(() => {
+      void fetchAutocomplete(searchQuery);
     }, 300);
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchQuery, activeSearchField]);
 
   const loadHistory = async () => {
     setIsLoadingMatches(true);
@@ -574,6 +626,24 @@ export default function ScorekeeperPage() {
     }
   };
 
+  const toggleFullscreen = () => {
+    if (typeof window === "undefined") return;
+    if (!document.fullscreenElement) {
+      const container = document.getElementById("live-scoreboard-fullscreen-container");
+      if (container) {
+        container.requestFullscreen().catch((err) => {
+          console.error("Lỗi bật toàn màn hình:", err);
+        });
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch((err) => {
+          console.error("Lỗi thoát toàn màn hình:", err);
+        });
+      }
+    }
+  };
+
   const undoPoint = () => {
     if (scoreHistory.length === 0) return;
     const last = scoreHistory[scoreHistory.length - 1];
@@ -663,7 +733,7 @@ export default function ScorekeeperPage() {
     }
   };
 
-  const resetLiveMatch = () => {
+  const resetLiveMatch = (keepPlayers = false) => {
     setCurrentA(0);
     setCurrentB(0);
     setSetsWonA(0);
@@ -672,6 +742,12 @@ export default function ScorekeeperPage() {
     setScoreHistory([]);
     setRedoHistory([]);
     setIntervalAnnounced(false);
+    if (!keepPlayers) {
+      setTaP1({ id: "", name: "" });
+      setTaP2({ id: "", name: "" });
+      setTbP1({ id: "", name: "" });
+      setTbP2({ id: "", name: "" });
+    }
     if (typeof window !== "undefined") {
       localStorage.removeItem("netup_live_match_state");
     }
@@ -779,13 +855,13 @@ export default function ScorekeeperPage() {
       {/* Tabs */}
       <div className="flex border-b border-slate-200 mb-8 overflow-x-auto gap-2">
         <button
-          onClick={() => { setActiveTab("live"); setIsLiveActive(false); }}
+          onClick={() => { setActiveTab("live"); }}
           className={`px-5 py-3 text-sm font-bold border-b-2 transition shrink-0 cursor-pointer ${activeTab === "live" ? "border-red-800 text-red-800" : "border-transparent text-slate-500 hover:text-slate-900"}`}
         >
           🏸 Trọng tài đếm điểm
         </button>
         <button
-          onClick={() => { setActiveTab("matchmaker"); setIsLiveActive(false); }}
+          onClick={() => { setActiveTab("matchmaker"); }}
           className={`px-5 py-3 text-sm font-bold border-b-2 transition shrink-0 cursor-pointer ${activeTab === "matchmaker" ? "border-red-800 text-red-800" : "border-transparent text-slate-500 hover:text-slate-900"}`}
         >
           🤝 Chia đội thông minh
@@ -928,8 +1004,47 @@ export default function ScorekeeperPage() {
                   autoFocus
                 />
                 <div className="max-h-60 overflow-y-auto space-y-1">
+                  {searchQuery.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const typedName = searchQuery.trim();
+                        const isDuplicate = 
+                          (activeSearchField === "matchmaker" && sessionPlayers.some((p) => p.name.toLowerCase() === typedName.toLowerCase())) ||
+                          (activeSearchField !== "matchmaker" && (
+                            (activeSearchField !== "taP1" && taP1.name.toLowerCase() === typedName.toLowerCase()) ||
+                            (activeSearchField !== "taP2" && taP2.name.toLowerCase() === typedName.toLowerCase()) ||
+                            (activeSearchField !== "tbP1" && tbP1.name.toLowerCase() === typedName.toLowerCase()) ||
+                            (activeSearchField !== "tbP2" && tbP2.name.toLowerCase() === typedName.toLowerCase())
+                          ));
+                          
+                        if (isDuplicate) {
+                          alert("Người chơi này đã được chọn hoặc đã có trong danh sách sân!");
+                          return;
+                        }
+
+                        if (activeSearchField === "taP1") setTaP1({ id: "", name: typedName });
+                        if (activeSearchField === "taP2") setTaP2({ id: "", name: typedName });
+                        if (activeSearchField === "tbP1") setTbP1({ id: "", name: typedName });
+                        if (activeSearchField === "tbP2") setTbP2({ id: "", name: typedName });
+                        if (activeSearchField === "matchmaker") {
+                          const playerKey = `name:${typedName}`;
+                          const nextPlayers = [...sessionPlayers, { key: playerKey, name: typedName }];
+                          setSessionPlayers(nextPlayers);
+                          void loadMatchmakerPlayCounts(nextPlayers);
+                        }
+                        setActiveSearchField(null);
+                        setSearchQuery("");
+                      }}
+                      className="w-full mb-2 flex items-center justify-between p-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer"
+                    >
+                      <span>✍️ Dùng tên nhập trực tiếp: "{searchQuery}"</span>
+                      <span className="text-red-800">Chọn →</span>
+                    </button>
+                  )}
+
                   {isSearching ? (
-                    <p className="text-xs text-slate-400 text-center py-4">Đang tìm kiếm...</p>
+                    <p className="text-xs text-slate-400 text-center py-4">Đang tải...</p>
                   ) : searchResults.length > 0 ? (
                     searchResults.map((user) => (
                       <button
@@ -946,45 +1061,11 @@ export default function ScorekeeperPage() {
                       </button>
                     ))
                   ) : searchQuery ? (
-                    <div className="text-center py-6">
+                    <div className="text-center py-4">
                       <p className="text-xs text-slate-400">Không tìm thấy thành viên phù hợp</p>
-                      <button
-                        onClick={() => {
-                          const typedName = searchQuery.trim();
-                          const isDuplicate = 
-                            (activeSearchField === "matchmaker" && sessionPlayers.some((p) => p.name.toLowerCase() === typedName.toLowerCase())) ||
-                            (activeSearchField !== "matchmaker" && (
-                              (activeSearchField !== "taP1" && taP1.name.toLowerCase() === typedName.toLowerCase()) ||
-                              (activeSearchField !== "taP2" && taP2.name.toLowerCase() === typedName.toLowerCase()) ||
-                              (activeSearchField !== "tbP1" && tbP1.name.toLowerCase() === typedName.toLowerCase()) ||
-                              (activeSearchField !== "tbP2" && tbP2.name.toLowerCase() === typedName.toLowerCase())
-                            ));
-                            
-                          if (isDuplicate) {
-                            alert("Người chơi này đã được chọn hoặc đã có trong danh sách sân!");
-                            return;
-                          }
-
-                          if (activeSearchField === "taP1") setTaP1({ id: "", name: typedName });
-                          if (activeSearchField === "taP2") setTaP2({ id: "", name: typedName });
-                          if (activeSearchField === "tbP1") setTbP1({ id: "", name: typedName });
-                          if (activeSearchField === "tbP2") setTbP2({ id: "", name: typedName });
-                          if (activeSearchField === "matchmaker") {
-                            const playerKey = `name:${typedName}`;
-                            const nextPlayers = [...sessionPlayers, { key: playerKey, name: typedName }];
-                            setSessionPlayers(nextPlayers);
-                            void loadMatchmakerPlayCounts(nextPlayers);
-                          }
-                          setActiveSearchField(null);
-                          setSearchQuery("");
-                        }}
-                        className="mt-2 text-xs text-red-800 font-bold hover:underline cursor-pointer"
-                      >
-                        Sử dụng tên "{searchQuery}" này
-                      </button>
                     </div>
                   ) : (
-                    <p className="text-xs text-slate-400 text-center py-4">Gõ để hiển thị kết quả gợi ý...</p>
+                    <p className="text-xs text-slate-400 text-center py-4">Chưa có người chơi nào trong danh sách. Hãy nhập tên ở trên.</p>
                   )}
                 </div>
               </>
@@ -1113,7 +1194,7 @@ export default function ScorekeeperPage() {
               <button
                 type="button"
                 disabled={!taP1.name || !tbP1.name || (matchType === "doubles" && (!taP2.name || !tbP2.name))}
-                onClick={() => { setIsLiveActive(true); resetLiveMatch(); speakText("Trận đấu bắt đầu."); }}
+                onClick={() => { setIsLiveActive(true); resetLiveMatch(true); speakText("Trận đấu bắt đầu."); }}
                 className="bg-red-800 hover:bg-red-950 text-white font-bold px-6 py-3 rounded-xl shadow-xs hover:scale-102 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 🎮 Bắt đầu làm Trọng tài
@@ -1430,69 +1511,7 @@ export default function ScorekeeperPage() {
       {/* Live Scoreboard Active Layout */}
       {isLiveActive && activeTab === "live" && (
         <div className="space-y-6">
-          {/* Header Action controls */}
-          <div className="flex flex-wrap items-center justify-between gap-4 p-4 bg-slate-900 text-white rounded-2xl shadow-md">
-            <div className="flex items-center gap-3">
-              <span className="px-3 py-1 bg-red-800 text-xs font-black rounded-[6px] tracking-wide uppercase">Live</span>
-              <h2 className="font-bold text-sm">
-                {matchType === "singles"
-                  ? `${taP1.name} vs ${tbP1.name}`
-                  : `${taP1.name} & ${taP2.name} vs ${tbP1.name} & ${tbP2.name}`}
-              </h2>
-            </div>
-
-            <div className="flex items-center gap-3">
-              {/* Voice toggle */}
-              <button
-                onClick={() => setVoiceEnabled(!voiceEnabled)}
-                className={`p-2 rounded-xl border transition cursor-pointer ${voiceEnabled ? "border-red-500 bg-red-500/20 text-red-400" : "border-slate-700 bg-slate-800 text-slate-400"}`}
-                title={voiceEnabled ? "Tắt âm thanh đọc điểm" : "Bật trợ lý đọc điểm"}
-              >
-                {voiceEnabled ? (
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
-                  </svg>
-                ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
-                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><line x1="23" x2="17" y1="9" y2="15" /><line x1="17" x2="23" y1="9" y2="15" />
-                  </svg>
-                )}
-              </button>
-
-              <button
-                onClick={() => setSwapped(!swapped)}
-                className="bg-slate-800 border border-slate-700 hover:bg-slate-700 px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
-              >
-                🔄 Đảo Bên Sân
-              </button>
-
-              <button
-                onClick={undoPoint}
-                disabled={scoreHistory.length === 0}
-                className="bg-slate-800 border border-slate-700 hover:bg-slate-700 px-3.5 py-1.5 rounded-xl text-xs font-bold transition disabled:opacity-30 cursor-pointer"
-              >
-                ↩ Hoàn tác
-              </button>
-
-              <button
-                onClick={redoPoint}
-                disabled={redoHistory.length === 0}
-                className="bg-slate-800 border border-slate-700 hover:bg-slate-700 px-3.5 py-1.5 rounded-xl text-xs font-bold transition disabled:opacity-30 cursor-pointer"
-              >
-                ↪ Làm lại
-              </button>
-
-              <button
-                onClick={() => { if (confirm("Bạn muốn hủy trận đấu trực tiếp này?")) { setIsLiveActive(false); resetLiveMatch(); } }}
-                className="bg-rose-950 border border-rose-900 text-rose-300 hover:bg-rose-900 px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer"
-              >
-                Hủy trận
-              </button>
-            </div>
-          </div>
-
-          {/* Set scores display */}
-          {setScores.length > 0 && (
+          {setScores.length > 0 && !isFullscreen && (
             <div className="flex gap-2 justify-center py-2 bg-slate-50 border border-slate-100 rounded-xl">
               <span className="text-xs text-slate-400 font-bold uppercase tracking-wider self-center mr-2">Kết quả các hiệp:</span>
               {setScores.map((set, idx) => (
@@ -1503,201 +1522,514 @@ export default function ScorekeeperPage() {
             </div>
           )}
 
-          {/* Sân đấu chính - Chia 2 bên */}
-          <div className="grid gap-4 md:grid-cols-2 relative rounded-3xl overflow-hidden shadow-2xl border-4 border-slate-900 min-h-[420px]">
-            {/* Netline dividing the court */}
-            <div className="hidden md:block absolute top-0 bottom-0 left-1/2 w-1 bg-yellow-400/90 z-20 shadow-lg pointer-events-none" />
-
-            {/* Left Court Side */}
-            <div
-              onClick={() => addPoint(swapped ? "B" : "A")}
-              className={`flex flex-col justify-between p-6 transition duration-200 cursor-pointer select-none relative ${
-                swapped 
-                  ? "bg-gradient-to-br from-indigo-900 to-indigo-950 hover:from-indigo-800 hover:to-indigo-900 text-indigo-100" 
-                  : "bg-gradient-to-br from-emerald-900 to-emerald-950 hover:from-emerald-800 hover:to-emerald-900 text-emerald-100"
-              }`}
-            >
-              {/* Corner Tag */}
-              <div className="flex justify-between items-start">
-                <span className="px-2.5 py-1 bg-white/10 rounded-lg text-xs font-bold uppercase tracking-wider">
-                  {swapped ? "Đội B (Phải)" : "Đội A (Trái)"}
-                </span>
-                
-                {/* Sets won display */}
-                <div className="flex gap-1.5">
-                  {[1, 2].map((i) => (
-                    <span 
-                      key={i} 
-                      className={`w-3.5 h-3.5 rounded-full border ${
-                        (swapped ? setsWonB : setsWonA) >= i 
-                          ? "bg-yellow-400 border-yellow-300 shadow-xs" 
-                          : "bg-white/10 border-white/20"
-                      }`} 
-                    />
-                  ))}
+          {/* Fullscreen Scoreboard Wrapper */}
+          <div
+            id="live-scoreboard-fullscreen-container"
+            className={`flex flex-col ${
+              isFullscreen
+                ? "fixed inset-0 z-[9999] w-screen h-screen bg-slate-950 p-6 justify-between overflow-y-auto"
+                : "space-y-6"
+            }`}
+          >
+            {/* Header Action controls */}
+            {!isDualView && (
+              <div className="flex flex-wrap items-center justify-between gap-4 p-4 bg-slate-900 text-white rounded-2xl shadow-md">
+                <div className="flex items-center gap-3">
+                  <span className="px-3 py-1 bg-red-800 text-xs font-black rounded-[6px] tracking-wide uppercase">Live</span>
+                  <h2 className="font-bold text-sm">
+                    {matchType === "singles"
+                      ? `${taP1.name} vs ${tbP1.name}`
+                      : `${taP1.name} & ${taP2.name} vs ${tbP1.name} & ${tbP2.name}`}
+                  </h2>
                 </div>
-              </div>
 
-              {/* Huge Counter */}
-              <div className="text-center my-6 flex flex-col justify-center items-center">
-                <span className="text-[120px] font-black tracking-tight leading-none drop-shadow-md">
-                  {swapped ? currentB : currentA}
-                </span>
-                <span className="text-xs uppercase font-bold tracking-widest text-white/40 mt-2">Nhấn bất kỳ để thêm điểm</span>
-              </div>
-
-              {/* Player Names Bottom */}
-              <div className="flex flex-col gap-1 border-t border-white/10 pt-4" onClick={(e) => e.stopPropagation()}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 shrink-0" />
-                    <p className="font-extrabold text-sm truncate">{swapped ? tbP1.name : taP1.name}</p>
-                  </div>
+                <div className="flex items-center gap-3">
+                  {/* Voice toggle */}
                   <button
-                    onClick={() => setActiveSearchField(swapped ? "tbP1" : "taP1")}
-                    className="text-[10px] bg-white/10 hover:bg-white/20 text-white px-2 py-0.5 rounded transition cursor-pointer shrink-0 ml-2"
+                    onClick={() => setVoiceEnabled(!voiceEnabled)}
+                    className={`p-2 rounded-xl border transition cursor-pointer ${voiceEnabled ? "border-red-500 bg-red-500/20 text-red-400" : "border-slate-700 bg-slate-800 text-slate-400"}`}
+                    title={voiceEnabled ? "Tắt âm thanh đọc điểm" : "Bật trợ lý đọc điểm"}
                   >
-                    Đổi
+                    {voiceEnabled ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
+                      </svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><line x1="23" x2="17" y1="9" y2="15" /><line x1="17" x2="23" y1="9" y2="15" />
+                      </svg>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => setSwapped(!swapped)}
+                    className="bg-slate-800 border border-slate-700 hover:bg-slate-700 px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                  >
+                    🔄 Đảo Bên Sân
+                  </button>
+
+                  <button
+                    onClick={toggleFullscreen}
+                    className="bg-slate-800 border border-slate-700 hover:bg-slate-700 px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer text-slate-200"
+                  >
+                    📺 Toàn màn hình
+                  </button>
+
+                  <button
+                    onClick={() => setIsDualView(!isDualView)}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      isDualView 
+                        ? "bg-amber-600 border border-amber-500 text-white hover:bg-amber-500" 
+                        : "bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-300"
+                    }`}
+                    title="Chế độ đối diện gập 180°"
+                  >
+                    🔄 Đối diện (180°)
+                  </button>
+
+                  <button
+                    onClick={undoPoint}
+                    disabled={scoreHistory.length === 0}
+                    className="bg-slate-800 border border-slate-700 hover:bg-slate-700 px-3.5 py-1.5 rounded-xl text-xs font-bold transition disabled:opacity-30 cursor-pointer"
+                  >
+                    ↩ Hoàn tác
+                  </button>
+
+                  <button
+                    onClick={redoPoint}
+                    disabled={redoHistory.length === 0}
+                    className="bg-slate-800 border border-slate-700 hover:bg-slate-700 px-3.5 py-1.5 rounded-xl text-xs font-bold transition disabled:opacity-30 cursor-pointer"
+                  >
+                    ↪ Làm lại
+                  </button>
+
+                  <button
+                    onClick={() => { if (confirm("Bạn muốn hủy trận đấu trực tiếp này?")) { setIsLiveActive(false); resetLiveMatch(); } }}
+                    className="bg-rose-950 border border-rose-900 text-rose-300 hover:bg-rose-900 px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer"
+                  >
+                    Hủy trận
                   </button>
                 </div>
-                {matchType === "doubles" && (
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-white/30 shrink-0" />
-                      <p className="font-semibold text-xs truncate text-white/70">{swapped ? tbP2.name : taP2.name}</p>
-                    </div>
-                    <button
-                      onClick={() => setActiveSearchField(swapped ? "tbP2" : "taP2")}
-                      className="text-[10px] bg-white/10 hover:bg-white/20 text-white px-2 py-0.5 rounded transition cursor-pointer shrink-0 ml-2"
-                    >
-                      Đổi
-                    </button>
-                  </div>
-                )}
               </div>
-
-              {/* Adjust Panel Overlay */}
-              <div className="absolute top-4 right-4 flex gap-1 z-30" onClick={(e) => e.stopPropagation()}>
-                <button
-                  onClick={() => adjustScore(swapped ? "B" : "A", 1)}
-                  className="bg-white/10 hover:bg-white/20 text-white w-7 h-7 rounded-lg text-xs font-bold transition flex items-center justify-center cursor-pointer"
-                  title="Cộng 1 điểm"
+            )}
+            {isDualView ? (
+              /* DUAL-VIEW (180° SPLIT) SCOREBOARD */
+              <div className="flex-1 flex flex-col justify-between gap-4 min-h-[500px]">
+                {/* 1. PLAYERS DISPLAY (ROTATED 180 DEG) - TAKES UP 100% AVAILABLE HEIGHT */}
+                <div 
+                  className="rotate-180 flex-1 grid grid-cols-2 gap-4 rounded-2xl overflow-hidden border-2 border-slate-800 bg-slate-950 p-4"
                 >
-                  +
-                </button>
-                <button
-                  onClick={() => adjustScore(swapped ? "B" : "A", -1)}
-                  className="bg-white/10 hover:bg-white/20 text-white w-7 h-7 rounded-lg text-xs font-bold transition flex items-center justify-center cursor-pointer"
-                  title="Trừ 1 điểm"
-                >
-                  -
-                </button>
-              </div>
-            </div>
-
-            {/* Right Court Side */}
-            <div
-              onClick={() => addPoint(swapped ? "A" : "B")}
-              className={`flex flex-col justify-between p-6 transition duration-200 cursor-pointer select-none relative ${
-                swapped 
-                  ? "bg-gradient-to-br from-emerald-900 to-emerald-950 hover:from-emerald-800 hover:to-emerald-900 text-emerald-100" 
-                  : "bg-gradient-to-br from-indigo-900 to-indigo-950 hover:from-indigo-800 hover:to-indigo-900 text-indigo-100"
-              }`}
-            >
-              {/* Corner Tag */}
-              <div className="flex justify-between items-start">
-                <span className="px-2.5 py-1 bg-white/10 rounded-lg text-xs font-bold uppercase tracking-wider">
-                  {swapped ? "Đội A (Trái)" : "Đội B (Phải)"}
-                </span>
-                
-                {/* Sets won display */}
-                <div className="flex gap-1.5">
-                  {[1, 2].map((i) => (
-                    <span 
-                      key={i} 
-                      className={`w-3.5 h-3.5 rounded-full border ${
-                        (swapped ? setsWonA : setsWonB) >= i 
-                          ? "bg-yellow-400 border-yellow-300 shadow-xs" 
-                          : "bg-white/10 border-white/20"
-                      }`} 
-                    />
-                  ))}
-                </div>
-              </div>
-
-              {/* Huge Counter */}
-              <div className="text-center my-6 flex flex-col justify-center items-center">
-                <span className="text-[120px] font-black tracking-tight leading-none drop-shadow-md">
-                  {swapped ? currentA : currentB}
-                </span>
-                <span className="text-xs uppercase font-bold tracking-widest text-white/40 mt-2">Nhấn bất kỳ để thêm điểm</span>
-              </div>
-
-              {/* Player Names Bottom */}
-              <div className="flex flex-col gap-1 border-t border-white/10 pt-4" onClick={(e) => e.stopPropagation()}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 shrink-0" />
-                    <p className="font-extrabold text-sm truncate">{swapped ? taP1.name : tbP1.name}</p>
-                  </div>
-                  <button
-                    onClick={() => setActiveSearchField(swapped ? "taP1" : "tbP1")}
-                    className="text-[10px] bg-white/10 hover:bg-white/20 text-white px-2 py-0.5 rounded transition cursor-pointer shrink-0 ml-2"
+                  {/* Left Column in Code (Rotates to RIGHT of screen, visually the LEFT side of laptop) */}
+                  <div 
+                    onClick={() => addPoint(swapped ? "B" : "A")}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      adjustScore(swapped ? "B" : "A", -1);
+                    }}
+                    className={`flex flex-col justify-center items-center rounded-xl p-6 transition cursor-pointer select-none ${swapped ? "bg-emerald-950/40 text-emerald-200 hover:bg-emerald-900/30" : "bg-indigo-950/40 text-indigo-200 hover:bg-indigo-900/30"}`}
                   >
-                    Đổi
-                  </button>
+                    <span className="text-sm uppercase font-black opacity-60 tracking-widest mb-4">
+                      {swapped ? "Đội A" : "Đội B"}
+                    </span>
+                    <span className="text-[200px] md:text-[320px] lg:text-[450px] font-black leading-none drop-shadow-2xl">
+                      {swapped ? currentA : currentB}
+                    </span>
+                    <span className="text-sm font-semibold truncate max-w-full opacity-80 mt-4">
+                      {swapped ? taP1.name : tbP1.name} {matchType === "doubles" && `& ${swapped ? taP2.name : tbP2.name}`}
+                    </span>
+                  </div>
+
+                  {/* Right Column in Code (Rotates to LEFT of screen, visually the RIGHT side of laptop) */}
+                  <div 
+                    onClick={() => addPoint(swapped ? "A" : "B")}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      adjustScore(swapped ? "A" : "B", -1);
+                    }}
+                    className={`flex flex-col justify-center items-center rounded-xl p-6 transition cursor-pointer select-none ${swapped ? "bg-indigo-950/40 text-indigo-200 hover:bg-indigo-900/30" : "bg-emerald-950/40 text-emerald-200 hover:bg-emerald-900/30"}`}
+                  >
+                    <span className="text-sm uppercase font-black opacity-60 tracking-widest mb-4">
+                      {swapped ? "Đội B" : "Đội A"}
+                    </span>
+                    <span className="text-[200px] md:text-[320px] lg:text-[450px] font-black leading-none drop-shadow-2xl">
+                      {swapped ? currentB : currentA}
+                    </span>
+                    <span className="text-sm font-semibold truncate max-w-full opacity-80 mt-4">
+                      {swapped ? tbP1.name : taP1.name} {matchType === "doubles" && `& ${swapped ? tbP2.name : taP2.name}`}
+                    </span>
+                  </div>
                 </div>
-                {matchType === "doubles" && (
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-white/30 shrink-0" />
-                      <p className="font-semibold text-xs truncate text-white/70">{swapped ? taP2.name : tbP2.name}</p>
+              </div>
+            ) : (
+              /* Sân đấu chính - Chia 2 bên */
+              <div className={`grid gap-4 md:grid-cols-2 relative rounded-3xl overflow-hidden shadow-2xl border-4 border-slate-900 ${isFullscreen ? "flex-1 my-2" : "min-h-[420px]"}`}>
+                {/* Netline dividing the court */}
+                <div className="hidden md:block absolute top-0 bottom-0 left-1/2 w-1 bg-yellow-400/90 z-20 shadow-lg pointer-events-none" />
+
+                {/* Left Court Side */}
+                <div
+                  onClick={() => addPoint(swapped ? "B" : "A")}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    adjustScore(swapped ? "B" : "A", -1);
+                  }}
+                  className={`flex flex-col justify-between p-6 transition duration-200 cursor-pointer select-none relative ${
+                    swapped 
+                      ? "bg-gradient-to-br from-indigo-900 to-indigo-950 hover:from-indigo-800 hover:to-indigo-900 text-indigo-100" 
+                      : "bg-gradient-to-br from-emerald-900 to-emerald-950 hover:from-emerald-800 hover:to-emerald-900 text-emerald-100"
+                  }`}
+                >
+                  {/* Corner Tag */}
+                  <div className="flex justify-between items-start">
+                    <span className="px-2.5 py-1 bg-white/10 rounded-lg text-xs font-bold uppercase tracking-wider">
+                      {swapped ? "Đội B (Phải)" : "Đội A (Trái)"}
+                    </span>
+                    
+                    {/* Sets won display */}
+                    <div className="flex gap-1.5">
+                      {[1, 2].map((i) => (
+                        <span 
+                          key={i} 
+                          className={`w-3.5 h-3.5 rounded-full border ${
+                            (swapped ? setsWonB : setsWonA) >= i 
+                              ? "bg-yellow-400 border-yellow-300 shadow-xs" 
+                              : "bg-white/10 border-white/20"
+                          }`} 
+                        />
+                      ))}
                     </div>
+                  </div>
+
+                  {/* Huge Counter */}
+                  <div className="text-center my-6 flex flex-col justify-center items-center">
+                    <span className="text-[120px] md:text-[180px] lg:text-[240px] font-black tracking-tight leading-none drop-shadow-md">
+                      {swapped ? currentB : currentA}
+                    </span>
+                    <span className="text-xs uppercase font-bold tracking-widest text-white/40 mt-2">Nhấn bất kỳ để thêm điểm</span>
+                  </div>
+
+                  {/* Player Names Bottom */}
+                  <div className="flex flex-col gap-1 border-t border-white/10 pt-4" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 shrink-0" />
+                        <p className="font-extrabold text-sm truncate">{swapped ? tbP1.name : taP1.name}</p>
+                      </div>
+                      <button
+                        onClick={() => setActiveSearchField(swapped ? "tbP1" : "taP1")}
+                        className="text-[10px] bg-white/10 hover:bg-white/20 text-white px-2 py-0.5 rounded transition cursor-pointer shrink-0 ml-2"
+                      >
+                        Đổi
+                      </button>
+                    </div>
+                    {matchType === "doubles" && (
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-white/30 shrink-0" />
+                          <p className="font-semibold text-xs truncate text-white/70">{swapped ? tbP2.name : taP2.name}</p>
+                        </div>
+                        <button
+                          onClick={() => setActiveSearchField(swapped ? "tbP2" : "taP2")}
+                          className="text-[10px] bg-white/10 hover:bg-white/20 text-white px-2 py-0.5 rounded transition cursor-pointer shrink-0 ml-2"
+                        >
+                          Đổi
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Adjust Panel Overlay */}
+                  <div className="absolute top-4 right-4 flex gap-1 z-30" onClick={(e) => e.stopPropagation()}>
                     <button
-                      onClick={() => setActiveSearchField(swapped ? "taP2" : "tbP2")}
-                      className="text-[10px] bg-white/10 hover:bg-white/20 text-white px-2 py-0.5 rounded transition cursor-pointer shrink-0 ml-2"
+                      onClick={() => adjustScore(swapped ? "B" : "A", 1)}
+                      className="bg-white/10 hover:bg-white/20 text-white w-7 h-7 rounded-lg text-xs font-bold transition flex items-center justify-center cursor-pointer"
+                      title="Cộng 1 điểm"
                     >
-                      Đổi
+                      +
+                    </button>
+                    <button
+                      onClick={() => adjustScore(swapped ? "B" : "A", -1)}
+                      className="bg-white/10 hover:bg-white/20 text-white w-7 h-7 rounded-lg text-xs font-bold transition flex items-center justify-center cursor-pointer"
+                      title="Trừ 1 điểm"
+                    >
+                      -
                     </button>
                   </div>
-                )}
-              </div>
+                </div>
 
-              {/* Adjust Panel Overlay */}
-              <div className="absolute top-4 right-4 flex gap-1 z-30" onClick={(e) => e.stopPropagation()}>
-                <button
-                  onClick={() => adjustScore(swapped ? "A" : "B", 1)}
-                  className="bg-white/10 hover:bg-white/20 text-white w-7 h-7 rounded-lg text-xs font-bold transition flex items-center justify-center cursor-pointer"
-                  title="Cộng 1 điểm"
+                {/* Right Court Side */}
+                <div
+                  onClick={() => addPoint(swapped ? "A" : "B")}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    adjustScore(swapped ? "A" : "B", -1);
+                  }}
+                  className={`flex flex-col justify-between p-6 transition duration-200 cursor-pointer select-none relative ${
+                    swapped 
+                      ? "bg-gradient-to-br from-emerald-900 to-emerald-950 hover:from-emerald-800 hover:to-emerald-900 text-emerald-100" 
+                      : "bg-gradient-to-br from-indigo-900 to-indigo-950 hover:from-indigo-800 hover:to-indigo-900 text-indigo-100"
+                  }`}
                 >
-                  +
-                </button>
-                <button
-                  onClick={() => adjustScore(swapped ? "A" : "B", -1)}
-                  className="bg-white/10 hover:bg-white/20 text-white w-7 h-7 rounded-lg text-xs font-bold transition flex items-center justify-center cursor-pointer"
-                  title="Trừ 1 điểm"
-                >
-                  -
-                </button>
+                  {/* Corner Tag */}
+                  <div className="flex justify-between items-start">
+                    <span className="px-2.5 py-1 bg-white/10 rounded-lg text-xs font-bold uppercase tracking-wider">
+                      {swapped ? "Đội A (Trái)" : "Đội B (Phải)"}
+                    </span>
+                    
+                    {/* Sets won display */}
+                    <div className="flex gap-1.5">
+                      {[1, 2].map((i) => (
+                        <span 
+                          key={i} 
+                          className={`w-3.5 h-3.5 rounded-full border ${
+                            (swapped ? setsWonA : setsWonB) >= i 
+                              ? "bg-yellow-400 border-yellow-300 shadow-xs" 
+                              : "bg-white/10 border-white/20"
+                          }`} 
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Huge Counter */}
+                  <div className="text-center my-6 flex flex-col justify-center items-center">
+                    <span className="text-[120px] md:text-[180px] lg:text-[240px] font-black tracking-tight leading-none drop-shadow-md">
+                      {swapped ? currentA : currentB}
+                    </span>
+                    <span className="text-xs uppercase font-bold tracking-widest text-white/40 mt-2">Nhấn bất kỳ để thêm điểm</span>
+                  </div>
+
+                  {/* Player Names Bottom */}
+                  <div className="flex flex-col gap-1 border-t border-white/10 pt-4" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 shrink-0" />
+                        <p className="font-extrabold text-sm truncate">{swapped ? taP1.name : tbP1.name}</p>
+                      </div>
+                      <button
+                        onClick={() => setActiveSearchField(swapped ? "taP1" : "tbP1")}
+                        className="text-[10px] bg-white/10 hover:bg-white/20 text-white px-2 py-0.5 rounded transition cursor-pointer shrink-0 ml-2"
+                      >
+                        Đổi
+                      </button>
+                    </div>
+                    {matchType === "doubles" && (
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-white/30 shrink-0" />
+                          <p className="font-semibold text-xs truncate text-white/70">{swapped ? taP2.name : tbP2.name}</p>
+                        </div>
+                        <button
+                          onClick={() => setActiveSearchField(swapped ? "taP2" : "tbP2")}
+                          className="text-[10px] bg-white/10 hover:bg-white/20 text-white px-2 py-0.5 rounded transition cursor-pointer shrink-0 ml-2"
+                        >
+                          Đổi
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Adjust Panel Overlay */}
+                  <div className="absolute top-4 right-4 flex gap-1 z-30" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={() => adjustScore(swapped ? "A" : "B", 1)}
+                      className="bg-white/10 hover:bg-white/20 text-white w-7 h-7 rounded-lg text-xs font-bold transition flex items-center justify-center cursor-pointer"
+                      title="Cộng 1 điểm"
+                    >
+                      +
+                    </button>
+                    <button
+                      onClick={() => adjustScore(swapped ? "A" : "B", -1)}
+                      className="bg-white/10 hover:bg-white/20 text-white w-7 h-7 rounded-lg text-xs font-bold transition flex items-center justify-center cursor-pointer"
+                      title="Trừ 1 điểm"
+                    >
+                      -
+                    </button>
+                  </div>
+                </div>
               </div>
+            )}
+
+            {/* Action buttons save/reset */}
+            <div className={`flex flex-wrap justify-between items-center gap-4 pt-4 ${isFullscreen ? "border-t border-slate-800" : "border-t border-slate-100"}`}>
+              {isDualView ? (
+                <>
+                  {/* Div 1 (Left): All function buttons merged (including Trận mới & Lưu trận đấu) */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Voice Assistant */}
+                    <button
+                      onClick={() => setVoiceEnabled(!voiceEnabled)}
+                      className={`p-2 rounded-xl border transition cursor-pointer ${voiceEnabled ? "border-red-500 bg-red-500/20 text-red-400" : "border-slate-700 bg-slate-800 text-slate-400"}`}
+                      title={voiceEnabled ? "Tắt âm thanh đọc điểm" : "Bật trợ lý đọc điểm"}
+                    >
+                      {voiceEnabled ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" />
+                        </svg>
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="w-4 h-4">
+                          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><line x1="23" x2="17" y1="9" y2="15" /><line x1="17" x2="23" y1="9" y2="15" />
+                        </svg>
+                      )}
+                    </button>
+
+                    {/* Đảo bên sân */}
+                    <button
+                      onClick={() => setSwapped(!swapped)}
+                      className="bg-slate-800 border border-slate-700 hover:bg-slate-700 px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer text-slate-200"
+                    >
+                      🔄 Đảo Bên Sân
+                    </button>
+
+                    {/* Toàn màn hình */}
+                    <button
+                      onClick={toggleFullscreen}
+                      className="bg-slate-800 border border-slate-700 hover:bg-slate-700 px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer text-slate-200"
+                    >
+                      📺 Toàn màn hình
+                    </button>
+
+                    {/* Đối diện 180 */}
+                    <button
+                      onClick={() => setIsDualView(!isDualView)}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                        isDualView 
+                          ? "bg-amber-600 border border-amber-500 text-white hover:bg-amber-500" 
+                          : "bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-300"
+                      }`}
+                    >
+                      🔄 Đối diện (180°)
+                    </button>
+
+                    {/* Hoàn tác */}
+                    <button
+                      onClick={undoPoint}
+                      disabled={scoreHistory.length === 0}
+                      className="bg-slate-800 border border-slate-700 hover:bg-slate-700 px-3.5 py-1.5 rounded-xl text-xs font-bold transition disabled:opacity-30 cursor-pointer text-slate-200"
+                    >
+                      ↩ Hoàn tác
+                    </button>
+
+                    {/* Làm lại */}
+                    <button
+                      onClick={redoPoint}
+                      disabled={redoHistory.length === 0}
+                      className="bg-slate-800 border border-slate-700 hover:bg-slate-700 px-3.5 py-1.5 rounded-xl text-xs font-bold transition disabled:opacity-30 cursor-pointer text-slate-200"
+                    >
+                      ↪ Làm lại
+                    </button>
+
+                    {/* Hủy trận */}
+                    <button
+                      onClick={() => { if (confirm("Bạn muốn hủy trận đấu trực tiếp này?")) { setIsLiveActive(false); resetLiveMatch(); } }}
+                      className="bg-rose-950 border border-rose-900 text-rose-300 hover:bg-rose-900 px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer"
+                    >
+                      Hủy trận
+                    </button>
+
+                    {/* Trận mới */}
+                    <button
+                      onClick={() => { if (confirm("Bạn có chắc chắn muốn làm mới điểm số hiệp này?")) resetLiveMatch(true); }}
+                      className="px-4 py-2.5 border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition cursor-pointer"
+                    >
+                      🔄 Trận mới
+                    </button>
+
+                    {/* Xác nhận & Lưu */}
+                    <button
+                      onClick={handleSaveLiveMatch}
+                      disabled={isSavingMatch || (setScores.length === 0 && currentA === 0 && currentB === 0)}
+                      className="bg-red-800 hover:bg-red-950 text-white font-bold px-6 py-2.5 rounded-xl shadow-xs hover:scale-102 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isSavingMatch ? "Đang lưu..." : "💾 Xác nhận & Lưu trận đấu"}
+                    </button>
+                  </div>
+
+                  {/* Div 2 (Right): Compact scoreboard for referee - Styled with larger elements */}
+                  <div className="flex items-center gap-4 bg-slate-800 border border-slate-700 px-5 py-2.5 rounded-xl shadow-xs text-slate-200">
+                    {/* Left Team Small Controller */}
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-bold text-slate-400 truncate max-w-[100px]">
+                        {swapped ? "Đội B" : "Đội A"}
+                      </span>
+                      <button
+                        onClick={() => adjustScore(swapped ? "B" : "A", -1)}
+                        className="w-8 h-8 rounded-lg bg-slate-700 hover:bg-slate-600 transition flex items-center justify-center cursor-pointer text-sm font-bold"
+                      >
+                        -
+                      </button>
+                      <span className="text-2xl font-black w-8 text-center text-emerald-400">
+                        {swapped ? currentB : currentA}
+                      </span>
+                      <button
+                        onClick={() => addPoint(swapped ? "B" : "A")}
+                        className="w-8 h-8 rounded-lg bg-emerald-700 hover:bg-emerald-600 transition flex items-center justify-center cursor-pointer text-sm font-bold"
+                      >
+                        +
+                      </button>
+                    </div>
+
+                    <span className="text-slate-600 font-bold text-sm">|</span>
+
+                    {/* Right Team Small Controller */}
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => addPoint(swapped ? "A" : "B")}
+                        className="w-8 h-8 rounded-lg bg-indigo-700 hover:bg-indigo-600 transition flex items-center justify-center cursor-pointer text-sm font-bold"
+                      >
+                        +
+                      </button>
+                      <span className="text-2xl font-black w-8 text-center text-indigo-400">
+                        {swapped ? currentA : currentB}
+                      </span>
+                      <button
+                        onClick={() => adjustScore(swapped ? "A" : "B", -1)}
+                        className="w-8 h-8 rounded-lg bg-slate-700 hover:bg-slate-600 transition flex items-center justify-center cursor-pointer text-sm font-bold"
+                      >
+                        -
+                      </button>
+                      <span className="text-xs font-bold text-slate-400 truncate max-w-[100px]">
+                        {swapped ? "Đội A" : "Đội B"}
+                      </span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                /* Standard layout (Div 1: Exit Fullscreen on Left, Div 2: New/Save on Right) */
+                <>
+                  <div>
+                    {isFullscreen && (
+                      <button
+                        onClick={toggleFullscreen}
+                        className="px-4 py-2.5 border border-slate-700 bg-slate-800 text-slate-200 rounded-xl text-xs font-bold hover:bg-slate-700 transition cursor-pointer"
+                      >
+                        📺 Thoát Fullscreen
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => { if (confirm("Bạn có chắc chắn muốn làm mới điểm số hiệp này?")) resetLiveMatch(true); }}
+                      className={`px-4 py-2.5 border rounded-xl text-xs font-bold transition cursor-pointer ${
+                        isFullscreen 
+                          ? "border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700" 
+                          : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      🔄 Trận mới
+                    </button>
+                    <button
+                      onClick={handleSaveLiveMatch}
+                      disabled={isSavingMatch || (setScores.length === 0 && currentA === 0 && currentB === 0)}
+                      className="bg-red-800 hover:bg-red-950 text-white font-bold px-6 py-2.5 rounded-xl shadow-xs hover:scale-102 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isSavingMatch ? "Đang lưu..." : "💾 Xác nhận & Lưu trận đấu"}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
-          </div>
-
-          {/* Action buttons save/reset */}
-          <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-            <button
-              onClick={() => { if (confirm("Bạn có chắc chắn muốn làm mới điểm số hiệp này?")) resetLiveMatch(); }}
-              className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition cursor-pointer"
-            >
-              🔄 Trận mới
-            </button>
-            <button
-              onClick={handleSaveLiveMatch}
-              disabled={isSavingMatch || (setScores.length === 0 && currentA === 0 && currentB === 0)}
-              className="bg-red-800 hover:bg-red-950 text-white font-bold px-6 py-2.5 rounded-xl shadow-xs hover:scale-102 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSavingMatch ? "Đang lưu..." : "💾 Xác nhận & Lưu trận đấu"}
-            </button>
           </div>
         </div>
       )}

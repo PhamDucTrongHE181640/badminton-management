@@ -68,7 +68,7 @@ def post_referee_match(
 @router.get("/players")
 def get_autocomplete(
     user: Annotated[UserPrincipal, Depends(require_player)],
-    q: str = Query(default="", min_length=1),
+    q: str = Query(default=""),
 ) -> list[dict[str, Any]]:
     return get_player_autocomplete(query=q)
 

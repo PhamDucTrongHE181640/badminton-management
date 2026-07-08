@@ -135,20 +135,33 @@ def save_referee_match(*, actor_user_id: str, data: dict[str, Any]) -> dict[str,
     }
 
 def get_player_autocomplete(*, query: str) -> list[dict[str, Any]]:
-    q = f"%{query.strip()}%"
     with get_engine().begin() as connection:
-        rows = connection.execute(
-            text(
-                """
-                SELECT id, full_name, avatar_url 
-                FROM public.users 
-                WHERE is_active = true AND (full_name ILIKE :q OR email ILIKE :q) 
-                ORDER BY full_name ASC 
-                LIMIT 15
-                """
-            ),
-            {"q": q}
-        ).all()
+        if not query.strip():
+            rows = connection.execute(
+                text(
+                    """
+                    SELECT id, full_name, avatar_url 
+                    FROM public.users 
+                    WHERE is_active = true 
+                    ORDER BY full_name ASC 
+                    LIMIT 20
+                    """
+                )
+            ).all()
+        else:
+            q = f"%{query.strip()}%"
+            rows = connection.execute(
+                text(
+                    """
+                    SELECT id, full_name, avatar_url 
+                    FROM public.users 
+                    WHERE is_active = true AND (full_name ILIKE :q OR email ILIKE :q) 
+                    ORDER BY full_name ASC 
+                    LIMIT 15
+                    """
+                ),
+                {"q": q}
+            ).all()
     return [{"id": str(r.id), "full_name": str(r.full_name), "avatar_url": str(r.avatar_url) if r.avatar_url else None} for r in rows]
 
 def _parse_match_row(r: Any) -> dict[str, Any]:
