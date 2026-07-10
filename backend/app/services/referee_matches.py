@@ -128,6 +128,215 @@ def save_referee_match(*, actor_user_id: str, data: dict[str, Any]) -> dict[str,
             }
         ).first()
 
+        # --- ELO CALCULATION & UPDATES FOR REGISTERED PLAYERS ---
+        team_a_players = []
+        if resolved_ids.get("team_a_player1_id"):
+            team_a_players.append(resolved_ids.get("team_a_player1_id"))
+        if match_type == "doubles" and resolved_ids.get("team_a_player2_id"):
+            team_a_players.append(resolved_ids.get("team_a_player2_id"))
+
+        team_b_players = []
+        if resolved_ids.get("team_b_player1_id"):
+            team_b_players.append(resolved_ids.get("team_b_player1_id"))
+        if match_type == "doubles" and resolved_ids.get("team_b_player2_id"):
+            team_b_players.append(resolved_ids.get("team_b_player2_id"))
+
+        player_ids = [pid for pid in (team_a_players + team_b_players) if pid]
+
+        existing_ratings = {}
+        if player_ids:
+            rating_rows = connection.execute(
+                text(
+                    """
+                    SELECT player_user_id, elo_value, matches_played, wins, losses, draws
+                    FROM public.elo_ratings
+                    WHERE player_user_id = ANY(CAST(:player_ids AS uuid[]))
+                    """
+                ),
+                {"player_ids": player_ids}
+            ).all()
+            for r in rating_rows:
+                existing_ratings[str(r.player_user_id)] = {
+                    "elo": int(r.elo_value),
+                    "matches_played": int(r.matches_played),
+                    "wins": int(r.wins),
+                    "losses": int(r.losses),
+                    "draws": int(r.draws),
+                }
+
+        BASELINE_ELO = 1000
+
+        team_a_elos = []
+        ta1_id = resolved_ids.get("team_a_player1_id")
+        team_a_elos.append(existing_ratings.get(ta1_id, {}).get("elo", BASELINE_ELO) if ta1_id else BASELINE_ELO)
+        if match_type == "doubles":
+            ta2_id = resolved_ids.get("team_a_player2_id")
+            team_a_elos.append(existing_ratings.get(ta2_id, {}).get("elo", BASELINE_ELO) if ta2_id else BASELINE_ELO)
+
+        team_b_elos = []
+        tb1_id = resolved_ids.get("team_b_player1_id")
+        team_b_elos.append(existing_ratings.get(tb1_id, {}).get("elo", BASELINE_ELO) if tb1_id else BASELINE_ELO)
+        if match_type == "doubles":
+            tb2_id = resolved_ids.get("team_b_player2_id")
+            team_b_elos.append(existing_ratings.get(tb2_id, {}).get("elo", BASELINE_ELO) if tb2_id else BASELINE_ELO)
+
+        team_a_avg = sum(team_a_elos) / len(team_a_elos)
+        team_b_avg = sum(team_b_elos) / len(team_b_elos)
+
+        expected_a = 1.0 / (1.0 + (10.0 ** ((team_b_avg - team_a_avg) / 400.0)))
+        expected_b = 1.0 - expected_a
+
+        actual_a = 1.0 if winner_team == "A" else 0.0
+        actual_b = 1.0 - actual_a
+
+        K = 32
+        delta_a = int(round(K * (actual_a - expected_a)))
+        delta_b = int(round(K * (actual_b - expected_b)))
+
+        # Update Team A
+        for pid in team_a_players:
+            if not pid:
+                continue
+            old_elo = existing_ratings.get(pid, {}).get("elo", BASELINE_ELO)
+            matches_played = existing_ratings.get(pid, {}).get("matches_played", 0)
+            wins = existing_ratings.get(pid, {}).get("wins", 0)
+            losses = existing_ratings.get(pid, {}).get("losses", 0)
+            draws = existing_ratings.get(pid, {}).get("draws", 0)
+
+            new_elo = max(100, min(5000, old_elo + delta_a))
+            new_matches = matches_played + 1
+            new_wins = wins + (1 if winner_team == "A" else 0)
+            new_losses = losses + (1 if winner_team == "B" else 0)
+
+            new_tier = "Beginner"
+            if new_elo >= 1550:
+                new_tier = "Advanced"
+            elif new_elo >= 1200:
+                new_tier = "Intermediate"
+
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO public.elo_ratings (
+                      player_user_id, elo_value, visible_skill_tier, matches_played, wins, losses, draws
+                    )
+                    VALUES (
+                      :player_user_id, :elo_value, CAST(:visible_skill_tier AS public.skill_tier), :matches_played, :wins, :losses, :draws
+                    )
+                    ON CONFLICT (player_user_id)
+                    DO UPDATE SET
+                      elo_value = EXCLUDED.elo_value,
+                      visible_skill_tier = EXCLUDED.visible_skill_tier,
+                      matches_played = EXCLUDED.matches_played,
+                      wins = EXCLUDED.wins,
+                      losses = EXCLUDED.losses,
+                      updated_at = now()
+                    """
+                ),
+                {
+                    "player_user_id": pid,
+                    "elo_value": new_elo,
+                    "visible_skill_tier": new_tier,
+                    "matches_played": new_matches,
+                    "wins": new_wins,
+                    "losses": new_losses,
+                    "draws": draws,
+                }
+            )
+
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO public.elo_rating_history (
+                      player_user_id, old_elo, new_elo, delta, reason, algorithm_version
+                    )
+                    VALUES (
+                      :player_user_id, :old_elo, :new_elo, :delta, :reason, :algorithm_version
+                    )
+                    """
+                ),
+                {
+                    "player_user_id": pid,
+                    "old_elo": old_elo,
+                    "new_elo": new_elo,
+                    "delta": new_elo - old_elo,
+                    "reason": f"referee_match_finalize:{str(result.id)}:{team_a_score}-{team_b_score}",
+                    "algorithm_version": "referee_scorekeeper_v1",
+                }
+            )
+
+        # Update Team B
+        for pid in team_b_players:
+            if not pid:
+                continue
+            old_elo = existing_ratings.get(pid, {}).get("elo", BASELINE_ELO)
+            matches_played = existing_ratings.get(pid, {}).get("matches_played", 0)
+            wins = existing_ratings.get(pid, {}).get("wins", 0)
+            losses = existing_ratings.get(pid, {}).get("losses", 0)
+            draws = existing_ratings.get(pid, {}).get("draws", 0)
+
+            new_elo = max(100, min(5000, old_elo + delta_b))
+            new_matches = matches_played + 1
+            new_wins = wins + (1 if winner_team == "B" else 0)
+            new_losses = losses + (1 if winner_team == "A" else 0)
+
+            new_tier = "Beginner"
+            if new_elo >= 1550:
+                new_tier = "Advanced"
+            elif new_elo >= 1200:
+                new_tier = "Intermediate"
+
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO public.elo_ratings (
+                      player_user_id, elo_value, visible_skill_tier, matches_played, wins, losses, draws
+                    )
+                    VALUES (
+                      :player_user_id, :elo_value, CAST(:visible_skill_tier AS public.skill_tier), :matches_played, :wins, :losses, :draws
+                    )
+                    ON CONFLICT (player_user_id)
+                    DO UPDATE SET
+                      elo_value = EXCLUDED.elo_value,
+                      visible_skill_tier = EXCLUDED.visible_skill_tier,
+                      matches_played = EXCLUDED.matches_played,
+                      wins = EXCLUDED.wins,
+                      losses = EXCLUDED.losses,
+                      updated_at = now()
+                    """
+                ),
+                {
+                    "player_user_id": pid,
+                    "elo_value": new_elo,
+                    "visible_skill_tier": new_tier,
+                    "matches_played": new_matches,
+                    "wins": new_wins,
+                    "losses": new_losses,
+                    "draws": draws,
+                }
+            )
+
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO public.elo_rating_history (
+                      player_user_id, old_elo, new_elo, delta, reason, algorithm_version
+                    )
+                    VALUES (
+                      :player_user_id, :old_elo, :new_elo, :delta, :reason, :algorithm_version
+                    )
+                    """
+                ),
+                {
+                    "player_user_id": pid,
+                    "old_elo": old_elo,
+                    "new_elo": new_elo,
+                    "delta": new_elo - old_elo,
+                    "reason": f"referee_match_finalize:{str(result.id)}:{team_a_score}-{team_b_score}",
+                    "algorithm_version": "referee_scorekeeper_v1",
+                }
+            )
+
     return {
         "id": str(result.id),
         "created_at": result.created_at,

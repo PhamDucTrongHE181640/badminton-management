@@ -43,6 +43,31 @@ export default function PlayerDebtsPage() {
   const [error, setError] = useState("");
   const [selectedQrUrl, setSelectedQrUrl] = useState<string | null>(null);
   const [selectedPartnerName, setSelectedPartnerName] = useState<string | null>(null);
+  const [hiddenPaymentIds, setHiddenPaymentIds] = useState<string[]>([]);
+  const [showHiddenDebts, setShowHiddenDebts] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("netup_hidden_debts");
+    if (saved) {
+      try {
+        setHiddenPaymentIds(JSON.parse(saved));
+      } catch (e) {
+        // ignore
+      }
+    }
+  }, []);
+
+  const hideDebtItem = (id: string) => {
+    const newHidden = [...hiddenPaymentIds, id];
+    setHiddenPaymentIds(newHidden);
+    localStorage.setItem("netup_hidden_debts", JSON.stringify(newHidden));
+  };
+
+  const unhideDebtItem = (id: string) => {
+    const newHidden = hiddenPaymentIds.filter(x => x !== id);
+    setHiddenPaymentIds(newHidden);
+    localStorage.setItem("netup_hidden_debts", JSON.stringify(newHidden));
+  };
 
   async function loadData() {
     setIsLoading(true);
@@ -111,6 +136,11 @@ export default function PlayerDebtsPage() {
 
   if (currentUser) {
     pendingPayments.forEach((p) => {
+      // Nếu khoản này bị ẩn và người dùng không chọn hiển thị các khoản đã ẩn, bỏ qua
+      if (!showHiddenDebts && hiddenPaymentIds.includes(p.id)) {
+        return;
+      }
+
       const isOwedToPartner = p.sender_user_id === currentUser.id; // Mình nợ partner
       const isOwedByPartner = p.receiver_user_id === currentUser.id; // Partner nợ mình
       
@@ -192,6 +222,17 @@ export default function PlayerDebtsPage() {
           Hệ thống tự động cộng dồn và cấn trừ chéo (Netting) tất cả các khoản chi tiêu và nợ nần giữa bạn và từng người qua nhiều ngày để đưa ra số tiền thực tế cuối cùng cần thanh toán.
         </Notice>
 
+        {hiddenPaymentIds.length > 0 && (
+          <div className="flex justify-end">
+            <button
+              onClick={() => setShowHiddenDebts(!showHiddenDebts)}
+              className="text-xs text-slate-500 hover:text-slate-700 font-semibold flex items-center gap-1 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded transition cursor-pointer"
+            >
+              {showHiddenDebts ? "👁️ Ẩn các khoản nhạy cảm" : `👁️ Hiện các khoản đã ẩn (${hiddenPaymentIds.length})`}
+            </button>
+          </div>
+        )}
+
         {partnersList.length === 0 && !isLoading ? (
           <EmptyState
             title="Không có nợ chéo lũy kế"
@@ -264,20 +305,37 @@ export default function PlayerDebtsPage() {
                       <div className="space-y-1.5">
                         <p className="text-[10px] font-bold text-rose-500 uppercase">Bạn nợ họ:</p>
                         <div className="divide-y divide-slate-50 border border-slate-100 rounded-lg overflow-hidden bg-slate-50/50">
-                          {partner.oweDetails.map((d) => (
-                            <div key={d.id} className="flex justify-between items-center text-xs p-2 gap-1.5">
-                              <div className="min-w-0 flex-1">
-                                <span className={`font-semibold text-slate-700 block truncate ${d.status === "settled" ? "line-through text-slate-400" : ""}`} title={d.title}>{d.title}</span>
-                                <span className="text-[9px] text-slate-400">({d.date})</span>
-                                {d.status === "settled" && (
-                                  <span className="ml-1 rounded bg-slate-200 text-[9px] px-1 text-slate-600 font-semibold shrink-0">Đã trả</span>
-                                )}
+                          {partner.oweDetails.map((d) => {
+                            const isHidden = hiddenPaymentIds.includes(d.id);
+                            return (
+                              <div key={d.id} className={`flex justify-between items-center text-xs p-2 gap-1.5 ${isHidden ? "bg-slate-100/70 opacity-60" : ""}`}>
+                                <div className="min-w-0 flex-1">
+                                  <span className={`font-semibold text-slate-700 block truncate ${d.status === "settled" ? "line-through text-slate-400" : ""}`} title={d.title}>{d.title}</span>
+                                  <span className="text-[9px] text-slate-400">({d.date})</span>
+                                  {d.status === "settled" && (
+                                    <span className="ml-1 rounded bg-slate-200 text-[9px] px-1 text-slate-600 font-semibold shrink-0">Đã trả</span>
+                                  )}
+                                  {isHidden && (
+                                    <span className="ml-1 rounded bg-slate-300 text-[9px] px-1 text-slate-700 font-semibold shrink-0">Đã ẩn</span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <span className={`font-bold ${d.status === "settled" ? "text-slate-400 line-through" : "text-rose-600"}`}>
+                                    {formatVnd(d.amount)}
+                                  </span>
+                                  {d.status === "settled" && (
+                                    <button
+                                      onClick={() => isHidden ? unhideDebtItem(d.id) : hideDebtItem(d.id)}
+                                      className="rounded text-[10px] font-bold px-1.5 py-0.5 transition cursor-pointer border bg-slate-50 hover:bg-slate-100 text-slate-500 border-slate-200"
+                                      title={isHidden ? "Hiển thị lại khoản này" : "Ẩn khoản này khỏi danh sách"}
+                                    >
+                                      {isHidden ? "👁️" : "✕"}
+                                    </button>
+                                  )}
+                                </div>
                               </div>
-                              <span className={`font-bold shrink-0 ${d.status === "settled" ? "text-slate-400 line-through" : "text-rose-600"}`}>
-                                {formatVnd(d.amount)}
-                              </span>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     )}
@@ -287,33 +345,50 @@ export default function PlayerDebtsPage() {
                       <div className="space-y-1.5">
                         <p className="text-[10px] font-bold text-emerald-600 uppercase">Họ nợ bạn:</p>
                         <div className="divide-y divide-slate-50 border border-slate-100 rounded-lg overflow-hidden bg-slate-50/50">
-                          {partner.receiveDetails.map((d) => (
-                            <div key={d.id} className="flex justify-between items-center text-xs p-2 gap-1.5">
-                              <div className="min-w-0 flex-1">
-                                <span className={`font-semibold text-slate-700 block truncate ${d.status === "settled" ? "line-through text-slate-400" : ""}`} title={d.title}>{d.title}</span>
-                                <span className="text-[9px] text-slate-400">({d.date})</span>
-                                {d.status === "settled" && (
-                                  <span className="ml-1.5 rounded bg-emerald-50 text-[9px] px-1.5 py-0.5 text-emerald-600 font-bold border border-emerald-100 shrink-0">Đã nhận</span>
-                                )}
+                          {partner.receiveDetails.map((d) => {
+                            const isHidden = hiddenPaymentIds.includes(d.id);
+                            return (
+                              <div key={d.id} className={`flex justify-between items-center text-xs p-2 gap-1.5 ${isHidden ? "bg-slate-100/70 opacity-60" : ""}`}>
+                                <div className="min-w-0 flex-1">
+                                  <span className={`font-semibold text-slate-700 block truncate ${d.status === "settled" ? "line-through text-slate-400" : ""}`} title={d.title}>{d.title}</span>
+                                  <span className="text-[9px] text-slate-400">({d.date})</span>
+                                  {d.status === "settled" && (
+                                    <span className="ml-1.5 rounded bg-emerald-50 text-[9px] px-1.5 py-0.5 text-emerald-600 font-bold border border-emerald-100 shrink-0">Đã nhận</span>
+                                  )}
+                                  {isHidden && (
+                                    <span className="ml-1 rounded bg-slate-300 text-[9px] px-1 text-slate-700 font-semibold shrink-0">Đã ẩn</span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <span className={`font-bold ${d.status === "settled" ? "text-emerald-600" : "text-rose-600"}`}>
+                                    {formatVnd(d.amount)}
+                                  </span>
+                                  {!isHidden && (
+                                    <button
+                                      onClick={() => void handleTogglePayment(d.id, d.status)}
+                                      className={`rounded text-[10px] font-bold px-1.5 py-0.5 transition cursor-pointer border ${
+                                        d.status === "settled"
+                                          ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border-emerald-200"
+                                          : "bg-rose-50 hover:bg-rose-100 text-rose-600 border-rose-200"
+                                      }`}
+                                      title={d.status === "settled" ? "Hoàn tác (Đánh dấu chưa trả)" : "Xác nhận đã nhận tiền"}
+                                    >
+                                      {d.status === "settled" ? "✓" : "✕"}
+                                    </button>
+                                  )}
+                                  {d.status === "settled" && (
+                                    <button
+                                      onClick={() => isHidden ? unhideDebtItem(d.id) : hideDebtItem(d.id)}
+                                      className="rounded text-[10px] font-bold px-1.5 py-0.5 transition cursor-pointer border bg-slate-50 hover:bg-slate-100 text-slate-500 border-slate-200"
+                                      title={isHidden ? "Hiển thị lại khoản này" : "Ẩn khoản này khỏi danh sách"}
+                                    >
+                                      {isHidden ? "👁️" : "✕"}
+                                    </button>
+                                  )}
+                                </div>
                               </div>
-                              <div className="flex items-center gap-2 shrink-0">
-                                <span className={`font-bold ${d.status === "settled" ? "text-emerald-600" : "text-rose-600"}`}>
-                                  {formatVnd(d.amount)}
-                                </span>
-                                <button
-                                  onClick={() => void handleTogglePayment(d.id, d.status)}
-                                  className={`rounded text-[10px] font-bold px-1.5 py-0.5 transition cursor-pointer border ${
-                                    d.status === "settled"
-                                      ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border-emerald-200"
-                                      : "bg-rose-50 hover:bg-rose-100 text-rose-600 border-rose-200"
-                                  }`}
-                                  title={d.status === "settled" ? "Hoàn tác (Đánh dấu chưa trả)" : "Xác nhận đã nhận tiền"}
-                                >
-                                  {d.status === "settled" ? "✓" : "✕"}
-                                </button>
-                              </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     )}
