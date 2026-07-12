@@ -133,6 +133,10 @@ export default function ScorekeeperPage() {
   const isMatchPointLiveA = isSetPointLiveA && (setsWonA === 1 || setScores.length === 2);
   const isMatchPointLiveB = isSetPointLiveB && (setsWonB === 1 || setScores.length === 2);
 
+  const lastScore = scoreHistory[scoreHistory.length - 1];
+  const justWonPointA = lastScore ? currentA > lastScore.a : false;
+  const justWonPointB = lastScore ? currentB > lastScore.b : false;
+
   const loadAllPlayers = async () => {
     setIsLoadingAllPlayers(true);
     try {
@@ -2074,9 +2078,9 @@ export default function ScorekeeperPage() {
                       adjustScore(swapped ? "B" : "A", -1);
                     }}
                     className={`flex flex-col justify-center items-center rounded-xl p-6 transition cursor-pointer select-none ${
-                      swapped 
-                        ? "bg-emerald-950/40 text-emerald-200 hover:bg-emerald-900/30" 
-                        : "bg-indigo-950/40 text-indigo-200 hover:bg-indigo-900/30"
+                      (swapped ? justWonPointA : justWonPointB)
+                        ? "bg-orange-600 text-white hover:bg-orange-500"
+                        : "bg-slate-900/70 text-slate-300 hover:bg-slate-800/60"
                     } ${
                       (swapped ? isMatchPointLiveA : isMatchPointLiveB)
                         ? "ring-4 ring-red-500 bg-red-950/20 animate-pulse"
@@ -2114,9 +2118,9 @@ export default function ScorekeeperPage() {
                       adjustScore(swapped ? "A" : "B", -1);
                     }}
                     className={`flex flex-col justify-center items-center rounded-xl p-6 transition cursor-pointer select-none ${
-                      swapped 
-                        ? "bg-indigo-950/40 text-indigo-200 hover:bg-indigo-900/30" 
-                        : "bg-emerald-950/40 text-emerald-200 hover:bg-emerald-900/30"
+                      (swapped ? justWonPointB : justWonPointA)
+                        ? "bg-orange-600 text-white hover:bg-orange-500"
+                        : "bg-slate-900/70 text-slate-300 hover:bg-slate-800/60"
                     } ${
                       (swapped ? isMatchPointLiveB : isMatchPointLiveA)
                         ? "ring-4 ring-red-500 bg-red-950/20 animate-pulse"
@@ -2161,9 +2165,9 @@ export default function ScorekeeperPage() {
                     adjustScore(swapped ? "B" : "A", -1);
                   }}
                   className={`flex flex-col justify-between p-6 transition duration-200 cursor-pointer select-none relative ${
-                    swapped 
-                      ? "bg-gradient-to-br from-indigo-900 to-indigo-950 hover:from-indigo-800 hover:to-indigo-900 text-indigo-100" 
-                      : "bg-gradient-to-br from-emerald-900 to-emerald-950 hover:from-emerald-800 hover:to-emerald-900 text-emerald-100"
+                    (swapped ? justWonPointB : justWonPointA)
+                      ? "bg-gradient-to-br from-orange-500 to-orange-600 hover:from-orange-400 hover:to-orange-500 text-white"
+                      : "bg-gradient-to-br from-slate-900 to-slate-950 hover:from-slate-800 hover:to-slate-900 text-slate-200"
                   } ${
                     (swapped ? isMatchPointLiveB : isMatchPointLiveA)
                       ? "ring-4 ring-red-500 animate-pulse"
@@ -2268,9 +2272,9 @@ export default function ScorekeeperPage() {
                     adjustScore(swapped ? "A" : "B", -1);
                   }}
                   className={`flex flex-col justify-between p-6 transition duration-200 cursor-pointer select-none relative ${
-                    swapped 
-                      ? "bg-gradient-to-br from-emerald-900 to-emerald-950 hover:from-emerald-800 hover:to-emerald-900 text-emerald-100" 
-                      : "bg-gradient-to-br from-indigo-900 to-indigo-950 hover:from-indigo-800 hover:to-indigo-900 text-indigo-100"
+                    (swapped ? justWonPointA : justWonPointB)
+                      ? "bg-gradient-to-br from-orange-500 to-orange-600 hover:from-orange-400 hover:to-orange-500 text-white"
+                      : "bg-gradient-to-br from-slate-900 to-slate-950 hover:from-slate-800 hover:to-slate-900 text-slate-200"
                   } ${
                     (swapped ? isMatchPointLiveA : isMatchPointLiveB)
                       ? "ring-4 ring-red-500 animate-pulse"
@@ -2477,7 +2481,11 @@ export default function ScorekeeperPage() {
                       >
                         -
                       </button>
-                      <span className="text-2xl font-black w-8 text-center text-emerald-400">
+                      <span className={`text-2xl font-black w-8 text-center rounded ${
+                        (swapped ? justWonPointB : justWonPointA)
+                          ? "bg-orange-500 text-white px-1"
+                          : "text-emerald-400"
+                      }`}>
                         {swapped ? currentB : currentA}
                       </span>
                       <button
@@ -2498,7 +2506,11 @@ export default function ScorekeeperPage() {
                       >
                         +
                       </button>
-                      <span className="text-2xl font-black w-8 text-center text-indigo-400">
+                      <span className={`text-2xl font-black w-8 text-center rounded ${
+                        (swapped ? justWonPointA : justWonPointB)
+                          ? "bg-orange-500 text-white px-1"
+                          : "text-indigo-400"
+                      }`}>
                         {swapped ? currentA : currentB}
                       </span>
                       <button

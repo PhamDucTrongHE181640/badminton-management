@@ -116,12 +116,18 @@ export default function PlayerDebtsPage() {
     }
   }
 
-  const totalOwed = history.reduce((sum, item) => {
-    return item.my_balance_vnd < 0 ? sum + Math.abs(item.my_balance_vnd) : sum;
+  const totalOwed = pendingPayments.reduce((sum, p) => {
+    if (currentUser && p.sender_user_id === currentUser.id && p.status === "pending") {
+      return sum + p.amount_vnd;
+    }
+    return sum;
   }, 0);
 
-  const totalReceivable = history.reduce((sum, item) => {
-    return item.my_balance_vnd > 0 ? sum + item.my_balance_vnd : sum;
+  const totalReceivable = pendingPayments.reduce((sum, p) => {
+    if (currentUser && p.receiver_user_id === currentUser.id && p.status === "pending") {
+      return sum + p.amount_vnd;
+    }
+    return sum;
   }, 0);
 
   // Gom nhóm & cấn trừ nợ chéo lũy kế
@@ -204,15 +210,15 @@ export default function PlayerDebtsPage() {
 
       <div className="grid gap-4 sm:grid-cols-2">
         <StatCard
-          label="Tôi cần trả thêm (Tổng nợ)"
+          label="Tôi cần trả (Chưa thanh toán)"
           value={formatVnd(totalOwed)}
-          helper="Tổng cộng các khoản bạn cần thanh toán cho người khác"
+          helper="Tổng số tiền bạn còn nợ người khác chưa thanh toán"
           tone={totalOwed > 0 ? "warning" : "default"}
         />
         <StatCard
-          label="Tôi được nhận lại (Tổng dư)"
+          label="Số tiền chưa thu được (Chưa thu)"
           value={formatVnd(totalReceivable)}
-          helper="Tổng cộng số tiền mọi người cần gửi bạn"
+          helper="Tổng số tiền người khác còn nợ bạn chưa thanh toán"
           tone={totalReceivable > 0 ? "success" : "default"}
         />
       </div>
