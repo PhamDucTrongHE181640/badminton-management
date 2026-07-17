@@ -119,11 +119,40 @@ def get_expense_detail_by_id(*, expense_id: str, actor_user_id: str) -> dict[str
         breakdown = []
         if num_participants > 0:
             for item in items:
-                breakdown.append({
-                    "item_name": item["name"],
-                    "share_amount": item["amount_vnd"] // num_participants,
-                    "reason": f"Chia đều từ {item['amount_vnd']:,}đ cho {num_participants} người"
-                })
+                split_between = item.get("split_between_display_names")
+                has_custom_split = False
+                if split_between:
+                    for part in split_between:
+                        if ":" in part:
+                            has_custom_split = True
+                            break
+                
+                if has_custom_split:
+                    reasons = []
+                    for part in split_between:
+                        if ":" in part:
+                            name, amt = part.split(":", 1)
+                            try:
+                                amt_val = int(amt)
+                            except ValueError:
+                                amt_val = 0
+                            reasons.append(f"{name}: {amt_val:,}đ")
+                    breakdown.append({
+                        "item_name": item["name"],
+                        "share_amount": 0,
+                        "reason": f"Chia chi tiết: {', '.join(reasons)}"
+                    })
+                else:
+                    target_count = len(split_between) if split_between else num_participants
+                    share = item["amount_vnd"] // target_count if target_count > 0 else 0
+                    reason_msg = f"Chia đều từ {item['amount_vnd']:,}đ cho {target_count} người"
+                    if split_between:
+                        reason_msg += f" ({', '.join(split_between)})"
+                    breakdown.append({
+                        "item_name": item["name"],
+                        "share_amount": share,
+                        "reason": reason_msg
+                    })
 
         return {
             "exists": True,
@@ -434,18 +463,36 @@ def create_or_update_expense(
 
             # Tính phần nợ
             target_p_ids = []
+            custom_splits = {}
             if isinstance(split_between, list) and len(split_between) > 0:
-                for name in split_between:
-                    name_str = str(name).strip()
-                    if name_str in participant_map:
-                        target_p_ids.append(participant_map[name_str])
+                for item_part in split_between:
+                    part_str = str(item_part).strip()
+                    if ":" in part_str:
+                        name_str, amount_str = part_str.split(":", 1)
+                        name_str = name_str.strip()
+                        try:
+                            item_amount = int(amount_str.strip())
+                        except ValueError:
+                            item_amount = 0
+                        if name_str in participant_map:
+                            p_id = participant_map[name_str]
+                            custom_splits[p_id] = item_amount
+                            target_p_ids.append(p_id)
+                    else:
+                        name_str = part_str
+                        if name_str in participant_map:
+                            target_p_ids.append(participant_map[name_str])
             
             if len(target_p_ids) == 0:
                 target_p_ids = list(participant_map.values())
             
-            item_share = amount // len(target_p_ids)
-            for p_id in target_p_ids:
-                participant_owed_sums[p_id] += item_share
+            if custom_splits:
+                for p_id in target_p_ids:
+                    participant_owed_sums[p_id] += custom_splits.get(p_id, 0)
+            else:
+                item_share = amount // len(target_p_ids)
+                for p_id in target_p_ids:
+                    participant_owed_sums[p_id] += item_share
 
             split_participants_str = None
             if isinstance(split_between, list) and len(split_between) > 0:
@@ -566,10 +613,13 @@ def toggle_payment_status(*, payment_id: str, status: str, actor_user_id: str) -
         payment_row = connection.execute(
             text(
                 """
-                SELECT p.*, e.created_by_user_id, rp.user_id as receiver_user_id
+                SELECT p.*, e.created_by_user_id, 
+                       rp.user_id as receiver_user_id,
+                       sp.user_id as sender_user_id
                 FROM public.session_expense_payments p
                 JOIN public.session_expenses e ON e.id = p.expense_id
                 JOIN public.session_expense_participants rp ON rp.id = p.receiver_participant_id
+                JOIN public.session_expense_participants sp ON sp.id = p.sender_participant_id
                 WHERE p.id = :payment_id
                 LIMIT 1
                 """
@@ -582,12 +632,13 @@ def toggle_payment_status(*, payment_id: str, status: str, actor_user_id: str) -
 
         is_creator = str(payment_row.created_by_user_id) == actor_user_id
         is_receiver = payment_row.receiver_user_id and str(payment_row.receiver_user_id) == actor_user_id
+        is_sender = payment_row.sender_user_id and str(payment_row.sender_user_id) == actor_user_id
 
-        if not (is_creator or is_receiver):
+        if not (is_creator or is_receiver or is_sender):
             raise AppError(
                 status_code=403,
                 code="permission_denied",
-                message="Chỉ chủ nợ hoặc người tạo hóa đơn mới được thay đổi trạng thái giao dịch này"
+                message="Chỉ những người liên quan đến giao dịch mới được thay đổi trạng thái"
             )
 
         settled_at = datetime.now() if status == "settled" else None

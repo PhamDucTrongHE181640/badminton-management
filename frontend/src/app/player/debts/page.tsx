@@ -281,16 +281,9 @@ export default function PlayerDebtsPage() {
                   {/* Nút hành động thanh toán QR / Chờ nhận tiền */}
                   <div className="mb-4">
                     {partner.netBalance < 0 ? (
-                      <button
-                        onClick={() => {
-                          const infoUrl = `https://img.vietqr.io/image/970415-1100010959-qr_only.png?amount=${absBalance}&addInfo=Tra%20tien%20badminton%20cho%20${partner.partnerName}`;
-                          setSelectedQrUrl(infoUrl);
-                          setSelectedPartnerName(partner.partnerName);
-                        }}
-                        className="w-full rounded-lg bg-red-800 hover:bg-red-900 text-white font-bold text-xs py-2 shadow transition cursor-pointer text-center"
-                      >
-                        💸 Quét QR Trả tiền
-                      </button>
+                      <div className="text-xs text-slate-500 font-semibold italic bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 text-center">
+                        Cần thanh toán cho họ
+                      </div>
                     ) : partner.netBalance > 0 ? (
                       <div className="text-xs text-slate-500 font-semibold italic bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100 text-center">
                         Đợi họ thanh toán
@@ -329,6 +322,19 @@ export default function PlayerDebtsPage() {
                                   <span className={`font-bold ${d.status === "settled" ? "text-slate-400 line-through" : "text-rose-600"}`}>
                                     {formatVnd(d.amount)}
                                   </span>
+                                  {!isHidden && (
+                                    <button
+                                      onClick={() => void handleTogglePayment(d.id, d.status)}
+                                      className={`rounded text-[10px] font-bold px-1.5 py-0.5 transition cursor-pointer border ${
+                                        d.status === "settled"
+                                          ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border-emerald-200"
+                                          : "bg-rose-50 hover:bg-rose-100 text-rose-600 border-rose-200"
+                                      }`}
+                                      title={d.status === "settled" ? "Hoàn tác (Đánh dấu chưa trả)" : "Đánh dấu đã trả tiền"}
+                                    >
+                                      {d.status === "settled" ? "✓" : "✕"}
+                                    </button>
+                                  )}
                                   {d.status === "settled" && (
                                     <button
                                       onClick={() => isHidden ? unhideDebtItem(d.id) : hideDebtItem(d.id)}

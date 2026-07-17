@@ -89,8 +89,9 @@ export default function ExpenseForm({
 
   const [currentUser, setCurrentUser] = useState<{ id: string; full_name?: string } | null>(null);
   const [frequentPlayers, setFrequentPlayers] = useState<string[]>([]);
-  const [newItemSplitType, setNewItemSplitType] = useState<"all" | "custom">("all");
+  const [newItemSplitType, setNewItemSplitType] = useState<"all" | "custom" | "custom_amount">("all");
   const [newItemSplitBetween, setNewItemSplitBetween] = useState<string[]>([]);
+  const [newItemSplitAmounts, setNewItemSplitAmounts] = useState<{ [displayName: string]: string }>({});
 
   useEffect(() => {
     async function loadCurrentUser() {
@@ -299,19 +300,41 @@ export default function ExpenseForm({
   // Handler: Thêm khoản chi mới
   function handleAddItem() {
     const name = newItemName.trim();
-    const amount = parseInt(newItemAmount);
+    let amount = parseInt(newItemAmount);
     const payerId = newItemPayerId;
 
     if (!name) {
       setError("Vui lòng nhập tên khoản chi (nước uống, quả cầu, tiền sân...)");
       return;
     }
-    if (isNaN(amount) || amount <= 0) {
-      setError("Số tiền chi phải là số dương lớn hơn 0");
-      return;
-    }
     if (!payerId) {
       setError("Vui lòng chọn người đã chi trả cho khoản này");
+      return;
+    }
+
+    let finalSplitBetween: string[] | null = null;
+
+    if (newItemSplitType === "custom") {
+      if (newItemSplitBetween.length === 0) {
+        setError("Vui lòng chọn ít nhất 1 người để chia tiền");
+        return;
+      }
+      finalSplitBetween = [...newItemSplitBetween];
+    } else if (newItemSplitType === "custom_amount") {
+      const splitEntries = Object.entries(newItemSplitAmounts).filter(([_, val]) => {
+        const amt = parseInt(val);
+        return !isNaN(amt) && amt > 0;
+      });
+      if (splitEntries.length === 0) {
+        setError("Vui lòng nhập số tiền cho ít nhất 1 người");
+        return;
+      }
+      amount = splitEntries.reduce((sum, [_, val]) => sum + parseInt(val), 0);
+      finalSplitBetween = splitEntries.map(([name, val]) => `${name}:${val}`);
+    }
+
+    if (isNaN(amount) || amount <= 0) {
+      setError("Số tiền chi phải là số dương lớn hơn 0");
       return;
     }
     setError("");
@@ -324,7 +347,7 @@ export default function ExpenseForm({
       name,
       amount_vnd: amount,
       paid_by_participant_id: payerId,
-      split_between_display_names: newItemSplitType === "custom" ? [...newItemSplitBetween] : null
+      split_between_display_names: finalSplitBetween
     };
 
     setItems([...items, newItem]);
@@ -332,6 +355,7 @@ export default function ExpenseForm({
     setNewItemAmount("");
     setNewItemSplitType("all");
     setNewItemSplitBetween([]);
+    setNewItemSplitAmounts({});
   }
 
   // Handler: Xóa khoản chi
@@ -537,7 +561,14 @@ export default function ExpenseForm({
                             Người trả: <span className="font-semibold text-slate-700">{payer ? payer.display_name : "Không rõ"}</span>
                             {item.split_between_display_names && item.split_between_display_names.length > 0 && (
                               <span className="ml-2 bg-rose-50 text-[10px] text-rose-600 px-1.5 py-0.5 rounded font-bold border border-rose-100">
-                                Chia riêng cho: {item.split_between_display_names.join(", ")}
+                                Chia riêng cho: {item.split_between_display_names.map((part) => {
+                                  if (part.includes(":")) {
+                                    const [name, amt] = part.split(":", 2);
+                                    const formattedAmt = new Intl.NumberFormat("vi-VN").format(parseInt(amt));
+                                    return `${name} (${formattedAmt}đ)`;
+                                  }
+                                  return part;
+                                }).join(", ")}
                               </span>
                             )}
                           </p>
@@ -577,13 +608,25 @@ export default function ExpenseForm({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Số tiền (VNĐ)</label>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      {newItemSplitType === "custom_amount" ? "Tổng tiền (Tự động tính)" : "Số tiền (VNĐ)"}
+                    </label>
                     <input
                       type="number"
-                      value={newItemAmount}
+                      value={
+                        newItemSplitType === "custom_amount"
+                          ? Object.values(newItemSplitAmounts).reduce((sum, val) => {
+                              const amt = parseInt(val);
+                              return sum + (isNaN(amt) ? 0 : amt);
+                            }, 0)
+                          : newItemAmount
+                      }
                       onChange={(e) => setNewItemAmount(e.target.value)}
-                      placeholder="Ví dụ: 300000"
-                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs focus:border-red-800 focus:outline-none"
+                      disabled={newItemSplitType === "custom_amount"}
+                      placeholder={newItemSplitType === "custom_amount" ? "Tự động tính..." : "Ví dụ: 300000"}
+                      className={`w-full rounded-lg border border-slate-300 px-3 py-1.5 text-xs focus:border-red-800 focus:outline-none ${
+                        newItemSplitType === "custom_amount" ? "bg-slate-100 font-bold text-slate-700 cursor-not-allowed" : "bg-white"
+                      }`}
                     />
                   </div>
                   <div>
@@ -605,7 +648,7 @@ export default function ExpenseForm({
                   {/* Phân chia chi phí riêng (Custom Splitting) */}
                   <div className="sm:col-span-3 border-t border-slate-200/60 pt-3">
                     <label className="block text-xs font-semibold text-slate-600 mb-1.5">Cách phân chia chi phí này:</label>
-                    <div className="flex gap-4 mb-2">
+                    <div className="flex flex-wrap gap-4 mb-2">
                       <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
                         <input
                           type="radio"
@@ -613,7 +656,7 @@ export default function ExpenseForm({
                           checked={newItemSplitType === "all"}
                           onChange={() => setNewItemSplitType("all")}
                         />
-                        Chia đều cho tất cả mọi người
+                        Chia đều cả nhóm
                       </label>
                       <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
                         <input
@@ -627,7 +670,18 @@ export default function ExpenseForm({
                             }
                           }}
                         />
-                        Chỉ chia cho những người được chọn (Nợ riêng)
+                        Chia đều cho người được chọn (Nợ riêng)
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="split_type"
+                          checked={newItemSplitType === "custom_amount"}
+                          onChange={() => {
+                            setNewItemSplitType("custom_amount");
+                          }}
+                        />
+                        Chia theo số tiền cụ thể của từng người
                       </label>
                     </div>
 
@@ -650,6 +704,37 @@ export default function ExpenseForm({
                               />
                               {p.display_name}
                             </label>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {newItemSplitType === "custom_amount" && (
+                      <div className="rounded-lg bg-white border border-slate-200 p-2.5 max-h-[200px] overflow-y-auto space-y-2">
+                        <p className="text-[10px] text-slate-400 italic mb-1">
+                          * Nhập số tiền cụ thể cho từng người chơi. Tổng số tiền sẽ tự động cập nhật ở trên.
+                        </p>
+                        {participants.map((p) => {
+                          const val = newItemSplitAmounts[p.display_name] || "";
+                          return (
+                            <div key={p.id} className="flex items-center justify-between gap-4 text-xs">
+                              <span className="text-slate-700 font-semibold truncate">{p.display_name}</span>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  placeholder="0"
+                                  value={val}
+                                  onChange={(e) => {
+                                    setNewItemSplitAmounts({
+                                      ...newItemSplitAmounts,
+                                      [p.display_name]: e.target.value
+                                    });
+                                  }}
+                                  className="w-24 rounded border border-slate-300 px-2 py-1 text-xs focus:border-red-800 focus:outline-none text-right"
+                                />
+                                <span className="text-[10px] text-slate-400 font-semibold">đ</span>
+                              </div>
+                            </div>
                           );
                         })}
                       </div>
@@ -823,6 +908,18 @@ export default function ExpenseForm({
                         <p className="font-semibold text-slate-800">{item.name}</p>
                         <p className="text-xs text-slate-500">
                           Người trả trước: <span className="font-semibold text-slate-700">{payer ? payer.display_name : "Không rõ"}</span>
+                          {item.split_between_display_names && item.split_between_display_names.length > 0 && (
+                            <span className="ml-2 bg-rose-50 text-[10px] text-rose-600 px-1.5 py-0.5 rounded font-bold border border-rose-100">
+                              Chia riêng cho: {item.split_between_display_names.map((part) => {
+                                if (part.includes(":")) {
+                                  const [name, amt] = part.split(":", 2);
+                                  const formattedAmt = new Intl.NumberFormat("vi-VN").format(parseInt(amt));
+                                  return `${name} (${formattedAmt}đ)`;
+                                }
+                                return part;
+                              }).join(", ")}
+                            </span>
+                          )}
                         </p>
                       </div>
                       <span className="font-bold text-slate-900">{formatVnd(item.amount_vnd)}</span>
@@ -888,7 +985,7 @@ export default function ExpenseForm({
                     const isSenderMe = p.sender_participant_id === participants.find((x) => x.user_id === currentUser?.id)?.id;
                     const isReceiverMe = p.receiver_participant_id === participants.find((x) => x.user_id === currentUser?.id)?.id;
                     
-                    const isSettleEnabled = isCreator || isReceiverMe;
+                    const isSettleEnabled = isCreator || isReceiverMe || isSenderMe;
                     const qrUrl = `https://img.vietqr.io/image/970415-1100010959-qr_only.png?amount=${p.amount_vnd}&addInfo=Chuyen%20tien%20${p.sender_name}%20nho%20san`;
 
                     return (
@@ -930,7 +1027,11 @@ export default function ExpenseForm({
                                   : "bg-red-800 hover:bg-red-900 text-white"
                               }`}
                             >
-                              {p.status === "settled" ? "↩ Đánh dấu chưa trả" : "✓ Xác nhận đã nhận tiền"}
+                              {p.status === "settled" 
+                                ? "↩ Đánh dấu chưa trả" 
+                                : isSenderMe 
+                                  ? "✓ Xác nhận đã trả tiền" 
+                                  : "✓ Xác nhận đã nhận tiền"}
                             </button>
                           </div>
                         )}
